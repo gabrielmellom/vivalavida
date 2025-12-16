@@ -246,7 +246,7 @@ function Hero() {
             Embarque no <strong className="text-viva-yellow">Barco Viva La Vida</strong> e conheça a 
             <strong className="text-viva-yellow"> Ilha do Campeche</strong>!
             <br className="hidden sm:block" />
-            <span className="text-viva-green">Caiaque, stand up, snorkel, drinks abordo</span> e muito mais!
+            <span className="text-viva-green"> Caiaque, stand up, snorkel, drinks a bordo</span> e muito mais!
           </p>
 
 
