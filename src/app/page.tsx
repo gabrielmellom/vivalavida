@@ -217,10 +217,10 @@ function Hero() {
       <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-viva-green/30 rounded-full blur-xl floating z-30" style={{ animationDelay: '4s' }} />
 
       {/* Content */}
-      <div className="relative z-40 container mx-auto px-4 text-center pt-24 sm:pt-32 pb-16 sm:pb-20">
+      <div className="relative z-40 container mx-auto px-4 text-center pt-40 sm:pt-44 pb-16 sm:pb-20">
         <div className="max-w-5xl mx-auto">
           {/* Badge - menor no mobile */}
-          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 sm:px-6 py-2 mb-6 sm:mb-8 animate-fade-in-up">
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 sm:px-6 py-2 mb-6 sm:mb-8 animate-fade-in-up mt-6 sm:mt-0">
             <Sparkles className="text-viva-yellow" size={16} />
             <span className="text-white font-medium text-xs sm:text-sm">🏝️ Ilha do Campeche • Florianópolis</span>
           </div>
