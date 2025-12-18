@@ -22,9 +22,11 @@ import {
   Sparkles,
   Camera,
   Palmtree,
-  Navigation
+  Navigation,
+  LogIn
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import PublicReservationModal from '@/components/PublicReservationModal';
 
 // Header Component
 function Header() {
@@ -139,6 +141,19 @@ function Header() {
                 </a>
               </li>
             ))}
+            <li>
+              <a 
+                href="/login"
+                className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition-all duration-300 ${
+                  scrolled 
+                    ? 'text-viva-blue-dark hover:bg-viva-blue/10 hover:text-viva-blue' 
+                    : 'text-white hover:bg-white/20'
+                }`}
+              >
+                <LogIn size={18} />
+                Login
+              </a>
+            </li>
           </ul>
 
           {/* CTA Button - Desktop */}
@@ -169,6 +184,16 @@ function Header() {
                 </a>
               </li>
             ))}
+            <li>
+              <a 
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-3 text-viva-blue-dark font-semibold hover:bg-viva-blue/10 rounded-lg transition-colors"
+              >
+                <LogIn size={18} />
+                Login
+              </a>
+            </li>
             <li className="mt-2">
               <a 
                 href="https://wa.me/5548999999999"
@@ -462,6 +487,8 @@ function ImageCarousel() {
 
 // Tours Section - ROTEIROS VIVA LA VIDA
 function Tours() {
+  const [showReservationModal, setShowReservationModal] = useState(false);
+
   return (
     <section id="passeios" className="py-12 sm:py-20 bg-white relative">
       <div className="container mx-auto px-4">
@@ -586,13 +613,13 @@ function Tours() {
                   </div>
 
                   {/* CTA */}
-                  <a 
-                    href="https://wa.me/5548999999999?text=Olá! Quero reservar o Tour Panorâmico Viva La Vida!"
+                  <button
+                    onClick={() => setShowReservationModal(true)}
                     className="block w-full text-center bg-gradient-to-r from-green-500 to-green-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-base sm:text-xl shadow-lg shadow-green-500/30 active:scale-95 transition-all"
                   >
                     <MessageCircle className="inline mr-2" size={20} />
                     RESERVAR TOUR PANORÂMICO
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
@@ -708,6 +735,12 @@ function Tours() {
           </ul>
         </div>
       </div>
+
+      {/* Modal de Reserva */}
+      <PublicReservationModal
+        isOpen={showReservationModal}
+        onClose={() => setShowReservationModal(false)}
+      />
     </section>
   );
 }
