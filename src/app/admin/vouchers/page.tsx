@@ -5,9 +5,10 @@ import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestor
 import { db } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, Users, QrCode, ArrowLeft, Search } from 'lucide-react';
+import { Calendar, Users, QrCode, ArrowLeft, Search, Phone, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { generateVoucherPDF } from '@/lib/voucherGenerator';
+import { updateDoc, doc, Timestamp } from 'firebase/firestore';
 
 export default function VouchersPage() {
   const { user } = useAuth();
@@ -79,6 +80,24 @@ export default function VouchersPage() {
       console.error('Erro ao gerar voucher:', error);
       alert('Erro ao gerar voucher. Tente novamente.');
     }
+  };
+
+  const handleToggleVoucherSent = async (reservationId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'reservations', reservationId), {
+        voucherSent: !currentStatus,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar status do voucher:', error);
+      alert('Erro ao atualizar status. Tente novamente.');
+    }
+  };
+
+  const getWhatsAppLink = (phone: string) => {
+    // Remove caracteres não numéricos
+    const cleanPhone = phone.replace(/\D/g, '');
+    return `https://wa.me/${cleanPhone}`;
   };
 
   const filteredReservations = reservations.filter(reservation => {
@@ -191,14 +210,36 @@ export default function VouchersPage() {
                       className="rounded-lg p-4 border border-gray-200 bg-gray-50"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-bold text-gray-900">{reservation.customerName}</p>
-                          <p className="text-xs text-gray-500">Assento #{reservation.seatNumber}</p>
+                          <a 
+                            href={getWhatsAppLink(reservation.phone)} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium"
+                          >
+                            <MessageCircle size={14} />
+                            {reservation.phone}
+                          </a>
+                          <p className="text-xs text-gray-500 mt-1">Assento #{reservation.seatNumber}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-gray-500">Total</p>
                           <p className="font-bold text-gray-800">R$ {reservation.totalAmount.toFixed(2)}</p>
                         </div>
+                      </div>
+
+                      {/* Checkbox para marcar como enviado */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <input
+                          type="checkbox"
+                          checked={reservation.voucherSent || false}
+                          onChange={() => handleToggleVoucherSent(reservation.id, reservation.voucherSent || false)}
+                          className="w-4 h-4 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
+                        />
+                        <label className="text-sm text-gray-700">
+                          Voucher enviado
+                        </label>
                       </div>
 
                       <div className="flex items-center gap-2 text-xs mb-3">
@@ -231,6 +272,7 @@ export default function VouchersPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Enviado</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Passageiro</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assento</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total</th>
@@ -242,7 +284,7 @@ export default function VouchersPage() {
                   <tbody className="divide-y divide-gray-200">
                     {filteredReservations.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-12 text-gray-500">
+                        <td colSpan={7} className="text-center py-12 text-gray-500">
                           {searchTerm 
                             ? `Nenhum passageiro encontrado para "${searchTerm}"`
                             : 'Nenhuma reserva aprovada para este passeio'
@@ -251,10 +293,26 @@ export default function VouchersPage() {
                       </tr>
                     ) : (
                       filteredReservations.map((reservation) => (
-                        <tr key={reservation.id} className="hover:bg-gray-50">
+                        <tr key={reservation.id} className={`hover:bg-gray-50 ${reservation.voucherSent ? 'bg-green-50/50' : ''}`}>
+                          <td className="px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={reservation.voucherSent || false}
+                              onChange={() => handleToggleVoucherSent(reservation.id, reservation.voucherSent || false)}
+                              className="w-4 h-4 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <p className="font-semibold text-gray-900">{reservation.customerName}</p>
-                            <p className="text-sm text-gray-500">{reservation.phone}</p>
+                            <a 
+                              href={getWhatsAppLink(reservation.phone)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 font-medium mt-1"
+                            >
+                              <MessageCircle size={14} />
+                              {reservation.phone}
+                            </a>
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-sm font-medium text-gray-700">#{reservation.seatNumber}</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation, Boat, Payment, PaymentMethod } from '@/types';
@@ -54,6 +54,8 @@ function CheckInPageContent() {
   const [reservationToCheckIn, setReservationToCheckIn] = useState<Reservation | null>(null);
   const [remainingAmount, setRemainingAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const pendingReservationIdRef = useRef<string | null>(null);
+  const hasProcessedVoucherRef = useRef(false);
 
   useEffect(() => {
     let reservationsUnsubscribe: (() => void) | null = null;
@@ -125,36 +127,80 @@ function CheckInPageContent() {
     };
   }, [selectedDate]);
 
-  // Processar voucher escaneado (quando vem da URL)
+  // Buscar reserva do voucher e definir data automaticamente
   useEffect(() => {
     const reservationId = searchParams?.get('reservationId');
     
-    if (reservationId && reservations.length > 0) {
+    if (reservationId && !hasProcessedVoucherRef.current) {
+      hasProcessedVoucherRef.current = true;
+      pendingReservationIdRef.current = reservationId;
+      
+      // Buscar reserva para pegar a data do passeio
+      const fetchReservationAndSetDate = async () => {
+        try {
+          const reservationDoc = await getDoc(doc(db, 'reservations', reservationId));
+          
+          if (reservationDoc.exists()) {
+            const reservationData = {
+              id: reservationDoc.id,
+              ...reservationDoc.data(),
+            } as Reservation;
+            
+            // Buscar o barco para pegar a data
+            if (reservationData.boatId) {
+              const boatDoc = await getDoc(doc(db, 'boats', reservationData.boatId));
+              
+              if (boatDoc.exists()) {
+                const boatData = {
+                  id: boatDoc.id,
+                  ...boatDoc.data(),
+                } as Boat;
+                
+                // Definir a data do passeio automaticamente
+                const boatDate = new Date(boatData.date).toISOString().split('T')[0];
+                setSelectedDate(boatDate);
+                
+                // Limpar URL
+                if (typeof window !== 'undefined') {
+                  window.history.replaceState({}, '', '/admin/checkin');
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar reserva do voucher:', error);
+        }
+      };
+      
+      fetchReservationAndSetDate();
+    }
+  }, [searchParams]);
+
+  // Processar voucher escaneado (quando vem da URL) - após carregar reservas
+  useEffect(() => {
+    const reservationId = pendingReservationIdRef.current;
+    
+    if (reservationId && reservations.length > 0 && boat) {
       const reservation = reservations.find(r => r.id === reservationId);
       
       if (reservation) {
+        // Limpar referência
+        pendingReservationIdRef.current = null;
+        
         // Se tem pagamento pendente, abrir modal
         if (reservation.amountDue > 0) {
           setReservationToCheckIn(reservation);
           setRemainingAmount(reservation.amountDue.toString());
           setPaymentMethod('pix');
           setShowPaymentConfirm(true);
-          
-          // Limpar URL
-          if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', '/admin/checkin');
-          }
         } else {
           // Se não tem pendência, fazer check-in direto
           handleCheckIn(reservation.id, false);
-          if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', '/admin/checkin');
-          }
         }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, reservations]);
+  }, [reservations, boat]);
 
   const handleCheckIn = async (reservationId: string, currentlyCheckedIn: boolean) => {
     // Se já está marcado, pode desmarcar direto
@@ -666,6 +712,54 @@ function CheckInPageContent() {
                 <p className="font-bold text-lg">{reservationToCheckIn.customerName}</p>
                 <p className="text-white/80 text-sm">Assento #{reservationToCheckIn.seatNumber}</p>
               </div>
+
+              {/* Informações do Serviço */}
+              {reservationToCheckIn.groupId && (() => {
+                // Contar pessoas do grupo com cada tipo de serviço
+                const groupReservations = reservations.filter(r => r.groupId === reservationToCheckIn.groupId);
+                const comDesembarque = groupReservations.filter(r => r.escunaType === 'com-desembarque').length;
+                const semDesembarque = groupReservations.filter(r => r.escunaType === 'sem-desembarque' || !r.escunaType).length;
+                const totalGrupo = groupReservations.length;
+
+                return (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                      <Users size={16} />
+                      Informações do Grupo ({totalGrupo} {totalGrupo === 1 ? 'pessoa' : 'pessoas'})
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="bg-white rounded-lg p-2 border border-blue-200">
+                        <p className="text-xs text-gray-600 mb-1">Com Desembarque</p>
+                        <p className="font-bold text-blue-700 text-base">{comDesembarque}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2 border border-blue-200">
+                        <p className="text-xs text-gray-600 mb-1">Panorâmico</p>
+                        <p className="font-bold text-blue-700 text-base">{semDesembarque}</p>
+                      </div>
+                    </div>
+                    {reservationToCheckIn.escunaType && (
+                      <p className="text-xs text-blue-700 mt-2">
+                        <span className="font-semibold">Serviço desta reserva:</span>{' '}
+                        {reservationToCheckIn.escunaType === 'com-desembarque' 
+                          ? 'Com Desembarque na Ilha' 
+                          : 'Sem Desembarque (Panorâmico)'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+              
+              {/* Informação de serviço individual (se não for grupo) */}
+              {!reservationToCheckIn.groupId && reservationToCheckIn.escunaType && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">Tipo de Serviço</p>
+                  <p className="text-sm text-blue-700">
+                    {reservationToCheckIn.escunaType === 'com-desembarque' 
+                      ? 'Com Desembarque na Ilha' 
+                      : 'Sem Desembarque (Panorâmico)'}
+                  </p>
+                </div>
+              )}
 
               {/* Valores */}
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
