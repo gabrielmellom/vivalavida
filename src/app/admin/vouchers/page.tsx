@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestor
 import { db } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, Users, Download, QrCode, ArrowLeft, Search } from 'lucide-react';
+import { Calendar, Users, QrCode, ArrowLeft, Search } from 'lucide-react';
 import Link from 'next/link';
 import { generateVoucherPDF } from '@/lib/voucherGenerator';
 
