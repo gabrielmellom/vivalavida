@@ -1,13 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, addDoc, doc, onSnapshot, Timestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, Payment } from '@/types';
-import { DollarSign } from 'lucide-react';
-import { Calendar, Users, CheckCircle, LogOut, Plus } from 'lucide-react';
+import { DollarSign, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Calendar, Users, CheckCircle, LogOut, Plus, User, Phone, Mail, MapPin, CreditCard, Banknote } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+// Cores para identificar grupos (paleta vibrante)
+const GROUP_COLORS = [
+  { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-500' },
+  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-500' },
+  { bg: 'bg-pink-100', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
+  { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
+  { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
+  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-700', badge: 'bg-indigo-500' },
+  { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
+  { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
+  { bg: 'bg-lime-100', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-600' },
+  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+];
 
 // Formatar data sem problemas de timezone (fora do componente para ser acessível a todos)
 const formatDateSafe = (dateString: string) => {
@@ -20,18 +34,32 @@ const formatDateSafe = (dateString: string) => {
   return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
 };
 
+// Interface para dados de cada pessoa
+interface PersonData {
+  name: string;
+  document: string;
+  phone: string;
+  birthDate: string;
+  email: string;
+  address: string;
+  isChild: boolean;
+  isHalfPrice: boolean;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  amountPaid: number;
+}
+
 export default function VendedorDashboard() {
   const [boats, setBoats] = useState<Boat[]>([]);
   const [myReservations, setMyReservations] = useState<Reservation[]>([]);
-  const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
-  const [showReservationModal, setShowReservationModal] = useState(false);
-  const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
-  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
+  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [reservationForPayment, setReservationForPayment] = useState<Reservation | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  
+  // Estado do Wizard
+  const [showWizard, setShowWizard] = useState(false);
+  
   const { user, signOut } = useAuth();
   const router = useRouter();
 
@@ -137,11 +165,6 @@ export default function VendedorDashboard() {
   }, [user]);
 
 
-  const handleSelectBoat = (boat: Boat) => {
-    setSelectedBoat(boat);
-    setShowReservationModal(true);
-  };
-
   // Formatar data sem problemas de timezone
   const formatDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
@@ -167,10 +190,58 @@ export default function VendedorDashboard() {
   }, [showDateFilter]);
 
   // Filtrar reservas pela data selecionada (por rideDate) e excluir canceladas
-  const filteredReservations = myReservations.filter(r => {
-    const reservationDate = new Date(r.rideDate).toISOString().split('T')[0];
-    return reservationDate === filterDate && r.status !== 'cancelled';
-  });
+  // Ordenar para manter grupos juntos
+  const filteredReservations = myReservations
+    .filter(r => {
+      const reservationDate = new Date(r.rideDate).toISOString().split('T')[0];
+      return reservationDate === filterDate && r.status !== 'cancelled';
+    })
+    .sort((a, b) => {
+      // Primeiro, ordenar por groupId para manter grupos juntos
+      if (a.groupId && b.groupId) {
+        if (a.groupId !== b.groupId) {
+          return a.groupId.localeCompare(b.groupId);
+        }
+      }
+      if (a.groupId && !b.groupId) return -1;
+      if (!a.groupId && b.groupId) return 1;
+      // Depois por nome do cliente
+      return a.customerName.localeCompare(b.customerName);
+    });
+
+  // Criar mapa de cores para grupos
+  const groupColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let colorIndex = 0;
+    
+    filteredReservations.forEach(r => {
+      if (r.groupId && !map.has(r.groupId)) {
+        map.set(r.groupId, colorIndex);
+        colorIndex++;
+      }
+    });
+    
+    return map;
+  }, [filteredReservations]);
+
+  // Contar membros de cada grupo
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    filteredReservations.forEach(r => {
+      if (r.groupId) {
+        counts.set(r.groupId, (counts.get(r.groupId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [filteredReservations]);
+
+  // Função auxiliar para obter cor de grupo
+  const getGroupColor = (groupId: string | undefined) => {
+    if (!groupId) return null;
+    const colorIndex = groupColorMap.get(groupId);
+    if (colorIndex === undefined) return null;
+    return GROUP_COLORS[colorIndex % GROUP_COLORS.length];
+  };
 
   // Filtrar barcos pela data selecionada
   const filteredBoats = boats.filter(boat => {
@@ -182,13 +253,15 @@ export default function VendedorDashboard() {
   const filteredApproved = filteredReservations.filter(r => r.status === 'approved').length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
       {/* Header - Responsivo */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-white/20 sticky top-0 z-40">
         <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-viva-blue-dark">Painel Vendedor</h1>
+              <h1 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                Painel Vendedor
+              </h1>
               <p className="text-gray-600 text-xs sm:text-sm">Gerenciar Reservas</p>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -209,18 +282,38 @@ export default function VendedorDashboard() {
       </header>
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        {/* Botão Criar Reserva - Destaque Principal */}
+        <div className="mb-6 sm:mb-8">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="w-full sm:w-auto group relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white px-8 py-5 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl hover:shadow-blue-500/30 transition-all duration-300 transform hover:scale-[1.02] flex items-center justify-center gap-3"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+            <div className="relative flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-xl">
+                <Plus size={28} className="text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-xl font-black">Criar Nova Reserva</p>
+                <p className="text-sm text-white/80 font-normal">Passo a passo rápido e fácil</p>
+              </div>
+              <Sparkles className="text-yellow-300 animate-pulse" size={24} />
+            </div>
+          </button>
+        </div>
+
         {/* Stats - Grid responsivo */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-8">
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-3 sm:p-6 shadow-sm border border-white/40">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Barcos</p>
-                <p className="text-2xl sm:text-3xl font-black text-viva-blue">{filteredBoats.length}</p>
+                <p className="text-2xl sm:text-3xl font-black text-blue-600">{filteredBoats.length}</p>
               </div>
-              <Calendar className="text-viva-blue hidden sm:block" size={32} />
+              <Calendar className="text-blue-500 hidden sm:block" size={32} />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-3 sm:p-6 shadow-sm border border-white/40">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Reservas</p>
@@ -229,7 +322,7 @@ export default function VendedorDashboard() {
               <Users className="text-orange-500 hidden sm:block" size={32} />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-3 sm:p-6 shadow-sm border border-white/40">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Aprovadas</p>
@@ -242,14 +335,14 @@ export default function VendedorDashboard() {
           </div>
         </div>
 
-        {/* Barcos Disponíveis */}
+        {/* Filtro de Data */}
         <div className="mb-4 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg sm:text-xl font-bold text-viva-blue-dark">Barcos Disponíveis</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800">Minhas Reservas</h2>
             <div className="relative date-filter-container">
               <button
                 onClick={() => setShowDateFilter(!showDateFilter)}
-                className="flex items-center gap-2 bg-white border-2 border-viva-blue text-viva-blue-dark px-3 sm:px-4 py-2 rounded-xl font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base w-full sm:w-auto justify-center"
+                className="flex items-center gap-2 bg-white border-2 border-blue-500 text-blue-700 px-3 sm:px-4 py-2 rounded-xl font-semibold hover:bg-blue-50 transition text-sm sm:text-base w-full sm:w-auto justify-center"
               >
                 <Calendar size={18} />
                 {formatDate(filterDate)}
@@ -269,7 +362,7 @@ export default function VendedorDashboard() {
                           setFilterDate(e.target.value);
                           setShowDateFilter(false);
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                       />
                     </div>
                     <div className="flex gap-2">
@@ -279,7 +372,7 @@ export default function VendedorDashboard() {
                           setFilterDate(today);
                           setShowDateFilter(false);
                         }}
-                        className="flex-1 px-3 py-2 bg-viva-blue/10 text-viva-blue rounded-lg text-sm font-semibold hover:bg-viva-blue/20 transition"
+                        className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-200 transition"
                       >
                         Hoje
                       </button>
@@ -290,7 +383,7 @@ export default function VendedorDashboard() {
                           setFilterDate(tomorrow.toISOString().split('T')[0]);
                           setShowDateFilter(false);
                         }}
-                        className="flex-1 px-3 py-2 bg-viva-blue/10 text-viva-blue rounded-lg text-sm font-semibold hover:bg-viva-blue/20 transition"
+                        className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-200 transition"
                       >
                         Amanhã
                       </button>
@@ -301,103 +394,46 @@ export default function VendedorDashboard() {
             </div>
           </div>
 
-          {filteredBoats.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 sm:p-12 text-center">
-              <Calendar className="mx-auto text-gray-400 mb-4" size={40} />
-              <p className="text-gray-600 font-semibold mb-2 text-sm sm:text-base">
-                Nenhum barco disponível para {formatDate(filterDate)}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {filteredBoats.map((boat) => {
-              const availableSeats = boat.seatsTotal - boat.seatsTaken;
-              return (
-                <div key={boat.id} className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-gray-100">
-                  {/* Header do Card */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                        boat.boatType === 'escuna' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
-                        {boat.boatType === 'escuna' ? '🚢' : '🚤'}
-                      </span>
-                      <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark truncate">{boat.name}</h3>
-                    </div>
-                  </div>
-                  
-                  {/* Info do Barco */}
-                  <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                    <div className="flex items-center gap-2 text-gray-700 mb-2">
-                      <Calendar size={16} className="text-viva-blue shrink-0" />
-                      <span className="font-semibold text-sm">{formatDateSafe(boat.date)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-700 mb-2">
-                      <Users size={16} className="text-viva-blue shrink-0" />
-                      <span className="text-sm">
-                        <span className="font-bold">{boat.seatsTaken}</span> / {boat.seatsTotal} ocupados
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div
-                        className={`h-2.5 rounded-full transition-all ${
-                          availableSeats === 0 
-                            ? 'bg-red-500' 
-                            : availableSeats <= 5 
-                              ? 'bg-orange-500' 
-                              : 'bg-viva-green'
-                        }`}
-                        style={{ width: `${(boat.seatsTaken / boat.seatsTotal) * 100}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1.5">
-                      {availableSeats > 0 
-                        ? `${availableSeats} vagas disponíveis` 
-                        : '❌ Lotado'}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => handleSelectBoat(boat)}
-                    disabled={availableSeats === 0}
-                    className="w-full bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-2.5 rounded-lg font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base"
-                  >
-                    <Plus size={18} />
-                    {availableSeats > 0 ? 'Criar Reserva' : 'Lotado'}
-                  </button>
-                </div>
-              );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Minhas Reservas */}
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-viva-blue-dark mb-3 sm:mb-4">
-            Minhas Reservas - {formatDate(filterDate)}
-          </h2>
-          
           {/* Versão Mobile - Cards */}
           <div className="sm:hidden space-y-3">
             {filteredReservations.length === 0 ? (
-              <div className="bg-white rounded-xl p-6 text-center">
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 text-center border border-white/40">
                 <Users className="mx-auto text-gray-400 mb-2" size={32} />
                 <p className="text-gray-500 text-sm">Nenhuma reserva para {formatDate(filterDate)}</p>
               </div>
             ) : (
-              filteredReservations.map((reservation) => (
-                <div key={reservation.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              filteredReservations.map((reservation) => {
+                const groupColor = getGroupColor(reservation.groupId);
+                const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                
+                return (
+                <div key={reservation.id} className={`rounded-xl p-4 shadow-sm border-2 ${
+                  groupColor
+                    ? `${groupColor.bg} ${groupColor.border}`
+                    : 'bg-white/80 backdrop-blur-sm border-white/40'
+                }`}>
+                  {/* Badge de Grupo */}
+                  {groupColor && groupSize > 1 && (
+                    <div className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 mb-2`}>
+                      <Users size={12} />
+                      Grupo de {groupSize}
+                    </div>
+                  )}
+                  
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <p className="font-bold text-gray-900">{reservation.customerName}</p>
                       <p className="text-sm text-gray-500">{reservation.phone}</p>
                     </div>
-                    <span className="bg-viva-blue text-white text-sm font-bold px-2.5 py-1 rounded-lg">
-                      #{reservation.seatNumber}
-                    </span>
+                    {groupColor ? (
+                      <span className={`${groupColor.badge} text-white text-sm font-bold px-2.5 py-1 rounded-lg`}>
+                        <Users size={14} />
+                      </span>
+                    ) : (
+                      <span className="bg-gray-400 text-white text-sm font-bold px-2.5 py-1 rounded-lg">
+                        <User size={14} />
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -410,24 +446,25 @@ export default function VendedorDashboard() {
                          reservation.status === 'pending' ? '⏳ Pendente' : '✕ Cancelada'}
                       </span>
                     </div>
-                    <span className="font-bold text-viva-blue-dark">
+                    <span className="font-bold text-gray-800">
                       R$ {reservation.totalAmount.toFixed(2)}
                     </span>
                   </div>
                 </div>
-              ))
+              );
+              })
             )}
           </div>
 
           {/* Versão Desktop - Tabela */}
-          <div className="hidden sm:block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="hidden sm:block bg-white/80 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden border border-white/40">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50/80">
                   <tr>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assento</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Grupo</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
@@ -442,10 +479,23 @@ export default function VendedorDashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredReservations.map((reservation) => (
-                      <tr key={reservation.id} className="hover:bg-gray-50">
+                    filteredReservations.map((reservation) => {
+                      const groupColor = getGroupColor(reservation.groupId);
+                      const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                      
+                      return (
+                      <tr key={reservation.id} className={`hover:bg-gray-50/50 ${
+                        groupColor ? groupColor.bg : ''
+                      }`}>
                         <td className="px-4 lg:px-6 py-4">
                           <div>
+                            {/* Badge de grupo inline */}
+                            {groupColor && groupSize > 1 && (
+                              <span className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 mb-1`}>
+                                <Users size={10} />
+                                Grupo de {groupSize}
+                              </span>
+                            )}
                             <p className="font-semibold text-gray-900">{reservation.customerName}</p>
                             <p className="text-sm text-gray-500">{reservation.phone}</p>
                           </div>
@@ -454,9 +504,15 @@ export default function VendedorDashboard() {
                           {formatDateSafe(reservation.rideDate)}
                         </td>
                         <td className="px-4 lg:px-6 py-4">
-                          <span className="bg-viva-blue/10 text-viva-blue-dark font-bold px-2 py-1 rounded text-sm">
-                            #{reservation.seatNumber}
-                          </span>
+                          {groupColor ? (
+                            <span className={`${groupColor.badge} text-white font-bold px-2 py-1 rounded text-sm inline-flex items-center gap-1`}>
+                              <Users size={12} />
+                            </span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded text-sm">
+                              Individual
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 lg:px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -485,8 +541,6 @@ export default function VendedorDashboard() {
                             <button
                               onClick={() => {
                                 setReservationForPayment(reservation);
-                                setPaymentAmount('');
-                                setPaymentMethod('pix');
                                 setShowPaymentModal(true);
                               }}
                               className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition flex items-center gap-1"
@@ -497,7 +551,8 @@ export default function VendedorDashboard() {
                           )}
                         </td>
                       </tr>
-                    ))
+                    );
+                    })
                   )}
                 </tbody>
               </table>
@@ -506,17 +561,12 @@ export default function VendedorDashboard() {
         </div>
       </div>
 
-      {/* Modal Criar Reserva */}
-      {showReservationModal && selectedBoat && (
-        <ReservationModal
-          boat={selectedBoat}
-          onClose={() => {
-            setShowReservationModal(false);
-            setSelectedBoat(null);
-            setSelectedSeat(null);
-          }}
-          vendorId={user?.uid || ''}
-          key={selectedBoat.id}
+      {/* Wizard de Reserva */}
+      {showWizard && user && (
+        <ReservationWizard
+          boats={boats}
+          onClose={() => setShowWizard(false)}
+          vendorId={user.uid}
         />
       )}
       
@@ -527,7 +577,6 @@ export default function VendedorDashboard() {
           onClose={() => {
             setShowPaymentModal(false);
             setReservationForPayment(null);
-            setPaymentAmount('');
           }}
           onPayment={async (amount: number, method: PaymentMethod) => {
             try {
@@ -554,7 +603,6 @@ export default function VendedorDashboard() {
 
               setShowPaymentModal(false);
               setReservationForPayment(null);
-              setPaymentAmount('');
               alert('Pagamento registrado com sucesso!');
             } catch (error) {
               console.error('Erro ao registrar pagamento:', error);
@@ -586,7 +634,7 @@ function PaymentModal({
     
     if (paymentAmount <= 0) {
       alert('O valor deve ser maior que zero!');
-      return;
+      return;   
     }
     
     if (paymentAmount > reservation.amountDue) {
@@ -603,9 +651,9 @@ function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-        <h3 className="text-xl font-black text-viva-blue-dark mb-4">Registrar Pagamento</h3>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <h3 className="text-xl font-black text-gray-800 mb-4">Registrar Pagamento</h3>
         <div className="bg-gray-50 rounded-xl p-4 mb-4">
           <p className="text-sm text-gray-600 mb-1">Cliente: <strong>{reservation.customerName}</strong></p>
           <p className="text-sm text-gray-600 mb-1">Total: R$ {reservation.totalAmount.toFixed(2)}</p>
@@ -630,7 +678,7 @@ function PaymentModal({
               min="0"
               max={reservation.amountDue}
               required
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-bold"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-bold"
               placeholder="0.00"
             />
           </div>
@@ -641,7 +689,7 @@ function PaymentModal({
               value={method}
               onChange={(e) => setMethod(e.target.value as PaymentMethod)}
               required
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             >
               <option value="pix">PIX</option>
               <option value="cartao">Cartão</option>
@@ -672,48 +720,48 @@ function PaymentModal({
   );
 }
 
-interface SeatData {
-  name: string;
-  isChild: boolean; // menor de 7 anos paga meia
-}
-
-function ReservationModal({
-  boat,
+// ===== WIZARD DE RESERVA PASSO A PASSO =====
+function ReservationWizard({
+  boats,
   onClose,
   vendorId,
 }: {
-  boat: Boat;
+  boats: Boat[];
   onClose: () => void;
   vendorId: string;
 }) {
-  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
-  const [seatData, setSeatData] = useState<Record<number, SeatData>>({});
-  const [phone, setPhone] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [address, setAddress] = useState('');
-  const [document, setDocument] = useState('');
-  const [birthDate, setBirthDate] = useState('');
-  const [email, setEmail] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
-  const [basePrice, setBasePrice] = useState('200'); // Preço base por pessoa
-  const [amountPaid, setAmountPaid] = useState('0'); // Valor pago na hora
+  // Estados do wizard
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
+  const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
+  const [currentPersonIndex, setCurrentPersonIndex] = useState(0);
+  const [people, setPeople] = useState<PersonData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Buscar assentos disponíveis em tempo real
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
 
+  // Calcular total de passos: 1 (data) + 1 (qtd pessoas) + numberOfPeople (dados) + 1 (pagamento)
+  const totalSteps = 3 + numberOfPeople;
+  
+  // Barcos disponíveis para a data selecionada
+  const boatsForDate = boats.filter(boat => {
+    const boatDate = new Date(boat.date).toISOString().split('T')[0];
+    return boatDate === selectedDate;
+  });
+
+  // Buscar assentos disponíveis quando um barco é selecionado
   useEffect(() => {
-    if (!boat) {
+    if (!selectedBoat) {
       setAvailableSeats([]);
       return;
     }
 
-    // Buscar reservas aprovadas para calcular assentos disponíveis
     const reservationsQuery = query(
       collection(db, 'reservations'),
-      where('boatId', '==', boat.id),
+      where('boatId', '==', selectedBoat.id),
       where('status', '==', 'approved')
     );
 
@@ -722,7 +770,7 @@ function ReservationModal({
       const takenSeats = reservations.map(r => r.seatNumber);
       
       const available: number[] = [];
-      for (let i = 1; i <= boat.seatsTotal; i++) {
+      for (let i = 1; i <= selectedBoat.seatsTotal; i++) {
         if (!takenSeats.includes(i)) {
           available.push(i);
         }
@@ -731,45 +779,82 @@ function ReservationModal({
     });
 
     return unsubscribe;
-  }, [boat]);
+  }, [selectedBoat]);
 
-  // Calcular valores totais
-  const calculateTotals = () => {
-    const base = parseFloat(basePrice) || 0;
-    let totalAmount = 0;
-    
-    selectedSeats.forEach(seat => {
-      const data = seatData[seat];
-      if (data?.isChild) {
-        totalAmount += base / 2; // Meia entrada para crianças
-      } else {
-        totalAmount += base;
-      }
-    });
-    
-    const paid = parseFloat(amountPaid) || 0;
-    const remaining = Math.max(0, totalAmount - paid);
-    
-    return { totalAmount, paid, remaining };
+  // Inicializar array de pessoas quando mudar a quantidade
+  useEffect(() => {
+    const newPeople: PersonData[] = [];
+    for (let i = 0; i < numberOfPeople; i++) {
+      newPeople.push(people[i] || {
+        name: '',
+        document: '',
+        phone: '',
+        birthDate: '',
+        email: '',
+        address: '',
+        isChild: false,
+        isHalfPrice: false,
+        amount: 200, // Valor padrão
+        paymentMethod: 'pix',
+        amountPaid: 0,
+      });
+    }
+    setPeople(newPeople);
+  }, [numberOfPeople]);
+
+  // Selecionar automaticamente os assentos quando a quantidade muda
+  useEffect(() => {
+    if (availableSeats.length > 0 && numberOfPeople > 0) {
+      setSelectedSeats(availableSeats.slice(0, numberOfPeople));
+    }
+  }, [numberOfPeople, availableSeats]);
+
+
+  // Calcular totais
+  const totalAmount = people.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalPaid = people.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+  const totalRemaining = totalAmount - totalPaid;
+
+  // Validações por passo
+  const canProceed = () => {
+    if (currentStep === 1) {
+      return selectedDate && selectedBoat;
+    }
+    if (currentStep === 2) {
+      return numberOfPeople >= 1 && numberOfPeople <= availableSeats.length;
+    }
+    // Passos de dados das pessoas (3 até 2 + numberOfPeople)
+    if (currentStep >= 3 && currentStep < 3 + numberOfPeople) {
+      const personIndex = currentStep - 3;
+      const person = people[personIndex];
+      return person && person.name && person.document && person.phone && person.birthDate;
+    }
+    // Último passo (pagamento)
+    return true;
   };
 
-  const { totalAmount, paid, remaining } = calculateTotals();
+  const handleNext = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedSeats.length === 0) {
-      setError('Selecione pelo menos um assento');
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedBoat) {
+      setError('Selecione um barco');
       return;
     }
-    if (boat.boatType === 'escuna' && !escunaType) {
-      setError('Selecione o tipo de passeio');
-      return;
-    }
 
-    // Validar que todos os assentos têm nome
-    const missingNames = selectedSeats.filter(seat => !seatData[seat]?.name?.trim());
-    if (missingNames.length > 0) {
-      setError(`Por favor, preencha o nome para todos os assentos selecionados (assentos: ${missingNames.join(', ')})`);
+    // Verificar se há vagas suficientes
+    const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+    if (numberOfPeople > vagasDisponiveis) {
+      setError(`Não há vagas suficientes. Disponíveis: ${vagasDisponiveis}`);
       return;
     }
 
@@ -777,466 +862,676 @@ function ReservationModal({
     setLoading(true);
 
     try {
-      // Verificar se os assentos ainda estão disponíveis (evitar race condition)
-      const reservationsQuery = query(
-        collection(db, 'reservations'),
-        where('boatId', '==', boat.id),
-        where('status', '==', 'approved')
-      );
-      const reservationsSnapshot = await getDocs(reservationsQuery);
-      const approvedReservations = reservationsSnapshot.docs.map(doc => doc.data()) as Reservation[];
-      const takenSeats = approvedReservations.map(r => r.seatNumber);
-
-      const unavailableSeats = selectedSeats.filter(seat => takenSeats.includes(seat));
-      if (unavailableSeats.length > 0) {
-        setError(`Os assentos ${unavailableSeats.join(', ')} já estão ocupados. Por favor, selecione outros assentos.`);
-        setLoading(false);
-        return;
-      }
-
       // Gerar groupId para reservas em grupo
-      const groupId = selectedSeats.length > 1 ? `group_${Date.now()}` : undefined;
-      const base = parseFloat(basePrice) || 0;
-      const totalPaid = parseFloat(amountPaid) || 0;
-      
-      // Calcular valores por assento e distribuir o pagamento proporcionalmente
-      const seatValues = selectedSeats.map(seat => {
-        const data = seatData[seat] || { name: '', isChild: false };
-        return data.isChild ? base / 2 : base;
-      });
-      const totalValue = seatValues.reduce((sum, val) => sum + val, 0);
-      
-      // Distribuir o pagamento proporcionalmente entre as reservas
-      let remainingPaid = totalPaid;
-      const reservations = selectedSeats.map((seatNumber, index) => {
-        const data = seatData[seatNumber] || { name: '', isChild: false };
-        const seatTotal = seatValues[index];
-        const proportionalPaid = index === selectedSeats.length - 1 
-          ? remainingPaid // Última reserva recebe o restante para evitar erros de arredondamento
-          : Math.round((seatTotal / totalValue) * totalPaid * 100) / 100;
-        remainingPaid -= proportionalPaid;
+      const groupId = people.length > 1 ? `group_${Date.now()}` : undefined;
+      const baseTimestamp = Date.now();
+
+      // Criar uma reserva para cada pessoa
+      const reservationPromises = people.map(async (person, index) => {
+        // Gerar número de identificação único baseado em timestamp
+        const seatNumber = baseTimestamp + index;
         
         const reservationData: Record<string, unknown> = {
-          boatId: boat.id,
-          seatNumber,
+          boatId: selectedBoat.id,
+          seatNumber, // Agora é apenas um ID único, não um assento real
           status: 'pending',
-          customerName: data.name,
-          phone,
-          whatsapp: whatsapp || phone,
-          address,
-          paymentMethod,
-          totalAmount: seatTotal,
-          amountPaid: proportionalPaid,
-          amountDue: seatTotal - proportionalPaid,
+          customerName: person.name,
+          phone: person.phone,
+          whatsapp: person.phone,
+          address: person.address || '',
+          document: person.document,
+          birthDate: person.birthDate,
+          email: person.email || '',
+          paymentMethod: person.paymentMethod,
+          totalAmount: person.amount,
+          amountPaid: person.amountPaid,
+          amountDue: person.amount - person.amountPaid,
           vendorId,
-          rideDate: boat.date,
+          rideDate: selectedBoat.date,
+          isChild: person.isChild,
+          isHalfPrice: person.isHalfPrice,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
 
-        // Adicionar campos opcionais apenas se tiverem valor
-        if (document) reservationData.document = document;
-        if (birthDate) reservationData.birthDate = birthDate;
-        if (email) reservationData.email = email;
         if (groupId) reservationData.groupId = groupId;
-
-        // Adicionar escunaType apenas se for escuna
-        if (boat.boatType === 'escuna') {
+        if (selectedBoat.boatType === 'escuna') {
           reservationData.escunaType = escunaType;
         }
 
-        return reservationData;
-      });
-
-      // Criar uma reserva para cada assento selecionado
-      const reservationPromises = reservations.map(async (reservationData) => {
         return addDoc(collection(db, 'reservations'), reservationData);
       });
 
       await Promise.all(reservationPromises);
-
-      // Limpar formulário
-      setSelectedSeats([]);
-      setSeatData({});
-      setPhone('');
-      setWhatsapp('');
-      setAddress('');
-      setDocument('');
-      setBirthDate('');
-      setEmail('');
-      setPaymentMethod('pix');
-      setEscunaType('sem-desembarque');
-      setBasePrice('200');
-      setAmountPaid('0');
-      setError('');
-
+      alert(`${people.length} reserva(s) criada(s) com sucesso! Aguardando aprovação do administrador.`);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar reserva');
+      setError(err.message || 'Erro ao criar reservas');
     } finally {
       setLoading(false);
     }
   };
 
+  // Formatar data para exibição
+  const formatDisplayDate = (dateString: string) => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return `${weekdays[date.getDay()]}, ${day} de ${months[month - 1]} de ${year}`;
+  };
+
+  // Renderizar indicador de progresso
+  const renderProgressBar = () => {
+    const stepLabels = ['Data', 'Pessoas', ...Array.from({ length: numberOfPeople }, (_, i) => `Pessoa ${i + 1}`), 'Pagamento'];
+    const displaySteps = stepLabels.slice(0, totalSteps);
+    
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-2">
+          {displaySteps.map((label, index) => {
+            const stepNum = index + 1;
+            const isActive = stepNum === currentStep;
+            const isCompleted = stepNum < currentStep;
+            
+            return (
+              <div key={index} className="flex flex-col items-center flex-1">
+                <div className={`
+                  w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all
+                  ${isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-blue-600 text-white ring-4 ring-blue-200' : 'bg-gray-200 text-gray-500'}
+                `}>
+                  {isCompleted ? '✓' : stepNum}
+                </div>
+                <span className={`text-xs mt-1 text-center ${isActive ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
+            style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-black text-viva-blue-dark mb-6">Nova Reserva - {boat.name}</h2>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Seleção de Assentos (Múltiplos para grupo) */}
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              Selecione os Assentos {selectedSeats.length > 0 && `(${selectedSeats.length} selecionado${selectedSeats.length > 1 ? 's' : ''})`}
-            </label>
-            <div className="grid grid-cols-8 gap-2 max-h-64 overflow-y-auto p-2 border border-gray-200 rounded-xl">
-              {Array.from({ length: boat.seatsTotal }, (_, i) => {
-                const seatNum = i + 1;
-                const isAvailable = availableSeats.includes(seatNum);
-                const isSelected = selectedSeats.includes(seatNum);
-                
-                return (
-                  <button
-                    key={seatNum}
-                    type="button"
-                    onClick={() => {
-                      if (isAvailable) {
-                        if (isSelected) {
-                          setSelectedSeats(selectedSeats.filter(s => s !== seatNum));
-                          // Remover dados do assento
-                          const newSeatData = { ...seatData };
-                          delete newSeatData[seatNum];
-                          setSeatData(newSeatData);
-                        } else {
-                          setSelectedSeats([...selectedSeats, seatNum]);
-                          // Inicializar dados do assento
-                          setSeatData({
-                            ...seatData,
-                            [seatNum]: { name: '', isChild: false }
-                          });
-                        }
-                      }
-                    }}
-                    disabled={!isAvailable}
-                    className={`px-3 py-2 rounded-lg font-bold transition text-sm ${
-                      isSelected
-                        ? 'bg-viva-blue text-white'
-                        : isAvailable
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-red-100 text-red-500 cursor-not-allowed opacity-50'
-                    }`}
-                    title={isAvailable ? 'Livre' : 'Ocupado'}
-                  >
-                    {isAvailable ? '✓' : '✗'}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-4 mt-2 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-green-100 rounded"></div>
-                <span>Livre</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-red-100 rounded"></div>
-                <span>Ocupado</span>
-              </div>
-            </div>
-            {selectedSeats.length > 0 && (
-              <p className="mt-2 text-sm text-viva-blue font-semibold">
-                {selectedSeats.length} assento{selectedSeats.length > 1 ? 's' : ''} selecionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.sort((a, b) => a - b).join(', ')}
-              </p>
-            )}
+            <h2 className="text-2xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+              Nova Reserva
+            </h2>
+            <p className="text-gray-500 text-sm">Passo {currentStep} de {totalSteps}</p>
           </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition p-2 hover:bg-gray-100 rounded-full"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          {/* Tipo de Passeio (apenas para Escuna) */}
-          {boat.boatType === 'escuna' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Passeio *</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEscunaType('sem-desembarque')}
-                  className={`px-4 py-3 rounded-xl font-bold transition ${
-                    escunaType === 'sem-desembarque'
-                      ? 'bg-viva-green text-white shadow-lg'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Sem Desembarque
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEscunaType('com-desembarque')}
-                  className={`px-4 py-3 rounded-xl font-bold transition ${
-                    escunaType === 'com-desembarque'
-                      ? 'bg-viva-green text-white shadow-lg'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Com Desembarque
-                </button>
-              </div>
-            </div>
-          )}
+        {/* Barra de Progresso */}
+        {renderProgressBar()}
 
-          {/* Dados por Assento */}
-          {selectedSeats.length > 0 && (
-            <div className="border-2 border-viva-blue/20 rounded-xl p-4 bg-viva-blue/5">
-              <h3 className="text-lg font-bold text-viva-blue-dark mb-4">
-                Dados dos Passageiros ({selectedSeats.length} {selectedSeats.length === 1 ? 'passageiro' : 'passageiros'})
-              </h3>
-              <div className="space-y-4">
-                {selectedSeats.sort((a, b) => a - b).map((seatNum) => {
-                  const data = seatData[seatNum] || { name: '', isChild: false };
-                  return (
-                    <div key={seatNum} className="bg-white rounded-lg p-4 border border-gray-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-bold text-viva-blue-dark">Assento #{seatNum}</h4>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`child-${seatNum}`}
-                            checked={data.isChild}
-                            onChange={(e) => {
-                              setSeatData({
-                                ...seatData,
-                                [seatNum]: { ...data, isChild: e.target.checked }
-                              });
-                            }}
-                            className="w-4 h-4 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
-                          />
-                          <label htmlFor={`child-${seatNum}`} className="text-sm font-semibold text-viva-orange cursor-pointer">
-                            👶 Menor de 7 anos (meia entrada)
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Nome Completo *
-                        </label>
-                        <input
-                          type="text"
-                          value={data.name}
-                          onChange={(e) => {
-                            setSeatData({
-                              ...seatData,
-                              [seatNum]: { ...data, name: e.target.value }
-                            });
-                          }}
-                          required
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                          placeholder={`Nome do passageiro do assento ${seatNum}`}
-                        />
-                      </div>
-                      {data.isChild && (
-                        <p className="mt-2 text-xs text-viva-orange font-semibold">
-                          💰 Valor: R$ {(parseFloat(basePrice) / 2).toFixed(2)} (meia entrada)
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Dados de Contato (compartilhados) */}
-          <div className="border-t-2 border-gray-200 pt-4">
-            <h3 className="text-lg font-bold text-viva-blue-dark mb-4">Dados de Contato</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                  placeholder="(48) 99999-9999"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
-                <input
-                  type="tel"
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                  placeholder="(48) 99999-9999"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Documento (CPF/RG)</label>
-              <input
-                type="text"
-                value={document}
-                onChange={(e) => setDocument(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                placeholder="000.000.000-00"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Data de Nascimento</label>
-              <input
-                type="date"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                placeholder="cliente@email.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
-              <input
-                type="tel"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                placeholder="(48) 99999-9999"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Endereço *</label>
-            <textarea
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              required
-              rows={2}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-            />
-          </div>
-
-          {/* Informações de Pagamento */}
-          <div className="border-2 border-green-200 rounded-xl p-4 bg-green-50">
-            <h3 className="text-lg font-bold text-green-800 mb-4">💰 Informações de Pagamento</h3>
-            
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Preço Base por Pessoa (R$) *</label>
-                <input
-                  type="number"
-                  value={basePrice}
-                  onChange={(e) => setBasePrice(e.target.value)}
-                  required
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                  placeholder="200.00"
-                />
-                <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade</p>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Forma de Pagamento *</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                >
-                  <option value="pix">PIX</option>
-                  <option value="cartao">Cartão</option>
-                  <option value="dinheiro">Dinheiro</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Resumo de Valores */}
-            <div className="bg-white rounded-lg p-4 border border-green-300">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-700">Valor Total:</span>
-                  <span className="text-xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
+        {/* Conteúdo do Passo */}
+        <div className="min-h-[300px]">
+          {/* PASSO 1: Seleção de Data e Barco */}
+          {currentStep === 1 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                  <Calendar className="w-8 h-8 text-blue-600" />
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-700">Valor Recebido na Hora:</span>
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const numValue = parseFloat(value) || 0;
-                      if (numValue >= 0 && numValue <= totalAmount) {
-                        setAmountPaid(value);
-                      }
-                    }}
-                    step="0.01"
-                    min="0"
-                    max={totalAmount}
-                    className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-right font-bold"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-                  <span className="font-bold text-gray-800">Valor Restante:</span>
-                  <span className={`text-xl font-black ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                    R$ {remaining.toFixed(2)}
-                  </span>
-                </div>
-                {selectedSeats.length > 0 && (
-                  <div className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-200">
-                    <p>Detalhamento:</p>
-                    <ul className="list-disc list-inside mt-1">
-                      {selectedSeats.sort((a, b) => a - b).map(seat => {
-                        const data = seatData[seat] || { name: '', isChild: false };
-                        const seatPrice = data.isChild ? parseFloat(basePrice) / 2 : parseFloat(basePrice);
-                        return (
-                          <li key={seat}>
-                            Assento {seat} ({data.isChild ? 'Criança' : 'Adulto'}): R$ {seatPrice.toFixed(2)}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                <h3 className="text-xl font-bold text-gray-800">Quando será o passeio?</h3>
+                <p className="text-gray-500">Selecione a data e o barco desejado</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  📅 Data do Passeio
+                </label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setSelectedBoat(null);
+                    setSelectedSeats([]);
+                  }}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg"
+                />
+                {selectedDate && (
+                  <p className="mt-2 text-sm text-blue-600 font-medium">
+                    {formatDisplayDate(selectedDate)}
+                  </p>
                 )}
               </div>
-            </div>
-          </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-              {error}
+              {selectedDate && (
+                <div className="animate-fadeIn">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    🚢 Selecione o Barco
+                  </label>
+                  {boatsForDate.length === 0 ? (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                      <p className="text-orange-700 font-medium">Nenhum barco disponível para esta data</p>
+                      <p className="text-orange-600 text-sm">Tente selecionar outra data</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {boatsForDate.map((boat) => {
+                        const availableCount = boat.seatsTotal - boat.seatsTaken;
+                        const isSelected = selectedBoat?.id === boat.id;
+                        return (
+                          <button
+                            key={boat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBoat(boat);
+                              setSelectedSeats([]);
+                            }}
+                            disabled={availableCount === 0}
+                            className={`p-4 rounded-xl border-2 transition-all text-left ${
+                              isSelected 
+                                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' 
+                                : availableCount === 0
+                                  ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                                  : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-lg ${boat.boatType === 'escuna' ? '' : ''}`}>
+                                    {boat.boatType === 'escuna' ? '🚢' : '🚤'}
+                                  </span>
+                                  <span className="font-bold text-gray-800">{boat.name}</span>
+                                </div>
+                                <p className="text-sm text-gray-500 mt-1">
+                                  {availableCount} vagas disponíveis de {boat.seatsTotal}
+                                </p>
+                              </div>
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                              }`}>
+                                {isSelected && <span className="text-white text-sm">✓</span>}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tipo de passeio para Escuna */}
+              {selectedBoat?.boatType === 'escuna' && (
+                <div className="animate-fadeIn">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Passeio</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEscunaType('sem-desembarque')}
+                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                        escunaType === 'sem-desembarque'
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Sem Desembarque
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEscunaType('com-desembarque')}
+                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                        escunaType === 'com-desembarque'
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Com Desembarque
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
 
-          <div className="flex gap-4 pt-4">
+          {/* PASSO 2: Quantidade de Pessoas */}
+          {currentStep === 2 && selectedBoat && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
+                  <Users className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Quantas pessoas vão no passeio?</h3>
+                <p className="text-gray-500">Selecione a quantidade de passageiros</p>
+              </div>
+
+              {/* Vagas disponíveis */}
+              {(() => {
+                const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+                return (
+                  <>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                      <p className="text-blue-800 text-lg">
+                        🎫 <strong>{vagasDisponiveis}</strong> vagas disponíveis de <strong>{selectedBoat.seatsTotal}</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-6">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.max(1, numberOfPeople - 1);
+                          setNumberOfPeople(newCount);
+                        }}
+                        className="w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-600 transition shadow-sm"
+                      >
+                        −
+                      </button>
+                      <div className="text-center px-6">
+                        <span className="text-7xl font-black text-blue-600">{numberOfPeople}</span>
+                        <p className="text-gray-500 mt-2 text-lg">{numberOfPeople === 1 ? 'pessoa' : 'pessoas'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCount = Math.min(vagasDisponiveis, numberOfPeople + 1);
+                          setNumberOfPeople(newCount);
+                        }}
+                        disabled={numberOfPeople >= vagasDisponiveis}
+                        className="w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-600 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {numberOfPeople > 0 && (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center animate-fadeIn">
+                        <p className="text-green-800 font-medium text-lg">
+                          ✅ {numberOfPeople} {numberOfPeople === 1 ? 'vaga será reservada' : 'vagas serão reservadas'}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* PASSOS 3 a 2+N: Dados de cada pessoa */}
+          {currentStep >= 3 && currentStep < 3 + numberOfPeople && (
+            <div className="space-y-5 animate-fadeIn">
+              {(() => {
+                const personIndex = currentStep - 3;
+                const person = people[personIndex] || {
+                  name: '',
+                  document: '',
+                  phone: '',
+                  birthDate: '',
+                  email: '',
+                  address: '',
+                  isChild: false,
+                  isHalfPrice: false,
+                  amount: 200,
+                  paymentMethod: 'pix',
+                  amountPaid: 0,
+                };
+                const seatNumber = selectedSeats[personIndex];
+
+                return (
+                  <>
+                    <div className="text-center mb-4">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full mb-4 text-white text-2xl font-bold">
+                        {personIndex + 1}
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">
+                        Dados da Pessoa {personIndex + 1}
+                      </h3>
+                      <p className="text-gray-500">Assento #{seatNumber}</p>
+                    </div>
+
+                    {/* Nome */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <User className="inline w-4 h-4 mr-1" /> Nome Completo *
+                      </label>
+                      <input
+                        type="text"
+                        value={person.name}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, name: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="Nome completo do passageiro"
+                      />
+                    </div>
+
+                    {/* Documento */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📄 Documento (CPF/RG) *
+                      </label>
+                      <input
+                        type="text"
+                        value={person.document}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, document: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="000.000.000-00"
+                      />
+                    </div>
+
+                    {/* Telefone */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <Phone className="inline w-4 h-4 mr-1" /> Telefone *
+                      </label>
+                      <input
+                        type="tel"
+                        value={person.phone}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, phone: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="(48) 99999-9999"
+                      />
+                    </div>
+
+                    {/* Data de Nascimento */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        🎂 Data de Nascimento *
+                      </label>
+                      <input
+                        type="date"
+                        value={person.birthDate}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, birthDate: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <Mail className="inline w-4 h-4 mr-1" /> Email
+                      </label>
+                      <input
+                        type="email"
+                        value={person.email}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, email: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="email@exemplo.com"
+                      />
+                    </div>
+
+                    {/* Endereço (opcional) */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <MapPin className="inline w-4 h-4 mr-1" /> Endereço <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={person.address}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, address: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="Rua, número, bairro..."
+                      />
+                    </div>
+
+                    {/* Valor do Passeio */}
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <label className="block text-sm font-semibold text-green-800 mb-2">
+                        💰 Valor do Passeio (R$) *
+                      </label>
+                      <input
+                        type="number"
+                        value={person.amount || ''}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, amount: parseFloat(e.target.value) || 0 };
+                          setPeople(newPeople);
+                        }}
+                        min="0"
+                        step="0.01"
+                        required
+                        className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold bg-white"
+                        placeholder="200.00"
+                      />
+                    </div>
+
+                    {/* É criança / Meia entrada */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <input
+                          type="checkbox"
+                          id={`child-${personIndex}`}
+                          checked={person.isChild}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[personIndex] = { ...person, isChild: e.target.checked };
+                            setPeople(newPeople);
+                          }}
+                          className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                        />
+                        <label htmlFor={`child-${personIndex}`} className="font-semibold text-yellow-800 cursor-pointer">
+                          👶 É criança (menor de 7 anos)?
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id={`half-${personIndex}`}
+                          checked={person.isHalfPrice}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[personIndex] = { ...person, isHalfPrice: e.target.checked };
+                            setPeople(newPeople);
+                          }}
+                          className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <label htmlFor={`half-${personIndex}`} className="font-semibold text-orange-700 cursor-pointer">
+                          🎫 Paga meia entrada?
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ÚLTIMO PASSO: Pagamento */}
+          {currentStep === totalSteps && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <CreditCard className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Pagamento</h3>
+                <p className="text-gray-500">Configure o pagamento de cada pessoa</p>
+              </div>
+
+              {/* Resumo Total */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-gray-700 font-medium">Valor Total:</span>
+                  <span className="text-2xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-gray-700 font-medium">Total Recebido:</span>
+                  <span className="text-xl font-bold text-blue-600">R$ {totalPaid.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-green-300">
+                  <span className="text-gray-800 font-bold">Valor Restante:</span>
+                  <span className={`text-xl font-black ${totalRemaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    R$ {totalRemaining.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pagamento por pessoa */}
+              <div className="space-y-4">
+                {people.map((person, index) => (
+                  <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="font-bold text-gray-800">Pessoa {index + 1}: {person.name}</span>
+                        <span className="text-sm text-gray-500 ml-2">(Assento #{selectedSeats[index]})</span>
+                      </div>
+                      <span className="font-bold text-green-700">R$ {person.amount.toFixed(2)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Valor Recebido</label>
+                        <input
+                          type="number"
+                          value={person.amountPaid || ''}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            const value = parseFloat(e.target.value) || 0;
+                            newPeople[index] = { ...person, amountPaid: Math.min(value, person.amount) };
+                            setPeople(newPeople);
+                          }}
+                          min="0"
+                          max={person.amount}
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Forma de Pagamento</label>
+                        <select
+                          value={person.paymentMethod}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[index] = { ...person, paymentMethod: e.target.value as PaymentMethod };
+                            setPeople(newPeople);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                        >
+                          <option value="pix">💠 PIX</option>
+                          <option value="cartao">💳 Cartão</option>
+                          <option value="dinheiro">💵 Dinheiro</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                <p className="text-blue-800 font-medium">
+                  ⏳ Após criar, a reserva será enviada para <strong>aprovação do administrador</strong>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Erro */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mt-4">
+            {error}
+          </div>
+        )}
+
+        {/* Botões de Navegação */}
+        <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
+          {currentStep > 1 && (
             <button
               type="button"
-              onClick={onClose}
-              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition"
+              onClick={handleBack}
+              disabled={loading}
+              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              Cancelar
+              <ChevronLeft size={20} />
+              Voltar
             </button>
+          )}
+          
+          {currentStep < totalSteps ? (
             <button
-              type="submit"
-              disabled={loading || selectedSeats.length === 0 || selectedSeats.some(seat => !seatData[seat]?.name?.trim())}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50"
+              type="button"
+              onClick={handleNext}
+              disabled={!canProceed()}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Criando...' : selectedSeats.length > 1 ? `Criar ${selectedSeats.length} Reservas` : 'Criar Reserva'}
+              Próximo
+              <ChevronRight size={20} />
             </button>
-          </div>
-        </form>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loading}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={20} />
+                  Criar Reserva{people.length > 1 ? 's' : ''}
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
-

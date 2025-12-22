@@ -1,12 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation, Boat, Payment, PaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign } from 'lucide-react';
+import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users } from 'lucide-react';
 import Link from 'next/link';
+
+// Cores para identificar grupos (paleta vibrante)
+const GROUP_COLORS = [
+  { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-500' },
+  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-500' },
+  { bg: 'bg-pink-100', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
+  { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
+  { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
+  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-700', badge: 'bg-indigo-500' },
+  { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
+  { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
+  { bg: 'bg-lime-100', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-600' },
+  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+];
+
+// Função para obter cor do grupo baseado no groupId
+const getGroupColor = (groupId: string | undefined, groupColorMap: Map<string, number>) => {
+  if (!groupId) return null;
+  const colorIndex = groupColorMap.get(groupId);
+  if (colorIndex === undefined) return null;
+  return GROUP_COLORS[colorIndex % GROUP_COLORS.length];
+};
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
@@ -72,8 +94,19 @@ export default function CheckInPage() {
             checkedIn: doc.data().checkedIn || false, // Garantir que seja boolean
           })) as Reservation[];
 
-          // Ordenar por assento
-          reservationsData.sort((a, b) => a.seatNumber - b.seatNumber);
+          // Ordenar para manter grupos juntos
+          reservationsData.sort((a, b) => {
+            // Primeiro, ordenar por groupId para manter grupos juntos
+            if (a.groupId && b.groupId) {
+              if (a.groupId !== b.groupId) {
+                return a.groupId.localeCompare(b.groupId);
+              }
+            }
+            if (a.groupId && !b.groupId) return -1;
+            if (!a.groupId && b.groupId) return 1;
+            // Depois por nome do cliente
+            return a.customerName.localeCompare(b.customerName);
+          });
           setReservations(reservationsData);
         });
       } else {
@@ -222,6 +255,32 @@ export default function CheckInPage() {
   const checkedInCount = reservations.filter(r => r.checkedIn).length;
   const pendingPayment = reservations.filter(r => r.amountDue > 0);
 
+  // Criar mapa de cores para grupos
+  const groupColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let colorIndex = 0;
+    
+    reservations.forEach(r => {
+      if (r.groupId && !map.has(r.groupId)) {
+        map.set(r.groupId, colorIndex);
+        colorIndex++;
+      }
+    });
+    
+    return map;
+  }, [reservations]);
+
+  // Contar membros de cada grupo
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    reservations.forEach(r => {
+      if (r.groupId) {
+        counts.set(r.groupId, (counts.get(r.groupId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [reservations]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header Responsivo */}
@@ -312,26 +371,42 @@ export default function CheckInPage() {
                     }
                   </div>
                 ) : (
-                  filteredReservations.map((reservation) => (
+                  filteredReservations.map((reservation) => {
+                    const groupColor = getGroupColor(reservation.groupId, groupColorMap);
+                    const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                    
+                    return (
                     <div 
                       key={reservation.id} 
                       className={`rounded-xl p-4 border-2 transition ${
                         reservation.checkedIn 
                           ? 'bg-green-50 border-green-300' 
-                          : reservation.amountDue > 0 
-                            ? 'bg-orange-50 border-orange-200' 
-                            : 'bg-white border-gray-200'
+                          : groupColor
+                            ? `${groupColor.bg} ${groupColor.border}`
+                            : reservation.amountDue > 0 
+                              ? 'bg-orange-50 border-orange-200' 
+                              : 'bg-white border-gray-200'
                       }`}
                     >
+                      {/* Badge de Grupo */}
+                      {groupColor && groupSize > 1 && (
+                        <div className={`${groupColor.badge} text-white text-xs font-bold px-2 py-1 rounded-full inline-flex items-center gap-1 mb-2`}>
+                          <Users size={12} />
+                          Grupo de {groupSize}
+                        </div>
+                      )}
+
                       {/* Header do Card */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
                             reservation.checkedIn 
                               ? 'bg-green-500 text-white' 
-                              : 'bg-viva-blue text-white'
+                              : groupColor
+                                ? `${groupColor.badge} text-white`
+                                : 'bg-viva-blue text-white'
                           }`}>
-                            {reservation.seatNumber}
+                            <User size={24} />
                           </div>
                           <div>
                             <p className="font-bold text-gray-900">{reservation.customerName}</p>
@@ -372,7 +447,9 @@ export default function CheckInPage() {
                         className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-base transition disabled:opacity-50 ${
                           reservation.checkedIn
                             ? 'bg-green-500 text-white active:bg-green-600'
-                            : 'bg-viva-blue text-white active:bg-viva-blue-dark'
+                            : groupColor
+                              ? `${groupColor.badge} text-white`
+                              : 'bg-viva-blue text-white active:bg-viva-blue-dark'
                         }`}
                       >
                         {reservation.checkedIn ? (
@@ -388,7 +465,8 @@ export default function CheckInPage() {
                         )}
                       </button>
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
 
@@ -397,7 +475,7 @@ export default function CheckInPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assento</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Grupo</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Contato</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
@@ -415,10 +493,27 @@ export default function CheckInPage() {
                         </td>
                       </tr>
                     ) : (
-                      filteredReservations.map((reservation) => (
-                        <tr key={reservation.id} className={`hover:bg-gray-50 ${reservation.checkedIn ? 'bg-green-50' : ''}`}>
+                      filteredReservations.map((reservation) => {
+                        const groupColor = getGroupColor(reservation.groupId, groupColorMap);
+                        const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                        
+                        return (
+                        <tr key={reservation.id} className={`hover:bg-gray-50 ${
+                          reservation.checkedIn 
+                            ? 'bg-green-50' 
+                            : groupColor 
+                              ? groupColor.bg 
+                              : ''
+                        }`}>
                           <td className="px-6 py-4">
-                            <span className="font-bold text-lg text-viva-blue-dark">{reservation.seatNumber}</span>
+                            <div className="flex items-center gap-2">
+                              {groupColor && groupSize > 1 && (
+                                <span className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1`}>
+                                  <Users size={10} />
+                                  {groupSize}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <div>
@@ -469,7 +564,9 @@ export default function CheckInPage() {
                               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
                                 reservation.checkedIn
                                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  : groupColor
+                                    ? `${groupColor.bg} ${groupColor.text} hover:opacity-80`
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
                             >
                               {reservation.checkedIn ? (
@@ -486,7 +583,8 @@ export default function CheckInPage() {
                             </button>
                           </td>
                         </tr>
-                      ))
+                      );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -549,7 +647,7 @@ export default function CheckInPage() {
               <div className="space-y-3 mb-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Valor Recebido (R$)
+                    Valor Pendente (R$)
                   </label>
                   <input
                     type="number"

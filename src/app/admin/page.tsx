@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Boat, Reservation } from '@/types';
-import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2 } from 'lucide-react';
+import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
+import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -19,6 +19,20 @@ const formatDate = (dateString: string) => {
   if (!year || !month || !day) return dateString;
   return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
 };
+
+// Cores para identificar grupos (paleta vibrante) - GLOBAL
+const GROUP_COLORS = [
+  { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-500' },
+  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-500' },
+  { bg: 'bg-pink-100', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
+  { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
+  { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
+  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-700', badge: 'bg-indigo-500' },
+  { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
+  { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
+  { bg: 'bg-lime-100', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-600' },
+  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+];
 
 export default function AdminDashboard() {
   const [boats, setBoats] = useState<Boat[]>([]);
@@ -42,6 +56,7 @@ export default function AdminDashboard() {
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [showReservationWizard, setShowReservationWizard] = useState(false);
   const previousPendingCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const { user, signOut } = useAuth();
@@ -304,26 +319,10 @@ export default function AdminDashboard() {
       // Se a reserva já estava aprovada, não incrementar seatsTaken novamente
       const wasAlreadyApproved = reservation.status === 'approved';
       
+      // Verificar se ainda há vagas disponíveis
       if (!wasAlreadyApproved && currentSeatsTaken >= boatData.seatsTotal) {
-        alert('Não há mais assentos disponíveis!');
+        alert('Não há mais vagas disponíveis neste barco!');
         return;
-      }
-
-      // Verificar se o assento ainda está disponível
-      if (!wasAlreadyApproved) {
-        const reservationsQuery = query(
-          collection(db, 'reservations'),
-          where('boatId', '==', reservation.boatId),
-          where('status', '==', 'approved')
-        );
-        const reservationsSnapshot = await getDocs(reservationsQuery);
-        const approvedReservations = reservationsSnapshot.docs.map(doc => doc.data()) as Reservation[];
-        const takenSeats = approvedReservations.map(r => r.seatNumber);
-        
-        if (takenSeats.includes(reservation.seatNumber)) {
-          alert(`O assento ${reservation.seatNumber} já está ocupado por outra reserva aprovada!`);
-          return;
-        }
       }
 
       await updateDoc(reservationRef, {
@@ -536,8 +535,56 @@ export default function AdminDashboard() {
   });
 
   // Reservas pendentes e pré-reservas devem aparecer TODAS, independente da data do passeio
-  const pendingReservations = reservations.filter(r => r.status === 'pending' || r.status === 'pre_reserved');
+  // Ordenar para manter grupos juntos
+  const pendingReservations = reservations
+    .filter(r => r.status === 'pending' || r.status === 'pre_reserved')
+    .sort((a, b) => {
+      // Primeiro, ordenar por groupId para manter grupos juntos
+      if (a.groupId && b.groupId) {
+        if (a.groupId !== b.groupId) {
+          return a.groupId.localeCompare(b.groupId);
+        }
+      }
+      if (a.groupId && !b.groupId) return -1;
+      if (!a.groupId && b.groupId) return 1;
+      // Depois por data do passeio
+      return new Date(a.rideDate).getTime() - new Date(b.rideDate).getTime();
+    });
   const approvedReservations = filteredReservations.filter(r => r.status === 'approved');
+
+  // Criar mapa de cores para grupos das reservas pendentes
+  const pendingGroupColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let colorIndex = 0;
+    
+    pendingReservations.forEach(r => {
+      if (r.groupId && !map.has(r.groupId)) {
+        map.set(r.groupId, colorIndex);
+        colorIndex++;
+      }
+    });
+    
+    return map;
+  }, [pendingReservations]);
+
+  // Contar membros de cada grupo das reservas pendentes
+  const pendingGroupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    pendingReservations.forEach(r => {
+      if (r.groupId) {
+        counts.set(r.groupId, (counts.get(r.groupId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [pendingReservations]);
+
+  // Função auxiliar para obter cor de grupo
+  const getPendingGroupColor = (groupId: string | undefined) => {
+    if (!groupId) return null;
+    const colorIndex = pendingGroupColorMap.get(groupId);
+    if (colorIndex === undefined) return null;
+    return GROUP_COLORS[colorIndex % GROUP_COLORS.length];
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -660,6 +707,13 @@ export default function AdminDashboard() {
 
         {/* Actions - Grid responsivo para mobile */}
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-8">
+          <button
+            onClick={() => setShowReservationWizard(true)}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 sm:px-6 py-3 rounded-xl font-bold hover:shadow-lg transition text-sm sm:text-base col-span-2 sm:col-span-1"
+          >
+            <Sparkles size={18} />
+            Criar Reserva
+          </button>
           <button
             onClick={() => setShowBoatModal(true)}
             className="flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white px-3 sm:px-6 py-3 rounded-xl font-bold hover:shadow-lg transition text-sm sm:text-base"
@@ -918,12 +972,26 @@ export default function AdminDashboard() {
                 <p className="text-gray-500 text-sm">Nenhuma reserva pendente</p>
               </div>
             ) : (
-              pendingReservations.map((reservation) => (
-                <div key={reservation.id} className={`rounded-xl p-4 shadow-sm border ${
-                  reservation.status === 'pre_reserved' 
-                    ? 'bg-orange-50 border-orange-300' 
-                    : 'bg-white border-orange-100'
+              pendingReservations.map((reservation) => {
+                const groupColor = getPendingGroupColor(reservation.groupId);
+                const groupSize = reservation.groupId ? pendingGroupCounts.get(reservation.groupId) || 0 : 0;
+                
+                return (
+                <div key={reservation.id} className={`rounded-xl p-4 shadow-sm border-2 ${
+                  groupColor
+                    ? `${groupColor.bg} ${groupColor.border}`
+                    : reservation.status === 'pre_reserved' 
+                      ? 'bg-orange-50 border-orange-300' 
+                      : 'bg-white border-orange-100'
                 }`}>
+                  {/* Badge de Grupo */}
+                  {groupColor && groupSize > 1 && (
+                    <div className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 mb-2`}>
+                      <Users size={12} />
+                      Grupo de {groupSize}
+                    </div>
+                  )}
+                  
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       {reservation.status === 'pre_reserved' && (
@@ -934,9 +1002,11 @@ export default function AdminDashboard() {
                       <p className="font-bold text-gray-900">{reservation.customerName}</p>
                       <p className="text-sm text-gray-500">{reservation.phone || 'Sem telefone'}</p>
                     </div>
-                    <span className="bg-viva-blue text-white text-sm font-bold px-2.5 py-1 rounded-lg">
-                      #{reservation.seatNumber}
-                    </span>
+                    {groupColor && (
+                      <span className={`${groupColor.badge} text-white text-sm font-bold px-2.5 py-1 rounded-lg`}>
+                        <Users size={14} />
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-sm mb-3">
                     <div className="flex items-center gap-1.5 text-gray-600">
@@ -949,12 +1019,17 @@ export default function AdminDashboard() {
                   </div>
                   <button
                     onClick={() => setSelectedReservation(reservation)}
-                    className="w-full bg-orange-500 text-white py-2.5 rounded-lg font-semibold text-sm hover:bg-orange-600 transition"
+                    className={`w-full py-2.5 rounded-lg font-semibold text-sm transition ${
+                      groupColor 
+                        ? `${groupColor.badge} text-white hover:opacity-90`
+                        : 'bg-orange-500 text-white hover:bg-orange-600'
+                    }`}
                   >
                     Ver Detalhes
                   </button>
                 </div>
-              ))
+              );
+              })
             )}
           </div>
 
@@ -966,7 +1041,7 @@ export default function AdminDashboard() {
                   <tr>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assento</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ações</th>
                   </tr>
@@ -980,14 +1055,29 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ) : (
-                    pendingReservations.map((reservation) => (
+                    pendingReservations.map((reservation) => {
+                      const groupColor = getPendingGroupColor(reservation.groupId);
+                      const groupSize = reservation.groupId ? pendingGroupCounts.get(reservation.groupId) || 0 : 0;
+                      
+                      return (
                       <tr key={reservation.id} className={`hover:bg-gray-50 ${
-                        reservation.status === 'pre_reserved' ? 'bg-orange-50' : ''
+                        groupColor 
+                          ? groupColor.bg 
+                          : reservation.status === 'pre_reserved' 
+                            ? 'bg-orange-50' 
+                            : ''
                       }`}>
                         <td className="px-4 lg:px-6 py-4">
                           <div>
+                            {/* Badge de grupo */}
+                            {groupColor && groupSize > 1 && (
+                              <span className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full mb-1 inline-flex items-center gap-1`}>
+                                <Users size={10} />
+                                Grupo de {groupSize}
+                              </span>
+                            )}
                             {reservation.status === 'pre_reserved' && (
-                              <span className="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full mb-1 inline-block">
+                              <span className="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full mb-1 inline-block ml-1">
                                 ⏳ PRÉ-RESERVA
                               </span>
                             )}
@@ -999,9 +1089,15 @@ export default function AdminDashboard() {
                           {formatDate(reservation.rideDate)}
                         </td>
                         <td className="px-4 lg:px-6 py-4">
-                          <span className="bg-viva-blue/10 text-viva-blue-dark font-bold px-2 py-1 rounded text-sm">
-                            #{reservation.seatNumber}
-                          </span>
+                          {groupColor ? (
+                            <span className={`${groupColor.badge} text-white font-bold px-2 py-1 rounded text-sm inline-flex items-center gap-1`}>
+                              <Users size={12} />
+                            </span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded text-sm">
+                              Individual
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-gray-900">
                           R$ {reservation.totalAmount.toFixed(2)}
@@ -1009,13 +1105,18 @@ export default function AdminDashboard() {
                         <td className="px-4 lg:px-6 py-4">
                           <button
                             onClick={() => setSelectedReservation(reservation)}
-                            className="bg-viva-blue text-white px-3 py-1.5 rounded-lg font-semibold text-sm hover:bg-viva-blue-dark transition"
+                            className={`px-3 py-1.5 rounded-lg font-semibold text-sm transition ${
+                              groupColor 
+                                ? `${groupColor.badge} text-white hover:opacity-90`
+                                : 'bg-viva-blue text-white hover:bg-viva-blue-dark'
+                            }`}
                           >
                             Ver Detalhes
                           </button>
                         </td>
                       </tr>
-                    ))
+                    );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1200,6 +1301,14 @@ export default function AdminDashboard() {
           onReject={handleRejectReservation}
         />
       )}
+
+      {/* Wizard de Reserva para Admin */}
+      {showReservationWizard && (
+        <AdminReservationWizard
+          boats={boats}
+          onClose={() => setShowReservationWizard(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1313,6 +1422,14 @@ function EditBoatModal({
   );
 }
 
+// Função para obter cor do grupo baseado no groupId
+const getGroupColor = (groupId: string | undefined, groupColorMap: Map<string, number>) => {
+  if (!groupId) return null;
+  const colorIndex = groupColorMap.get(groupId);
+  if (colorIndex === undefined) return null;
+  return GROUP_COLORS[colorIndex % GROUP_COLORS.length];
+};
+
 function BoatSeatsModal({
   boat,
   reservations,
@@ -1324,46 +1441,41 @@ function BoatSeatsModal({
   onClose: () => void;
   onCancelReservation: (reservationId: string) => void;
 }) {
-  const { user } = useAuth();
-  const [showPreReserveModal, setShowPreReserveModal] = useState(false);
-  const [selectedSeatForPreReserve, setSelectedSeatForPreReserve] = useState<number | null>(null);
-  
-  const takenSeats = reservations.map(r => r.seatNumber);
   const availableSeats = boat.seatsTotal - boat.seatsTaken;
-  
-  const handlePreReserve = async (seatNumber: number) => {
-    if (!user) return;
+  const occupancyPercent = Math.round((boat.seatsTaken / boat.seatsTotal) * 100);
+
+  // Criar mapa de cores para grupos
+  const groupColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let colorIndex = 0;
     
-    try {
-      await addDoc(collection(db, 'reservations'), {
-        boatId: boat.id,
-        seatNumber,
-        status: 'pre_reserved',
-        customerName: 'Pré-reserva',
-        phone: '',
-        address: '',
-        paymentMethod: 'pix',
-        totalAmount: 0,
-        amountPaid: 0,
-        amountDue: 0,
-        vendorId: user.uid,
-        rideDate: boat.date,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      
-      setShowPreReserveModal(false);
-      setSelectedSeatForPreReserve(null);
-      alert('Pré-reserva criada com sucesso!');
-    } catch (error) {
-      console.error('Erro ao criar pré-reserva:', error);
-      alert('Erro ao criar pré-reserva');
-    }
-  };
+    reservations.forEach(r => {
+      if (r.groupId && !map.has(r.groupId)) {
+        map.set(r.groupId, colorIndex);
+        colorIndex++;
+      }
+    });
+    
+    return map;
+  }, [reservations]);
+
+  // Contar membros de cada grupo
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    reservations.forEach(r => {
+      if (r.groupId) {
+        counts.set(r.groupId, (counts.get(r.groupId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [reservations]);
+
+  // Contar quantos grupos existem
+  const totalGroups = groupColorMap.size;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4 sm:mb-6">
           <div className="flex-1 min-w-0">
@@ -1386,109 +1498,78 @@ function BoatSeatsModal({
         </div>
 
         {/* Stats rápidos */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
-          <div className="bg-red-50 rounded-xl p-3 text-center">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+          <div className="bg-red-50 rounded-xl p-4 text-center">
             <p className="text-2xl sm:text-3xl font-black text-red-600">{boat.seatsTaken}</p>
-            <p className="text-xs text-red-600">Ocupados</p>
+            <p className="text-xs sm:text-sm text-red-600 font-medium">Ocupadas</p>
           </div>
-          <div className="bg-green-50 rounded-xl p-3 text-center">
+          <div className="bg-green-50 rounded-xl p-4 text-center">
             <p className="text-2xl sm:text-3xl font-black text-green-600">{availableSeats}</p>
-            <p className="text-xs text-green-600">Disponíveis</p>
+            <p className="text-xs sm:text-sm text-green-600 font-medium">Disponíveis</p>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-4 text-center">
+            <p className="text-2xl sm:text-3xl font-black text-purple-600">{totalGroups}</p>
+            <p className="text-xs sm:text-sm text-purple-600 font-medium">Grupos</p>
+          </div>
+        </div>
+
+        {/* Barra de Progresso Visual */}
+        <div className="mb-6">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-gray-600">Ocupação do Barco</span>
+            <span className="font-bold text-gray-800">{occupancyPercent}%</span>
+          </div>
+          <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-500 ${
+                boat.seatsTaken >= boat.seatsTotal 
+                  ? 'bg-red-500' 
+                  : boat.seatsTaken >= boat.seatsTotal * 0.8 
+                    ? 'bg-orange-500' 
+                    : 'bg-green-500'
+              }`}
+              style={{ width: `${occupancyPercent}%` }}
+            />
           </div>
         </div>
         
         <div className="space-y-4 sm:space-y-6">
-          {/* Legenda */}
-          <div className="flex items-center justify-center gap-4 sm:gap-6 text-xs sm:text-sm bg-gray-50 rounded-lg p-2">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 sm:w-6 sm:h-6 bg-red-500 rounded"></div>
-              <span className="text-gray-700">Ocupado</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 sm:w-6 sm:h-6 bg-gray-300 rounded"></div>
-              <span className="text-gray-700">Livre</span>
-            </div>
-          </div>
-
-          {/* Grade de Assentos - Responsivo (Livre/Ocupado) */}
-          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1.5 sm:gap-2">
-            {Array.from({ length: boat.seatsTotal }, (_, i) => {
-              const seatNumber = i + 1;
-              const isTaken = takenSeats.includes(seatNumber);
-              const reservation = reservations.find(r => r.seatNumber === seatNumber);
-              const isPreReserved = reservation?.status === 'pre_reserved';
-              
-              return (
-                <button
-                  key={seatNumber}
-                  type="button"
-                  onClick={() => {
-                    if (!isTaken) {
-                      setSelectedSeatForPreReserve(seatNumber);
-                      setShowPreReserveModal(true);
-                    }
-                  }}
-                  disabled={isTaken}
-                  className={`relative p-2 sm:p-3 rounded-lg text-center font-bold transition ${
-                    isTaken
-                      ? isPreReserved
-                        ? 'bg-orange-500 text-white cursor-not-allowed'
-                        : 'bg-red-500 text-white cursor-not-allowed'
-                      : 'bg-green-200 text-green-700 hover:bg-green-300 cursor-pointer'
-                  }`}
-                  title={reservation ? `${reservation.customerName} - ${reservation.phone}` : 'Clique para criar pré-reserva'}
-                >
-                  <div className="text-xs sm:text-sm">
-                    {isTaken ? (isPreReserved ? '⏳' : '✗') : '✓'}
-                  </div>
-                  {reservation && !isPreReserved && (
-                    <div className="text-[10px] sm:text-xs mt-0.5 opacity-90 truncate hidden sm:block">
-                      {reservation.customerName.split(' ')[0]}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          
-          {/* Botão criar pré-reserva rápida */}
-          <div className="flex justify-center">
-            <button
-              onClick={() => {
-                const firstAvailable = Array.from({ length: boat.seatsTotal }, (_, i) => i + 1)
-                  .find(seat => !takenSeats.includes(seat));
-                if (firstAvailable) {
-                  setSelectedSeatForPreReserve(firstAvailable);
-                  setShowPreReserveModal(true);
-                } else {
-                  alert('Não há assentos disponíveis');
-                }
-              }}
-              className="px-4 py-2 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 transition"
-            >
-              + Criar Pré-reserva
-            </button>
-          </div>
-
           {/* Lista de Reservas */}
-          {reservations.length > 0 && (
-            <div className="border-t pt-4 sm:pt-6">
+          {reservations.length > 0 ? (
+            <div>
               <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark mb-3 sm:mb-4 flex items-center gap-2">
                 ✅ Reservas Aprovadas
                 <span className="bg-viva-blue text-white text-xs px-2 py-0.5 rounded-full">
                   {reservations.length}
                 </span>
               </h3>
-              <div className="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto">
-                {reservations.map((reservation) => (
+              <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                {reservations.map((reservation, index) => {
+                  const groupColor = getGroupColor(reservation.groupId, groupColorMap);
+                  const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                  
+                  return (
                   <div
                     key={reservation.id}
-                    className="bg-gray-50 rounded-xl p-3 sm:p-4"
+                    className={`rounded-xl p-3 sm:p-4 border-2 ${
+                      groupColor 
+                        ? `${groupColor.bg} ${groupColor.border}` 
+                        : 'bg-gray-50 border-transparent'
+                    }`}
                   >
-                    {/* Mobile Layout */}
+                    {/* Badge de Grupo */}
+                    {groupColor && groupSize > 1 && (
+                      <div className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 mb-2`}>
+                        <Users size={12} />
+                        Grupo de {groupSize} pessoas
+                      </div>
+                    )}
+                    
                     <div className="flex items-start gap-3">
-                      <div className="bg-red-500 text-white w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center font-bold text-sm sm:text-base shrink-0">
-                        #{reservation.seatNumber}
+                      <div className={`${
+                        groupColor ? groupColor.badge : 'bg-gradient-to-br from-viva-blue to-viva-blue-dark'
+                      } text-white w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center font-bold text-sm sm:text-base shrink-0`}>
+                        {groupColor ? <Users size={20} /> : index + 1}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-gray-900 text-sm sm:text-base truncate">{reservation.customerName}</p>
@@ -1511,7 +1592,7 @@ function BoatSeatsModal({
                       </div>
                       <button
                         onClick={() => {
-                          if (confirm(`Cancelar reserva de ${reservation.customerName}?\nO assento #${reservation.seatNumber} ficará disponível.`)) {
+                          if (confirm(`Cancelar reserva de ${reservation.customerName}?\nA vaga ficará disponível.`)) {
                             onCancelReservation(reservation.id);
                           }
                         }}
@@ -1522,8 +1603,15 @@ function BoatSeatsModal({
                       </button>
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Users className="mx-auto text-gray-300 mb-3" size={48} />
+              <p className="text-gray-500 font-medium">Nenhuma reserva aprovada ainda</p>
+              <p className="text-gray-400 text-sm">As reservas aprovadas aparecerão aqui</p>
             </div>
           )}
 
@@ -1534,36 +1622,6 @@ function BoatSeatsModal({
             Fechar
           </button>
         </div>
-        
-        {/* Modal Pré-reserva */}
-        {showPreReserveModal && selectedSeatForPreReserve && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-black text-viva-blue-dark mb-4">Criar Pré-reserva</h3>
-              <p className="text-gray-600 mb-4">
-                Criar pré-reserva para o assento {selectedSeatForPreReserve}? 
-                Esta reserva bloqueia a vaga sem dados do cliente.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowPreReserveModal(false);
-                    setSelectedSeatForPreReserve(null);
-                  }}
-                  className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handlePreReserve(selectedSeatForPreReserve)}
-                  className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg font-bold hover:bg-orange-600 transition"
-                >
-                  Criar Pré-reserva
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1695,58 +1753,13 @@ function ReservationDetailModal({
         </div>
 
         {/* Input de valor pago (se pendente) */}
-        {reservation.status === 'pending' && (
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              💵 Valor Pago (R$)
-            </label>
-            <input
-              type="number"
-              value={amountPaid}
-              onChange={(e) => {
-                const value = e.target.value;
-                const numValue = parseFloat(value);
-                if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservation.totalAmount)) {
-                  setAmountPaid(value);
-                }
-              }}
-              step="0.01"
-              min="0"
-              max={reservation.totalAmount}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-bold"
-              placeholder="0.00"
-            />
-            {parseFloat(amountPaid) > reservation.totalAmount && (
-              <p className="mt-1 text-sm text-red-600">⚠️ O valor pago não pode ser maior que o total!</p>
-            )}
-          </div>
-        )}
+        
 
         {/* Botões de Ação */}
         <div className="space-y-2 sm:space-y-0 sm:flex sm:gap-3 pt-2">
           {reservation.status === 'pending' ? (
             <>
-              {/* Botão Efetuar Pagamento - Redireciona para WhatsApp */}
-              <a
-                href={`https://wa.me/5548999999999?text=${encodeURIComponent(
-                  `Olá! Preciso cobrar o pagamento da reserva:\n\n` +
-                  `👤 Cliente: ${reservation.customerName}\n` +
-                  `📞 Telefone: ${reservation.phone || 'Não informado'}\n` +
-                  `📅 Data do Passeio: ${formatDate(reservation.rideDate)}\n` +
-                  `🚢 Barco: ${boat.name}\n` +
-                  `💺 Assento: #${reservation.seatNumber}\n` +
-                  `💰 Valor Total: R$ ${reservation.totalAmount.toFixed(2)}\n` +
-                  `💳 Forma de Pagamento: ${reservation.paymentMethod.toUpperCase()}\n` +
-                  `📍 Endereço: ${reservation.address}\n\n` +
-                  `Por favor, entre em contato com o cliente para efetuar o pagamento.`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
-              >
-                <DollarSign size={20} />
-                Efetuar Pagamento
-              </a>
+              
               {/* Botões em coluna no mobile, linha no desktop */}
               <button
                 onClick={() => {
@@ -2117,6 +2130,866 @@ function DeleteBoatModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ===== WIZARD DE RESERVA PARA ADMIN =====
+interface PersonData {
+  name: string;
+  document: string;
+  phone: string;
+  birthDate: string;
+  email: string;
+  address: string;
+  isChild: boolean;
+  isHalfPrice: boolean;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  amountPaid: number;
+}
+
+function AdminReservationWizard({
+  boats,
+  onClose,
+}: {
+  boats: Boat[];
+  onClose: () => void;
+}) {
+  // Estados do wizard
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
+  const [selectedVendorId, setSelectedVendorId] = useState<string>('');
+  const [vendors, setVendors] = useState<UserRole[]>([]);
+  const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
+  const [people, setPeople] = useState<PersonData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [availableSeats, setAvailableSeats] = useState<number[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
+
+  // Calcular total de passos: 1 (data/vendedor) + 1 (qtd pessoas) + numberOfPeople (dados) + 1 (pagamento)
+  const totalSteps = 3 + numberOfPeople;
+  
+  // Carregar vendedores
+  useEffect(() => {
+    const loadVendors = async () => {
+      try {
+        const vendorQuery = query(collection(db, 'roles'), where('role', '==', 'vendor'));
+        const vendorSnapshot = await getDocs(vendorQuery);
+        const vendorsList = vendorSnapshot.docs.map(doc => ({
+          uid: doc.id,
+          ...doc.data(),
+        })) as UserRole[];
+        setVendors(vendorsList);
+      } catch (error) {
+        console.error('Erro ao carregar vendedores:', error);
+      }
+    };
+    loadVendors();
+  }, []);
+
+  // Barcos disponíveis para a data selecionada
+  const boatsForDate = boats.filter(boat => {
+    const boatDate = new Date(boat.date).toISOString().split('T')[0];
+    return boatDate === selectedDate;
+  });
+
+  // Buscar assentos disponíveis quando um barco é selecionado
+  useEffect(() => {
+    if (!selectedBoat) {
+      setAvailableSeats([]);
+      return;
+    }
+
+    const reservationsQuery = query(
+      collection(db, 'reservations'),
+      where('boatId', '==', selectedBoat.id),
+      where('status', '==', 'approved')
+    );
+
+    const unsubscribe = onSnapshot(reservationsQuery, (snapshot) => {
+      const reservations = snapshot.docs.map(doc => doc.data()) as Reservation[];
+      const takenSeats = reservations.map(r => r.seatNumber);
+      
+      const available: number[] = [];
+      for (let i = 1; i <= selectedBoat.seatsTotal; i++) {
+        if (!takenSeats.includes(i)) {
+          available.push(i);
+        }
+      }
+      setAvailableSeats(available);
+    });
+
+    return unsubscribe;
+  }, [selectedBoat]);
+
+  // Inicializar array de pessoas quando mudar a quantidade
+  useEffect(() => {
+    const newPeople: PersonData[] = [];
+    for (let i = 0; i < numberOfPeople; i++) {
+      newPeople.push(people[i] || {
+        name: '',
+        document: '',
+        phone: '',
+        birthDate: '',
+        email: '',
+        address: '',
+        isChild: false,
+        isHalfPrice: false,
+        amount: 200,
+        paymentMethod: 'pix',
+        amountPaid: 0,
+      });
+    }
+    setPeople(newPeople);
+  }, [numberOfPeople]);
+
+  // Selecionar automaticamente os assentos quando a quantidade muda
+  useEffect(() => {
+    if (availableSeats.length > 0 && numberOfPeople > 0) {
+      setSelectedSeats(availableSeats.slice(0, numberOfPeople));
+    }
+  }, [numberOfPeople, availableSeats]);
+
+  // Calcular totais
+  const totalAmount = people.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalPaid = people.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+  const totalRemaining = totalAmount - totalPaid;
+
+  // Validações por passo
+  const canProceed = () => {
+    if (currentStep === 1) {
+      return selectedDate && selectedBoat && selectedVendorId;
+    }
+    if (currentStep === 2) {
+      const vagasDisponiveis = selectedBoat ? selectedBoat.seatsTotal - selectedBoat.seatsTaken : 0;
+      return numberOfPeople >= 1 && numberOfPeople <= vagasDisponiveis;
+    }
+    // Passos de dados das pessoas
+    if (currentStep >= 3 && currentStep < 3 + numberOfPeople) {
+      const personIndex = currentStep - 3;
+      const person = people[personIndex];
+      return person && person.name && person.document && person.phone && person.birthDate;
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedBoat) {
+      setError('Selecione um barco');
+      return;
+    }
+
+    if (!selectedVendorId) {
+      setError('Selecione um vendedor');
+      return;
+    }
+
+    // Verificar se há vagas suficientes
+    const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+    if (numberOfPeople > vagasDisponiveis) {
+      setError(`Não há vagas suficientes. Disponíveis: ${vagasDisponiveis}`);
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      // Gerar groupId para reservas em grupo
+      const groupId = people.length > 1 ? `group_${Date.now()}` : undefined;
+      const baseTimestamp = Date.now();
+
+      // Criar uma reserva para cada pessoa
+      const reservationPromises = people.map(async (person, index) => {
+        // Gerar número de identificação único baseado em timestamp
+        const seatNumber = baseTimestamp + index;
+        
+        const reservationData: Record<string, unknown> = {
+          boatId: selectedBoat.id,
+          seatNumber, // Agora é apenas um ID único, não um assento real
+          status: 'pending',
+          customerName: person.name,
+          phone: person.phone,
+          whatsapp: person.phone,
+          address: person.address || '',
+          document: person.document,
+          birthDate: person.birthDate,
+          email: person.email || '',
+          paymentMethod: person.paymentMethod,
+          totalAmount: person.amount,
+          amountPaid: person.amountPaid,
+          amountDue: person.amount - person.amountPaid,
+          vendorId: selectedVendorId,
+          rideDate: selectedBoat.date,
+          isChild: person.isChild,
+          isHalfPrice: person.isHalfPrice,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+
+        if (groupId) reservationData.groupId = groupId;
+        if (selectedBoat.boatType === 'escuna') {
+          reservationData.escunaType = escunaType;
+        }
+
+        return addDoc(collection(db, 'reservations'), reservationData);
+      });
+
+      await Promise.all(reservationPromises);
+      alert(`${people.length} reserva(s) criada(s) com sucesso!`);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar reservas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Formatar data para exibição
+  const formatDisplayDate = (dateString: string) => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return `${weekdays[date.getDay()]}, ${day} de ${months[month - 1]} de ${year}`;
+  };
+
+  // Renderizar indicador de progresso
+  const renderProgressBar = () => {
+    const stepLabels = ['Data', 'Pessoas', ...Array.from({ length: numberOfPeople }, (_, i) => `Pessoa ${i + 1}`), 'Pagamento'];
+    const displaySteps = stepLabels.slice(0, totalSteps);
+    
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-2">
+          {displaySteps.map((label, index) => {
+            const stepNum = index + 1;
+            const isActive = stepNum === currentStep;
+            const isCompleted = stepNum < currentStep;
+            
+            return (
+              <div key={index} className="flex flex-col items-center flex-1">
+                <div className={`
+                  w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all
+                  ${isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-blue-600 text-white ring-4 ring-blue-200' : 'bg-gray-200 text-gray-500'}
+                `}>
+                  {isCompleted ? '✓' : stepNum}
+                </div>
+                <span className={`text-xs mt-1 text-center ${isActive ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
+            style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+              Nova Reserva (Admin)
+            </h2>
+            <p className="text-gray-500 text-sm">Passo {currentStep} de {totalSteps}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition p-2 hover:bg-gray-100 rounded-full"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Barra de Progresso */}
+        {renderProgressBar()}
+
+        {/* Conteúdo do Passo */}
+        <div className="min-h-[300px]">
+          {/* PASSO 1: Seleção de Data, Barco e Vendedor */}
+          {currentStep === 1 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <Calendar className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Configuração Inicial</h3>
+                <p className="text-gray-500">Data, barco e vendedor responsável</p>
+              </div>
+
+              {/* Seleção de Vendedor */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  👤 Vendedor Responsável *
+                </label>
+                <select
+                  value={selectedVendorId}
+                  onChange={(e) => setSelectedVendorId(e.target.value)}
+                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
+                >
+                  <option value="">Selecione um vendedor...</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.uid} value={vendor.uid}>
+                      {vendor.name || vendor.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  📅 Data do Passeio
+                </label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setSelectedBoat(null);
+                    setSelectedSeats([]);
+                  }}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
+                />
+                {selectedDate && (
+                  <p className="mt-2 text-sm text-green-600 font-medium">
+                    {formatDisplayDate(selectedDate)}
+                  </p>
+                )}
+              </div>
+
+              {selectedDate && (
+                <div className="animate-fadeIn">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    🚢 Selecione o Barco
+                  </label>
+                  {boatsForDate.length === 0 ? (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                      <p className="text-orange-700 font-medium">Nenhum barco disponível para esta data</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {boatsForDate.map((boat) => {
+                        const availableCount = boat.seatsTotal - boat.seatsTaken;
+                        const isSelected = selectedBoat?.id === boat.id;
+                        return (
+                          <button
+                            key={boat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBoat(boat);
+                              setSelectedSeats([]);
+                            }}
+                            disabled={availableCount === 0}
+                            className={`p-4 rounded-xl border-2 transition-all text-left ${
+                              isSelected 
+                                ? 'border-green-500 bg-green-50 ring-2 ring-green-200' 
+                                : availableCount === 0
+                                  ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                                  : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span>{boat.boatType === 'escuna' ? '🚢' : '🚤'}</span>
+                                  <span className="font-bold text-gray-800">{boat.name}</span>
+                                </div>
+                                <p className="text-sm text-gray-500 mt-1">
+                                  {availableCount} vagas disponíveis de {boat.seatsTotal}
+                                </p>
+                              </div>
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                isSelected ? 'border-green-500 bg-green-500' : 'border-gray-300'
+                              }`}>
+                                {isSelected && <span className="text-white text-sm">✓</span>}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tipo de passeio para Escuna */}
+              {selectedBoat?.boatType === 'escuna' && (
+                <div className="animate-fadeIn">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Passeio</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEscunaType('sem-desembarque')}
+                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                        escunaType === 'sem-desembarque'
+                          ? 'bg-green-600 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Sem Desembarque
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEscunaType('com-desembarque')}
+                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                        escunaType === 'com-desembarque'
+                          ? 'bg-green-600 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Com Desembarque
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PASSO 2: Quantidade de Pessoas */}
+          {currentStep === 2 && selectedBoat && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
+                  <Users className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Quantas pessoas vão no passeio?</h3>
+                <p className="text-gray-500">Selecione a quantidade de passageiros</p>
+              </div>
+
+              {/* Vagas disponíveis */}
+              {(() => {
+                const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+                return (
+                  <>
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                      <p className="text-green-800 text-lg">
+                        🎫 <strong>{vagasDisponiveis}</strong> vagas disponíveis de <strong>{selectedBoat.seatsTotal}</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-6">
+                      <button
+                        type="button"
+                        onClick={() => setNumberOfPeople(Math.max(1, numberOfPeople - 1))}
+                        className="w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-600 transition shadow-sm"
+                      >
+                        −
+                      </button>
+                      <div className="text-center px-6">
+                        <span className="text-7xl font-black text-green-600">{numberOfPeople}</span>
+                        <p className="text-gray-500 mt-2 text-lg">{numberOfPeople === 1 ? 'pessoa' : 'pessoas'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNumberOfPeople(Math.min(vagasDisponiveis, numberOfPeople + 1))}
+                        disabled={numberOfPeople >= vagasDisponiveis}
+                        className="w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-600 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {numberOfPeople > 0 && (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center animate-fadeIn">
+                        <p className="text-green-800 font-medium text-lg">
+                          ✅ {numberOfPeople} {numberOfPeople === 1 ? 'vaga será reservada' : 'vagas serão reservadas'}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* PASSOS 3 a 2+N: Dados de cada pessoa */}
+          {currentStep >= 3 && currentStep < 3 + numberOfPeople && (
+            <div className="space-y-5 animate-fadeIn">
+              {(() => {
+                const personIndex = currentStep - 3;
+                const person = people[personIndex] || {
+                  name: '',
+                  document: '',
+                  phone: '',
+                  birthDate: '',
+                  email: '',
+                  address: '',
+                  isChild: false,
+                  isHalfPrice: false,
+                  amount: 200,
+                  paymentMethod: 'pix',
+                  amountPaid: 0,
+                };
+                const seatNumber = selectedSeats[personIndex];
+
+                return (
+                  <>
+                    <div className="text-center mb-4">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full mb-4 text-white text-2xl font-bold">
+                        {personIndex + 1}
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">
+                        Dados da Pessoa {personIndex + 1}
+                      </h3>
+                      <p className="text-gray-500">Vaga #{seatNumber}</p>
+                    </div>
+
+                    {/* Nome */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <User className="inline w-4 h-4 mr-1" /> Nome Completo *
+                      </label>
+                      <input
+                        type="text"
+                        value={person.name}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, name: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="Nome completo do passageiro"
+                      />
+                    </div>
+
+                    {/* Documento */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📄 Documento (CPF/RG) *
+                      </label>
+                      <input
+                        type="text"
+                        value={person.document}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, document: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="000.000.000-00"
+                      />
+                    </div>
+
+                    {/* Telefone */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <Phone className="inline w-4 h-4 mr-1" /> Telefone *
+                      </label>
+                      <input
+                        type="tel"
+                        value={person.phone}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, phone: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="(48) 99999-9999"
+                      />
+                    </div>
+
+                    {/* Data de Nascimento */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        🎂 Data de Nascimento *
+                      </label>
+                      <input
+                        type="date"
+                        value={person.birthDate}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, birthDate: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        required
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <Mail className="inline w-4 h-4 mr-1" /> Email
+                      </label>
+                      <input
+                        type="email"
+                        value={person.email}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, email: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="email@exemplo.com"
+                      />
+                    </div>
+
+                    {/* Endereço (opcional) */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <MapPin className="inline w-4 h-4 mr-1" /> Endereço <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={person.address}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, address: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="Rua, número, bairro..."
+                      />
+                    </div>
+
+                    {/* Valor do Passeio */}
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <label className="block text-sm font-semibold text-green-800 mb-2">
+                        💰 Valor do Passeio (R$) *
+                      </label>
+                      <input
+                        type="number"
+                        value={person.amount || ''}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, amount: parseFloat(e.target.value) || 0 };
+                          setPeople(newPeople);
+                        }}
+                        min="0"
+                        step="0.01"
+                        required
+                        className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold bg-white"
+                        placeholder="200.00"
+                      />
+                    </div>
+
+                    {/* É criança / Meia entrada */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <input
+                          type="checkbox"
+                          id={`child-${personIndex}`}
+                          checked={person.isChild}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[personIndex] = { ...person, isChild: e.target.checked };
+                            setPeople(newPeople);
+                          }}
+                          className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                        />
+                        <label htmlFor={`child-${personIndex}`} className="font-semibold text-yellow-800 cursor-pointer">
+                          👶 É criança (menor de 7 anos)?
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id={`half-${personIndex}`}
+                          checked={person.isHalfPrice}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[personIndex] = { ...person, isHalfPrice: e.target.checked };
+                            setPeople(newPeople);
+                          }}
+                          className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <label htmlFor={`half-${personIndex}`} className="font-semibold text-orange-700 cursor-pointer">
+                          🎫 Paga meia entrada?
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ÚLTIMO PASSO: Pagamento */}
+          {currentStep === totalSteps && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <CreditCard className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Pagamento</h3>
+                <p className="text-gray-500">Configure o pagamento de cada pessoa</p>
+              </div>
+
+              {/* Resumo Total */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-gray-700 font-medium">Valor Total:</span>
+                  <span className="text-2xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-gray-700 font-medium">Total Recebido:</span>
+                  <span className="text-xl font-bold text-blue-600">R$ {totalPaid.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-green-300">
+                  <span className="text-gray-800 font-bold">Valor Restante:</span>
+                  <span className={`text-xl font-black ${totalRemaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    R$ {totalRemaining.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pagamento por pessoa */}
+              <div className="space-y-4">
+                {people.map((person, index) => (
+                  <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="font-bold text-gray-800">Pessoa {index + 1}: {person.name}</span>
+                        <span className="text-sm text-gray-500 ml-2">(Vaga #{selectedSeats[index]})</span>
+                      </div>
+                      <span className="font-bold text-green-700">R$ {person.amount.toFixed(2)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Valor Recebido</label>
+                        <input
+                          type="number"
+                          value={person.amountPaid || ''}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            const value = parseFloat(e.target.value) || 0;
+                            newPeople[index] = { ...person, amountPaid: Math.min(value, person.amount) };
+                            setPeople(newPeople);
+                          }}
+                          min="0"
+                          max={person.amount}
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Forma de Pagamento</label>
+                        <select
+                          value={person.paymentMethod}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[index] = { ...person, paymentMethod: e.target.value as PaymentMethod };
+                            setPeople(newPeople);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+                        >
+                          <option value="pix">💠 PIX</option>
+                          <option value="cartao">💳 Cartão</option>
+                          <option value="dinheiro">💵 Dinheiro</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                <p className="text-blue-800 font-medium">
+                  ⏳ A reserva será criada como <strong>pendente</strong> e precisará ser aprovada
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Erro */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mt-4">
+            {error}
+          </div>
+        )}
+
+        {/* Botões de Navegação */}
+        <div className="flex gap-4 mt-8 pt-6 border-t border-gray-200">
+          {currentStep > 1 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={loading}
+              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <ChevronLeft size={20} />
+              Voltar
+            </button>
+          )}
+          
+          {currentStep < totalSteps ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={!canProceed()}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Próximo
+              <ChevronRight size={20} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loading}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={20} />
+                  Criar Reserva{people.length > 1 ? 's' : ''}
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
