@@ -36,6 +36,7 @@ export interface Reservation {
   createdAt: Date;
   updatedAt: Date;
   checkedIn?: boolean; // para check-in no dia do passeio
+  voucherSent?: boolean; // se o voucher foi enviado para o cliente
 }
 
 export interface UserRole {
