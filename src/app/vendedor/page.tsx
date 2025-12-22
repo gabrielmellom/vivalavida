@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, doc, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, onSnapshot, Timestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Boat, Reservation, PaymentMethod } from '@/types';
+import { Boat, Reservation, PaymentMethod, Payment } from '@/types';
+import { DollarSign } from 'lucide-react';
 import { Calendar, Users, CheckCircle, LogOut, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -27,6 +28,10 @@ export default function VendedorDashboard() {
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [reservationForPayment, setReservationForPayment] = useState<Reservation | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const { user, signOut } = useAuth();
   const router = useRouter();
 
@@ -425,12 +430,14 @@ export default function VendedorDashboard() {
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assento</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                     <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredReservations.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                         Nenhuma reserva para {formatDate(filterDate)}
                       </td>
                     </tr>
@@ -462,7 +469,32 @@ export default function VendedorDashboard() {
                           </span>
                         </td>
                         <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-gray-900">
-                          R$ {reservation.totalAmount.toFixed(2)}
+                          <div>
+                            <p>Total: R$ {reservation.totalAmount.toFixed(2)}</p>
+                            <p className="text-green-600">Pago: R$ {reservation.amountPaid.toFixed(2)}</p>
+                            {reservation.amountDue > 0 && (
+                              <p className="text-orange-600 font-bold">Falta: R$ {reservation.amountDue.toFixed(2)}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4">
+                          <span className="text-xs capitalize">{reservation.paymentMethod}</span>
+                        </td>
+                        <td className="px-4 lg:px-6 py-4">
+                          {reservation.status === 'approved' && reservation.amountDue > 0 && (
+                            <button
+                              onClick={() => {
+                                setReservationForPayment(reservation);
+                                setPaymentAmount('');
+                                setPaymentMethod('pix');
+                                setShowPaymentModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition flex items-center gap-1"
+                            >
+                              <DollarSign size={14} />
+                              Pagar
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -487,8 +519,162 @@ export default function VendedorDashboard() {
           key={selectedBoat.id}
         />
       )}
+      
+      {/* Modal Registrar Pagamento */}
+      {showPaymentModal && reservationForPayment && user && (
+        <PaymentModal
+          reservation={reservationForPayment}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setReservationForPayment(null);
+            setPaymentAmount('');
+          }}
+          onPayment={async (amount: number, method: PaymentMethod) => {
+            try {
+              const newAmountPaid = reservationForPayment.amountPaid + amount;
+              const newAmountDue = reservationForPayment.totalAmount - newAmountPaid;
+
+              // Criar registro de pagamento
+              await addDoc(collection(db, 'payments'), {
+                reservationId: reservationForPayment.id,
+                amount,
+                method,
+                source: 'vendedor',
+                vendorId: user.uid,
+                createdAt: Timestamp.now(),
+                createdBy: user.uid,
+              });
+
+              // Atualizar reserva
+              await updateDoc(doc(db, 'reservations', reservationForPayment.id), {
+                amountPaid: newAmountPaid,
+                amountDue: newAmountDue,
+                updatedAt: Timestamp.now(),
+              });
+
+              setShowPaymentModal(false);
+              setReservationForPayment(null);
+              setPaymentAmount('');
+              alert('Pagamento registrado com sucesso!');
+            } catch (error) {
+              console.error('Erro ao registrar pagamento:', error);
+              alert('Erro ao registrar pagamento');
+            }
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function PaymentModal({
+  reservation,
+  onClose,
+  onPayment,
+}: {
+  reservation: Reservation;
+  onClose: () => void;
+  onPayment: (amount: number, method: PaymentMethod) => Promise<void>;
+}) {
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState<PaymentMethod>('pix');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const paymentAmount = parseFloat(amount) || 0;
+    
+    if (paymentAmount <= 0) {
+      alert('O valor deve ser maior que zero!');
+      return;
+    }
+    
+    if (paymentAmount > reservation.amountDue) {
+      alert(`O valor não pode ser maior que o devido (R$ ${reservation.amountDue.toFixed(2)})!`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onPayment(paymentAmount, method);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+        <h3 className="text-xl font-black text-viva-blue-dark mb-4">Registrar Pagamento</h3>
+        <div className="bg-gray-50 rounded-xl p-4 mb-4">
+          <p className="text-sm text-gray-600 mb-1">Cliente: <strong>{reservation.customerName}</strong></p>
+          <p className="text-sm text-gray-600 mb-1">Total: R$ {reservation.totalAmount.toFixed(2)}</p>
+          <p className="text-sm text-green-600 mb-1">Pago: R$ {reservation.amountPaid.toFixed(2)}</p>
+          <p className="text-sm text-orange-600 font-bold">Falta: R$ {reservation.amountDue.toFixed(2)}</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Valor Recebido (R$)</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => {
+                const value = e.target.value;
+                const numValue = parseFloat(value);
+                if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservation.amountDue)) {
+                  setAmount(value);
+                }
+              }}
+              step="0.01"
+              min="0"
+              max={reservation.amountDue}
+              required
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-bold"
+              placeholder="0.00"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Método de Pagamento</label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value as PaymentMethod)}
+              required
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
+            >
+              <option value="pix">PIX</option>
+              <option value="cartao">Cartão</option>
+              <option value="dinheiro">Dinheiro</option>
+            </select>
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !amount}
+              className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition disabled:opacity-50"
+            >
+              {loading ? 'Registrando...' : 'Registrar Pagamento'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface SeatData {
+  name: string;
+  isChild: boolean; // menor de 7 anos paga meia
 }
 
 function ReservationModal({
@@ -500,14 +686,18 @@ function ReservationModal({
   onClose: () => void;
   vendorId: string;
 }) {
-  const [seatNumber, setSeatNumber] = useState<number | null>(null);
-  const [customerName, setCustomerName] = useState('');
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [seatData, setSeatData] = useState<Record<number, SeatData>>({});
   const [phone, setPhone] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [address, setAddress] = useState('');
+  const [document, setDocument] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [email, setEmail] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
-  const [totalAmount, setTotalAmount] = useState('');
+  const [basePrice, setBasePrice] = useState('200'); // Preço base por pessoa
+  const [amountPaid, setAmountPaid] = useState('0'); // Valor pago na hora
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -543,10 +733,32 @@ function ReservationModal({
     return unsubscribe;
   }, [boat]);
 
+  // Calcular valores totais
+  const calculateTotals = () => {
+    const base = parseFloat(basePrice) || 0;
+    let totalAmount = 0;
+    
+    selectedSeats.forEach(seat => {
+      const data = seatData[seat];
+      if (data?.isChild) {
+        totalAmount += base / 2; // Meia entrada para crianças
+      } else {
+        totalAmount += base;
+      }
+    });
+    
+    const paid = parseFloat(amountPaid) || 0;
+    const remaining = Math.max(0, totalAmount - paid);
+    
+    return { totalAmount, paid, remaining };
+  };
+
+  const { totalAmount, paid, remaining } = calculateTotals();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!seatNumber) {
-      setError('Selecione um assento');
+    if (selectedSeats.length === 0) {
+      setError('Selecione pelo menos um assento');
       return;
     }
     if (boat.boatType === 'escuna' && !escunaType) {
@@ -554,11 +766,18 @@ function ReservationModal({
       return;
     }
 
+    // Validar que todos os assentos têm nome
+    const missingNames = selectedSeats.filter(seat => !seatData[seat]?.name?.trim());
+    if (missingNames.length > 0) {
+      setError(`Por favor, preencha o nome para todos os assentos selecionados (assentos: ${missingNames.join(', ')})`);
+      return;
+    }
+
     setError('');
     setLoading(true);
 
     try {
-      // Verificar se o assento ainda está disponível (evitar race condition)
+      // Verificar se os assentos ainda estão disponíveis (evitar race condition)
       const reservationsQuery = query(
         collection(db, 'reservations'),
         where('boatId', '==', boat.id),
@@ -568,46 +787,87 @@ function ReservationModal({
       const approvedReservations = reservationsSnapshot.docs.map(doc => doc.data()) as Reservation[];
       const takenSeats = approvedReservations.map(r => r.seatNumber);
 
-      if (takenSeats.includes(seatNumber)) {
-        setError(`O assento ${seatNumber} já está ocupado. Por favor, selecione outro assento.`);
+      const unavailableSeats = selectedSeats.filter(seat => takenSeats.includes(seat));
+      if (unavailableSeats.length > 0) {
+        setError(`Os assentos ${unavailableSeats.join(', ')} já estão ocupados. Por favor, selecione outros assentos.`);
         setLoading(false);
         return;
       }
 
-      const reservationData: any = {
-        boatId: boat.id,
-        seatNumber,
-        status: 'pending',
-        customerName,
-        phone,
-        whatsapp: whatsapp || phone,
-        address,
-        paymentMethod,
-        totalAmount: parseFloat(totalAmount) || 0,
-        amountPaid: 0,
-        amountDue: parseFloat(totalAmount) || 0,
-        vendorId,
-        rideDate: boat.date,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+      // Gerar groupId para reservas em grupo
+      const groupId = selectedSeats.length > 1 ? `group_${Date.now()}` : undefined;
+      const base = parseFloat(basePrice) || 0;
+      const totalPaid = parseFloat(amountPaid) || 0;
+      
+      // Calcular valores por assento e distribuir o pagamento proporcionalmente
+      const seatValues = selectedSeats.map(seat => {
+        const data = seatData[seat] || { name: '', isChild: false };
+        return data.isChild ? base / 2 : base;
+      });
+      const totalValue = seatValues.reduce((sum, val) => sum + val, 0);
+      
+      // Distribuir o pagamento proporcionalmente entre as reservas
+      let remainingPaid = totalPaid;
+      const reservations = selectedSeats.map((seatNumber, index) => {
+        const data = seatData[seatNumber] || { name: '', isChild: false };
+        const seatTotal = seatValues[index];
+        const proportionalPaid = index === selectedSeats.length - 1 
+          ? remainingPaid // Última reserva recebe o restante para evitar erros de arredondamento
+          : Math.round((seatTotal / totalValue) * totalPaid * 100) / 100;
+        remainingPaid -= proportionalPaid;
+        
+        const reservationData: Record<string, unknown> = {
+          boatId: boat.id,
+          seatNumber,
+          status: 'pending',
+          customerName: data.name,
+          phone,
+          whatsapp: whatsapp || phone,
+          address,
+          paymentMethod,
+          totalAmount: seatTotal,
+          amountPaid: proportionalPaid,
+          amountDue: seatTotal - proportionalPaid,
+          vendorId,
+          rideDate: boat.date,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
 
-      // Adicionar escunaType apenas se for escuna
-      if (boat.boatType === 'escuna') {
-        reservationData.escunaType = escunaType;
-      }
+        // Adicionar campos opcionais apenas se tiverem valor
+        if (document) reservationData.document = document;
+        if (birthDate) reservationData.birthDate = birthDate;
+        if (email) reservationData.email = email;
+        if (groupId) reservationData.groupId = groupId;
 
-      await addDoc(collection(db, 'reservations'), reservationData);
+        // Adicionar escunaType apenas se for escuna
+        if (boat.boatType === 'escuna') {
+          reservationData.escunaType = escunaType;
+        }
+
+        return reservationData;
+      });
+
+      // Criar uma reserva para cada assento selecionado
+      const reservationPromises = reservations.map(async (reservationData) => {
+        return addDoc(collection(db, 'reservations'), reservationData);
+      });
+
+      await Promise.all(reservationPromises);
 
       // Limpar formulário
-      setSeatNumber(null);
-      setCustomerName('');
+      setSelectedSeats([]);
+      setSeatData({});
       setPhone('');
       setWhatsapp('');
       setAddress('');
+      setDocument('');
+      setBirthDate('');
+      setEmail('');
       setPaymentMethod('pix');
       setEscunaType('sem-desembarque');
-      setTotalAmount('');
+      setBasePrice('200');
+      setAmountPaid('0');
       setError('');
 
       onClose();
@@ -625,27 +885,68 @@ function ReservationModal({
         <h2 className="text-2xl font-black text-viva-blue-dark mb-6">Nova Reserva - {boat.name}</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Seleção de Assento */}
+          {/* Seleção de Assentos (Múltiplos para grupo) */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3">Selecione o Assento</label>
-            <div className="grid grid-cols-8 gap-2">
-              {availableSeats.map((seat) => (
-                <button
-                  key={seat}
-                  type="button"
-                  onClick={() => setSeatNumber(seat)}
-                  className={`px-4 py-3 rounded-lg font-bold transition ${
-                    seatNumber === seat
-                      ? 'bg-viva-blue text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {seat}
-                </button>
-              ))}
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              Selecione os Assentos {selectedSeats.length > 0 && `(${selectedSeats.length} selecionado${selectedSeats.length > 1 ? 's' : ''})`}
+            </label>
+            <div className="grid grid-cols-8 gap-2 max-h-64 overflow-y-auto p-2 border border-gray-200 rounded-xl">
+              {Array.from({ length: boat.seatsTotal }, (_, i) => {
+                const seatNum = i + 1;
+                const isAvailable = availableSeats.includes(seatNum);
+                const isSelected = selectedSeats.includes(seatNum);
+                
+                return (
+                  <button
+                    key={seatNum}
+                    type="button"
+                    onClick={() => {
+                      if (isAvailable) {
+                        if (isSelected) {
+                          setSelectedSeats(selectedSeats.filter(s => s !== seatNum));
+                          // Remover dados do assento
+                          const newSeatData = { ...seatData };
+                          delete newSeatData[seatNum];
+                          setSeatData(newSeatData);
+                        } else {
+                          setSelectedSeats([...selectedSeats, seatNum]);
+                          // Inicializar dados do assento
+                          setSeatData({
+                            ...seatData,
+                            [seatNum]: { name: '', isChild: false }
+                          });
+                        }
+                      }
+                    }}
+                    disabled={!isAvailable}
+                    className={`px-3 py-2 rounded-lg font-bold transition text-sm ${
+                      isSelected
+                        ? 'bg-viva-blue text-white'
+                        : isAvailable
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-red-100 text-red-500 cursor-not-allowed opacity-50'
+                    }`}
+                    title={isAvailable ? 'Livre' : 'Ocupado'}
+                  >
+                    {isAvailable ? '✓' : '✗'}
+                  </button>
+                );
+              })}
             </div>
-            {seatNumber && (
-              <p className="mt-2 text-sm text-viva-blue font-semibold">Assento {seatNumber} selecionado</p>
+            <div className="flex items-center gap-4 mt-2 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-green-100 rounded"></div>
+                <span>Livre</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-red-100 rounded"></div>
+                <span>Ocupado</span>
+              </div>
+            </div>
+            {selectedSeats.length > 0 && (
+              <p className="mt-2 text-sm text-viva-blue font-semibold">
+                {selectedSeats.length} assento{selectedSeats.length > 1 ? 's' : ''} selecionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.sort((a, b) => a - b).join(', ')}
+              </p>
             )}
           </div>
 
@@ -680,40 +981,138 @@ function ReservationModal({
             </div>
           )}
 
-          {/* Dados do Cliente */}
+          {/* Dados por Assento */}
+          {selectedSeats.length > 0 && (
+            <div className="border-2 border-viva-blue/20 rounded-xl p-4 bg-viva-blue/5">
+              <h3 className="text-lg font-bold text-viva-blue-dark mb-4">
+                Dados dos Passageiros ({selectedSeats.length} {selectedSeats.length === 1 ? 'passageiro' : 'passageiros'})
+              </h3>
+              <div className="space-y-4">
+                {selectedSeats.sort((a, b) => a - b).map((seatNum) => {
+                  const data = seatData[seatNum] || { name: '', isChild: false };
+                  return (
+                    <div key={seatNum} className="bg-white rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-viva-blue-dark">Assento #{seatNum}</h4>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`child-${seatNum}`}
+                            checked={data.isChild}
+                            onChange={(e) => {
+                              setSeatData({
+                                ...seatData,
+                                [seatNum]: { ...data, isChild: e.target.checked }
+                              });
+                            }}
+                            className="w-4 h-4 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
+                          />
+                          <label htmlFor={`child-${seatNum}`} className="text-sm font-semibold text-viva-orange cursor-pointer">
+                            👶 Menor de 7 anos (meia entrada)
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Nome Completo *
+                        </label>
+                        <input
+                          type="text"
+                          value={data.name}
+                          onChange={(e) => {
+                            setSeatData({
+                              ...seatData,
+                              [seatNum]: { ...data, name: e.target.value }
+                            });
+                          }}
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                          placeholder={`Nome do passageiro do assento ${seatNum}`}
+                        />
+                      </div>
+                      {data.isChild && (
+                        <p className="mt-2 text-xs text-viva-orange font-semibold">
+                          💰 Valor: R$ {(parseFloat(basePrice) / 2).toFixed(2)} (meia entrada)
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Dados de Contato (compartilhados) */}
+          <div className="border-t-2 border-gray-200 pt-4">
+            <h3 className="text-lg font-bold text-viva-blue-dark mb-4">Dados de Contato</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                  placeholder="(48) 99999-9999"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
+                <input
+                  type="tel"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                  placeholder="(48) 99999-9999"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Cliente *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Documento (CPF/RG)</label>
               <input
                 type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                required
+                value={document}
+                onChange={(e) => setDocument(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                placeholder="000.000.000-00"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Data de Nascimento</label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                placeholder="(48) 99999-9999"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
-            <input
-              type="tel"
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-              placeholder="(48) 99999-9999"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                placeholder="cliente@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
+              <input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                placeholder="(48) 99999-9999"
+              />
+            </div>
           </div>
 
           <div>
@@ -727,32 +1126,89 @@ function ReservationModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Forma de Pagamento *</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-              >
-                <option value="pix">PIX</option>
-                <option value="cartao">Cartão</option>
-                <option value="dinheiro">Dinheiro</option>
-              </select>
+          {/* Informações de Pagamento */}
+          <div className="border-2 border-green-200 rounded-xl p-4 bg-green-50">
+            <h3 className="text-lg font-bold text-green-800 mb-4">💰 Informações de Pagamento</h3>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Preço Base por Pessoa (R$) *</label>
+                <input
+                  type="number"
+                  value={basePrice}
+                  onChange={(e) => setBasePrice(e.target.value)}
+                  required
+                  step="0.01"
+                  min="0"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                  placeholder="200.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Forma de Pagamento *</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                >
+                  <option value="pix">PIX</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="dinheiro">Dinheiro</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Valor Total (R$) *</label>
-              <input
-                type="number"
-                value={totalAmount}
-                onChange={(e) => setTotalAmount(e.target.value)}
-                required
-                step="0.01"
-                min="0"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                placeholder="200.00"
-              />
+
+            {/* Resumo de Valores */}
+            <div className="bg-white rounded-lg p-4 border border-green-300">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-gray-700">Valor Total:</span>
+                  <span className="text-xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-gray-700">Valor Recebido na Hora:</span>
+                  <input
+                    type="number"
+                    value={amountPaid}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const numValue = parseFloat(value) || 0;
+                      if (numValue >= 0 && numValue <= totalAmount) {
+                        setAmountPaid(value);
+                      }
+                    }}
+                    step="0.01"
+                    min="0"
+                    max={totalAmount}
+                    className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-right font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                  <span className="font-bold text-gray-800">Valor Restante:</span>
+                  <span className={`text-xl font-black ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    R$ {remaining.toFixed(2)}
+                  </span>
+                </div>
+                {selectedSeats.length > 0 && (
+                  <div className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-200">
+                    <p>Detalhamento:</p>
+                    <ul className="list-disc list-inside mt-1">
+                      {selectedSeats.sort((a, b) => a - b).map(seat => {
+                        const data = seatData[seat] || { name: '', isChild: false };
+                        const seatPrice = data.isChild ? parseFloat(basePrice) / 2 : parseFloat(basePrice);
+                        return (
+                          <li key={seat}>
+                            Assento {seat} ({data.isChild ? 'Criança' : 'Adulto'}): R$ {seatPrice.toFixed(2)}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -772,10 +1228,10 @@ function ReservationModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !seatNumber}
+              disabled={loading || selectedSeats.length === 0 || selectedSeats.some(seat => !seatData[seat]?.name?.trim())}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50"
             >
-              {loading ? 'Criando...' : 'Criar Reserva'}
+              {loading ? 'Criando...' : selectedSeats.length > 1 ? `Criar ${selectedSeats.length} Reservas` : 'Criar Reserva'}
             </button>
           </div>
         </form>

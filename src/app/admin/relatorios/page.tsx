@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Reservation, UserRole, Boat } from '@/types';
+import { Reservation, UserRole, Boat, Payment, Expense } from '@/types';
 import { ArrowLeft, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users, XCircle, CheckCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
 
@@ -43,6 +43,13 @@ interface SalesReport {
   totalPaid: number;
   totalDue: number;
   cancelRate: number;
+  paymentsByMethod: {
+    pix: number;
+    cartao: number;
+    dinheiro: number;
+  };
+  expenses: number;
+  netProfit: number;
   vendorSales: VendorSales[];
   cancelledDetails: Array<{
     id: string;
@@ -51,6 +58,17 @@ interface SalesReport {
     amount: number;
     date: Date;
     createdAt: Date;
+  }>;
+  postSaleContacts: Array<{
+    boatId: string;
+    boatName: string;
+    boatDate: string;
+    contacts: Array<{
+      customerName: string;
+      phone: string;
+      whatsapp?: string;
+      seatNumber: number;
+    }>;
   }>;
 }
 
@@ -73,6 +91,9 @@ export default function RelatoriosPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
 
   const loadData = async () => {
     try {
@@ -110,6 +131,27 @@ export default function RelatoriosPage() {
         updatedAt: doc.data().updatedAt?.toDate(),
       })) as Boat[];
       setBoats(boatsData);
+
+      // Carregar pagamentos
+      const paymentsQuery = query(collection(db, 'payments'));
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      const paymentsData = paymentsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+      })) as Payment[];
+      setPayments(paymentsData);
+
+      // Carregar despesas
+      const expensesQuery = query(collection(db, 'expenses'));
+      const expensesSnapshot = await getDocs(expensesQuery);
+      const expensesData = expensesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate(),
+      })) as Expense[];
+      setExpenses(expensesData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       alert('Erro ao carregar dados');
@@ -224,6 +266,59 @@ export default function RelatoriosPage() {
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+      // Calcular pagamentos por método no período
+      const periodStart = filterType === 'month'
+        ? new Date(selectedMonth + '-01')
+        : new Date(startDate + 'T00:00:00');
+      const periodEnd = filterType === 'month'
+        ? new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]), 0, 23, 59, 59)
+        : new Date(endDate + 'T23:59:59');
+
+      const filteredPayments = payments.filter(p => {
+        const paymentDate = p.createdAt || new Date(0);
+        return paymentDate >= periodStart && paymentDate <= periodEnd;
+      });
+
+      const paymentsByMethod = {
+        pix: filteredPayments.filter(p => p.method === 'pix').reduce((sum, p) => sum + p.amount, 0),
+        cartao: filteredPayments.filter(p => p.method === 'cartao').reduce((sum, p) => sum + p.amount, 0),
+        dinheiro: filteredPayments.filter(p => p.method === 'dinheiro').reduce((sum, p) => sum + p.amount, 0),
+      };
+
+      // Calcular despesas no período
+      const filteredExpenses = expenses.filter(e => {
+        const expenseDate = e.dueDate ? new Date(e.dueDate) : e.createdAt || new Date(0);
+        return expenseDate >= periodStart && expenseDate <= periodEnd;
+      });
+      const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+      // Lucro líquido = receitas - despesas
+      const netProfit = totalPaid - totalExpenses;
+
+      // Relatório de pós-venda (contatos por barco)
+      const postSaleContacts = boats
+        .filter(boat => {
+          const boatDate = new Date(boat.date);
+          return boatDate >= periodStart && boatDate <= periodEnd;
+        })
+        .map(boat => {
+          const boatReservations = filteredReservations.filter(r => 
+            r.boatId === boat.id && r.status === 'approved'
+          );
+          return {
+            boatId: boat.id,
+            boatName: boat.name,
+            boatDate: boat.date,
+            contacts: boatReservations.map(r => ({
+              customerName: r.customerName,
+              phone: r.phone,
+              whatsapp: r.whatsapp,
+              seatNumber: r.seatNumber,
+            })),
+          };
+        })
+        .filter(item => item.contacts.length > 0);
+
       const periodLabel = filterType === 'month'
         ? formatDateForDisplay(selectedMonth + '-01', { month: 'long', year: 'numeric' })
         : `${formatDateForDisplay(startDate)} a ${formatDateForDisplay(endDate)}`;
@@ -238,8 +333,12 @@ export default function RelatoriosPage() {
         totalPaid,
         totalDue,
         cancelRate,
+        paymentsByMethod,
+        expenses: totalExpenses,
+        netProfit,
         vendorSales: vendorSalesArray,
         cancelledDetails,
+        postSaleContacts,
       });
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
@@ -266,6 +365,15 @@ export default function RelatoriosPage() {
     csv += `Total Recebido,R$ ${report.totalPaid.toFixed(2)}\n`;
     csv += `Total a Receber,R$ ${report.totalDue.toFixed(2)}\n\n`;
     
+    csv += 'PAGAMENTOS POR MÉTODO\n';
+    csv += `PIX,R$ ${report.paymentsByMethod.pix.toFixed(2)}\n`;
+    csv += `Cartão,R$ ${report.paymentsByMethod.cartao.toFixed(2)}\n`;
+    csv += `Dinheiro,R$ ${report.paymentsByMethod.dinheiro.toFixed(2)}\n\n`;
+    
+    csv += 'FINANCEIRO\n';
+    csv += `Contas a Pagar,R$ ${report.expenses.toFixed(2)}\n`;
+    csv += `Lucro Líquido,R$ ${report.netProfit.toFixed(2)}\n\n`;
+    
     csv += 'VENDAS POR VENDEDOR\n';
     csv += 'Vendedor,Email,Total Reservas,Aprovadas,Pendentes,Canceladas,Taxa Cancelamento,Total Vendas,Total Recebido,Total a Receber\n';
     report.vendorSales.forEach(v => {
@@ -277,6 +385,17 @@ export default function RelatoriosPage() {
       csv += 'Cliente,Vendedor,Valor,Data do Passeio,Data do Cancelamento\n';
       report.cancelledDetails.forEach(c => {
         csv += `"${c.customerName}","${c.vendorName}",R$ ${c.amount.toFixed(2)},${c.date.toLocaleDateString('pt-BR')},${c.createdAt.toLocaleDateString('pt-BR')}\n`;
+      });
+    }
+    
+    if (report.postSaleContacts.length > 0) {
+      csv += '\nPÓS-VENDA - CONTATOS POR BARCO\n';
+      report.postSaleContacts.forEach(boat => {
+        csv += `\nBarco: ${boat.boatName} - ${formatDateForDisplay(boat.boatDate)}\n`;
+        csv += 'Cliente,Telefone,WhatsApp,Assento\n';
+        boat.contacts.forEach(contact => {
+          csv += `"${contact.customerName}","${contact.phone}","${contact.whatsapp || contact.phone}",${contact.seatNumber}\n`;
+        });
       });
     }
 
@@ -464,6 +583,42 @@ export default function RelatoriosPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Pagamentos por Método */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                  <p className="text-sm text-blue-700 font-semibold mb-1">PIX</p>
+                  <p className="text-2xl font-black text-blue-900">R$ {report.paymentsByMethod.pix.toFixed(2)}</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+                  <p className="text-sm text-purple-700 font-semibold mb-1">Cartão</p>
+                  <p className="text-2xl font-black text-purple-900">R$ {report.paymentsByMethod.cartao.toFixed(2)}</p>
+                </div>
+                <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                  <p className="text-sm text-green-700 font-semibold mb-1">Dinheiro</p>
+                  <p className="text-2xl font-black text-green-900">R$ {report.paymentsByMethod.dinheiro.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Financeiro: Despesas e Lucro Líquido */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+                  <p className="text-sm text-red-700 font-semibold mb-1">Contas a Pagar</p>
+                  <p className="text-2xl font-black text-red-900">R$ {report.expenses.toFixed(2)}</p>
+                </div>
+                <div className={`rounded-xl p-4 border-2 ${
+                  report.netProfit >= 0 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <p className={`text-sm font-semibold mb-1 ${
+                    report.netProfit >= 0 ? 'text-green-700' : 'text-red-700'
+                  }`}>Lucro Líquido</p>
+                  <p className={`text-2xl font-black ${
+                    report.netProfit >= 0 ? 'text-green-900' : 'text-red-900'
+                  }`}>R$ {report.netProfit.toFixed(2)}</p>
+                </div>
+              </div>
             </div>
 
             {/* Vendas por Vendedor */}
@@ -587,6 +742,53 @@ export default function RelatoriosPage() {
                       </tr>
                     </tfoot>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* Pós-venda - Contatos por Barco */}
+            {report.postSaleContacts.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-gray-200">
+                  <h3 className="text-xl font-bold text-viva-blue-dark">Pós-venda - Contatos por Barco</h3>
+                  <p className="text-sm text-gray-600 mt-1">Lista de WhatsApp para envio de mensagens pós-venda</p>
+                </div>
+                <div className="p-6 space-y-6">
+                  {report.postSaleContacts.map((boatContact) => (
+                    <div key={boatContact.boatId} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h4 className="font-bold text-viva-blue-dark">{boatContact.boatName}</h4>
+                          <p className="text-sm text-gray-600">
+                            {formatDateForDisplay(boatContact.boatDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <span className="bg-viva-blue text-white px-3 py-1 rounded-full text-sm font-bold">
+                          {boatContact.contacts.length} contato{boatContact.contacts.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {boatContact.contacts.map((contact, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                            <div className="flex-1">
+                              <p className="font-semibold text-gray-900">{contact.customerName}</p>
+                              <div className="flex items-center gap-4 mt-1">
+                                <a
+                                  href={`https://wa.me/${(contact.whatsapp || contact.phone).replace(/\D/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-green-600 hover:text-green-700 font-semibold text-sm flex items-center gap-1"
+                                >
+                                  💬 {contact.whatsapp || contact.phone}
+                                </a>
+                                <span className="text-xs text-gray-500">Assento #{contact.seatNumber}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

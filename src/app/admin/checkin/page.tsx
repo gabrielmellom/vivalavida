@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Reservation, Boat } from '@/types';
+import { Reservation, Boat, Payment, PaymentMethod } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 
@@ -20,12 +21,15 @@ const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatO
 };
 
 export default function CheckInPage() {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [boat, setBoat] = useState<Boat | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [reservationToCheckIn, setReservationToCheckIn] = useState<Reservation | null>(null);
+  const [remainingAmount, setRemainingAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
 
   useEffect(() => {
     let reservationsUnsubscribe: (() => void) | null = null;
@@ -104,8 +108,10 @@ export default function CheckInPage() {
     // Se não está marcado, verificar se tem pagamento pendente
     const reservation = reservations.find(r => r.id === reservationId);
     if (reservation && reservation.amountDue > 0) {
-      // Mostrar modal de confirmação
+      // Mostrar modal de confirmação com opção de registrar pagamento
       setReservationToCheckIn(reservation);
+      setRemainingAmount(reservation.amountDue.toString());
+      setPaymentMethod('pix');
       setShowPaymentConfirm(true);
     } else {
       // Se não tem pendência, marcar direto
@@ -122,18 +128,39 @@ export default function CheckInPage() {
   };
 
   const confirmCheckInWithPayment = async () => {
-    if (!reservationToCheckIn) return;
+    if (!reservationToCheckIn || !user) return;
+
+    const paidAmount = parseFloat(remainingAmount) || 0;
+    if (paidAmount < 0 || paidAmount > reservationToCheckIn.amountDue) {
+      alert('Valor inválido!');
+      return;
+    }
 
     try {
-      // Marcar check-in E atualizar o pagamento como completo
+      const newAmountPaid = reservationToCheckIn.amountPaid + paidAmount;
+      const newAmountDue = reservationToCheckIn.totalAmount - newAmountPaid;
+
+      // Criar registro de pagamento
+      await addDoc(collection(db, 'payments'), {
+        reservationId: reservationToCheckIn.id,
+        amount: paidAmount,
+        method: paymentMethod,
+        source: 'checkin',
+        createdAt: Timestamp.now(),
+        createdBy: user.uid,
+      });
+
+      // Atualizar reserva
       await updateDoc(doc(db, 'reservations', reservationToCheckIn.id), {
         checkedIn: true,
-        amountPaid: reservationToCheckIn.totalAmount, // Valor total pago
-        amountDue: 0, // Nada mais a receber
+        amountPaid: newAmountPaid,
+        amountDue: newAmountDue,
         updatedAt: Timestamp.now(),
       });
+      
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
+      setRemainingAmount('');
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -518,11 +545,47 @@ export default function CheckInPage() {
                 </div>
               </div>
 
-              {/* Pergunta */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-                <p className="text-sm font-semibold text-blue-800 text-center">
-                  O que deseja fazer?
-                </p>
+              {/* Campos de Pagamento */}
+              <div className="space-y-3 mb-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Valor Recebido (R$)
+                  </label>
+                  <input
+                    type="number"
+                    value={remainingAmount}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const numValue = parseFloat(value);
+                      if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservationToCheckIn.amountDue)) {
+                        setRemainingAmount(value);
+                      }
+                    }}
+                    step="0.01"
+                    min="0"
+                    max={reservationToCheckIn.amountDue}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-bold"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Máximo: R$ {reservationToCheckIn.amountDue.toFixed(2)}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Método de Pagamento
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="cartao">Cartão</option>
+                    <option value="dinheiro">Dinheiro</option>
+                  </select>
+                </div>
               </div>
 
               {/* Botões de Ação */}
@@ -532,7 +595,7 @@ export default function CheckInPage() {
                   className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base"
                 >
                   <CheckCircle size={20} />
-                  ✓ Já Pagou - Fazer Check-in
+                  ✓ Registrar Pagamento e Fazer Check-in
                 </button>
 
                 <button
@@ -555,6 +618,7 @@ export default function CheckInPage() {
                   onClick={() => {
                     setShowPaymentConfirm(false);
                     setReservationToCheckIn(null);
+                    setRemainingAmount('');
                   }}
                   className="w-full px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold active:bg-gray-100 transition"
                 >

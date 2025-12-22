@@ -20,6 +20,8 @@ export default function LoginPage() {
         router.push('/admin');
       } else if (userRole.role === 'vendor') {
         router.push('/vendedor');
+      } else if (userRole.role === 'post_sale') {
+        router.push('/posvenda');
       }
     }
   }, [userRole, authLoading, router]);

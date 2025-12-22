@@ -8,14 +8,16 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
   requireVendor?: boolean;
+  requirePostSale?: boolean;
 }
 
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
   requireVendor = false,
+  requirePostSale = false,
 }: ProtectedRouteProps) {
-  const { user, userRole, loading, isAdmin, isVendor } = useAuth();
+  const { user, userRole, loading, isAdmin, isVendor, isPostSale } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -26,7 +28,12 @@ export default function ProtectedRoute({
       }
 
       if (requireAdmin && !isAdmin) {
-        router.push('/vendedor');
+        // Redirecionar baseado no tipo de usuário
+        if (userRole?.role === 'post_sale') {
+          router.push('/posvenda');
+        } else {
+          router.push('/vendedor');
+        }
         return;
       }
 
@@ -34,8 +41,13 @@ export default function ProtectedRoute({
         router.push('/login');
         return;
       }
+
+      if (requirePostSale && !isPostSale) {
+        router.push('/login');
+        return;
+      }
     }
-  }, [user, loading, isAdmin, isVendor, requireAdmin, requireVendor, router]);
+  }, [user, loading, isAdmin, isVendor, isPostSale, requireAdmin, requireVendor, requirePostSale, router, userRole]);
 
   if (loading) {
     return (
@@ -57,6 +69,10 @@ export default function ProtectedRoute({
   }
 
   if (requireVendor && !isVendor) {
+    return null;
+  }
+
+  if (requirePostSale && !isPostSale) {
     return null;
   }
 

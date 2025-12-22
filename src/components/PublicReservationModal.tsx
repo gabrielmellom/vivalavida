@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Boat, Reservation, PaymentMethod } from '@/types';
-import { Calendar, Users, X } from 'lucide-react';
+import { Calendar, Users, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
@@ -23,20 +23,27 @@ interface PublicReservationModalProps {
   onClose: () => void;
 }
 
+interface SeatData {
+  name: string;
+  isChild: boolean; // menor de 7 anos paga meia
+  phone: string;
+  whatsapp: string;
+  email: string;
+  document: string;
+  birthDate: string;
+  address: string;
+}
+
 export default function PublicReservationModal({ isOpen, onClose }: PublicReservationModalProps) {
   const [boats, setBoats] = useState<Boat[]>([]);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
-  const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
-  const [customerName, setCustomerName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [address, setAddress] = useState('');
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [seatData, setSeatData] = useState<Record<number, SeatData>>({});
+  const [expandedSeats, setExpandedSeats] = useState<Set<number>>(new Set());
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [totalAmount, setTotalAmount] = useState('200');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -133,14 +140,47 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
 
   const handleSelectBoat = (boat: Boat) => {
     setSelectedBoat(boat);
-    setSelectedSeat(null);
+    setSelectedSeats([]);
+    setSeatData({});
     setError('');
   };
 
+  // Calcular valores totais usando o preço do barco
+  const calculateTotals = () => {
+    if (!selectedBoat) return { totalAmount: 0 };
+    
+    const base = selectedBoat.ticketPrice || 200;
+    let totalAmount = 0;
+    
+    selectedSeats.forEach(seat => {
+      const data = seatData[seat];
+      if (data?.isChild) {
+        totalAmount += base / 2; // Meia entrada para crianças
+      } else {
+        totalAmount += base;
+      }
+    });
+    
+    return { totalAmount };
+  };
+
+  const { totalAmount } = calculateTotals();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBoat || !selectedSeat) {
-      setError('Selecione um barco e um assento');
+    if (!selectedBoat || selectedSeats.length === 0) {
+      setError('Selecione um barco e pelo menos um assento');
+      return;
+    }
+
+    // Validar que todos os assentos têm dados completos
+    const missingData = selectedSeats.filter(seat => {
+      const data = seatData[seat];
+      return !data?.name?.trim() || !data?.phone?.trim() || !data?.address?.trim();
+    });
+    
+    if (missingData.length > 0) {
+      setError(`Por favor, preencha o nome, telefone e endereço para todos os assentos selecionados (assentos: ${missingData.join(', ')})`);
       return;
     }
 
@@ -148,39 +188,116 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
     setLoading(true);
 
     try {
-      // Criar reserva como pendente (será aprovada pelo admin)
-      await addDoc(collection(db, 'reservations'), {
-        boatId: selectedBoat.id,
-        seatNumber: selectedSeat,
-        status: 'pending',
-        customerName,
-        phone,
-        whatsapp: whatsapp || phone,
-        address,
-        paymentMethod,
-        totalAmount: parseFloat(totalAmount) || 0,
-        amountPaid: 0,
-        amountDue: parseFloat(totalAmount) || 0,
-        vendorId: 'public', // Identifica como reserva pública
-        rideDate: selectedBoat.date,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+      // Verificar se os assentos ainda estão disponíveis
+      const reservationsQuery = query(
+        collection(db, 'reservations'),
+        where('boatId', '==', selectedBoat.id),
+        where('status', '==', 'approved')
+      );
+      const reservationsSnapshot = await getDocs(reservationsQuery);
+      const approvedReservations = reservationsSnapshot.docs.map(doc => doc.data()) as Reservation[];
+      const takenSeats = approvedReservations.map(r => r.seatNumber);
+
+      const unavailableSeats = selectedSeats.filter(seat => takenSeats.includes(seat));
+      if (unavailableSeats.length > 0) {
+        setError(`Os assentos ${unavailableSeats.join(', ')} já estão ocupados. Por favor, selecione outros assentos.`);
+        setLoading(false);
+        return;
+      }
+
+      // Criar reservas no banco
+      const groupId = selectedSeats.length > 1 ? `group_${Date.now()}` : undefined;
+      const base = selectedBoat.ticketPrice || 200;
+      
+      // Calcular valores por assento
+      const seatValues = selectedSeats.map(seat => {
+        const data = seatData[seat] || { name: '', isChild: false };
+        return data.isChild ? base / 2 : base;
+      });
+      
+      // Criar reservas
+      const reservations = selectedSeats.map((seatNumber, index) => {
+        const data = seatData[seatNumber] || { 
+          name: '', 
+          isChild: false, 
+          phone: '', 
+          whatsapp: '', 
+          email: '', 
+          document: '', 
+          birthDate: '',
+          address: ''
+        };
+        const seatTotal = seatValues[index];
+        
+        const reservationData: Record<string, unknown> = {
+          boatId: selectedBoat.id,
+          seatNumber,
+          status: 'pending' as const,
+          customerName: data.name,
+          phone: data.phone,
+          whatsapp: data.whatsapp || data.phone,
+          address: data.address,
+          paymentMethod,
+          totalAmount: seatTotal,
+          amountPaid: 0,
+          amountDue: seatTotal,
+          vendorId: 'public',
+          rideDate: selectedBoat.date,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+        
+        // Adicionar campos opcionais apenas se tiverem valor
+        if (data.document) reservationData.document = data.document;
+        if (data.birthDate) reservationData.birthDate = data.birthDate;
+        if (data.email) reservationData.email = data.email;
+        if (groupId) reservationData.groupId = groupId;
+        
+        return reservationData;
       });
 
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        onClose();
-        // Reset form
-        setSelectedBoat(null);
-        setSelectedSeat(null);
-        setCustomerName('');
-        setPhone('');
-        setWhatsapp('');
-        setAddress('');
-        setPaymentMethod('pix');
-        setTotalAmount('200');
-      }, 2000);
+      // Criar uma reserva para cada assento selecionado
+      const reservationPromises = reservations.map(async (reservation) => {
+        return addDoc(collection(db, 'reservations'), reservation);
+      });
+
+      await Promise.all(reservationPromises);
+
+      // Montar mensagem para WhatsApp
+      const seatsInfo = selectedSeats.sort((a, b) => a - b).map(seat => {
+        const data = seatData[seat] || { 
+          name: '', 
+          isChild: false, 
+          phone: '', 
+          whatsapp: '', 
+          email: '', 
+          document: '', 
+          birthDate: '',
+          address: ''
+        };
+        const seatPrice = data.isChild ? base / 2 : base;
+        return `Assento ${seat}: ${data.name} (${data.isChild ? 'Criança' : 'Adulto'}) - R$ ${seatPrice.toFixed(2)}\n` +
+               `  📞 ${data.phone}${data.whatsapp && data.whatsapp !== data.phone ? ` | 📱 ${data.whatsapp}` : ''}${data.email ? ` | 📧 ${data.email}` : ''}\n` +
+               `  📍 ${data.address}`;
+      }).join('\n\n');
+
+      const whatsappMessage = `Olá! Gostaria de fazer uma reserva:\n\n` +
+        `📅 Data: ${formatDateForDisplay(selectedBoat.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n` +
+        `🚢 Barco: ${selectedBoat.name}\n\n` +
+        `👥 Passageiros:\n${seatsInfo}\n\n` +
+        `💰 Valor Total: R$ ${totalAmount.toFixed(2)}\n` +
+        `💳 Forma de Pagamento: ${paymentMethod.toUpperCase()}`;
+
+      // Redirecionar para WhatsApp
+      window.open(`https://wa.me/5548999999999?text=${encodeURIComponent(whatsappMessage)}`, '_blank');
+      
+      // Fechar modal e resetar formulário
+      onClose();
+      setSelectedBoat(null);
+      setSelectedSeats([]);
+      setSeatData({});
+      setExpandedSeats(new Set());
+      setPaymentMethod('pix');
     } catch (err: any) {
       setError(err.message || 'Erro ao criar reserva. Tente novamente.');
     } finally {
@@ -203,16 +320,7 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
           </button>
         </div>
 
-        {success ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="text-green-600" size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-green-600 mb-2">Reserva Criada!</h3>
-            <p className="text-gray-600">Sua solicitação foi enviada e será analisada pelo administrador.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
             {/* Seleção de Barco */}
             {!selectedBoat ? (
               <div>
@@ -267,7 +375,9 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
                       type="button"
                       onClick={() => {
                         setSelectedBoat(null);
-                        setSelectedSeat(null);
+                        setSelectedSeats([]);
+                        setSeatData({});
+                        setExpandedSeats(new Set());
                       }}
                       className="text-sm text-viva-blue hover:text-viva-blue-dark font-semibold"
                     >
@@ -276,107 +386,377 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
                   </div>
                 </div>
 
-                {/* Seleção de Assento */}
+                {/* Seleção de Assentos (Múltiplos para grupo) */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Selecione o Assento ({availableSeats.length} disponíveis)
+                    Selecione os Assentos {selectedSeats.length > 0 && `(${selectedSeats.length} selecionado${selectedSeats.length > 1 ? 's' : ''})`} ({availableSeats.length} disponíveis)
                   </label>
                   <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto p-2 border border-gray-200 rounded-xl">
-                    {availableSeats.map((seat) => (
-                      <button
-                        key={seat}
-                        type="button"
-                        onClick={() => setSelectedSeat(seat)}
-                        className={`px-4 py-3 rounded-lg font-bold transition ${
-                          selectedSeat === seat
-                            ? 'bg-viva-blue text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {seat}
-                      </button>
-                    ))}
+                    {Array.from({ length: selectedBoat.seatsTotal }, (_, i) => {
+                      const seatNum = i + 1;
+                      const isAvailable = availableSeats.includes(seatNum);
+                      const isSelected = selectedSeats.includes(seatNum);
+                      
+                      return (
+                        <button
+                          key={seatNum}
+                          type="button"
+                          onClick={() => {
+                            if (isAvailable) {
+                              if (isSelected) {
+                                setSelectedSeats(selectedSeats.filter(s => s !== seatNum));
+                                // Remover dados do assento
+                                const newSeatData = { ...seatData };
+                                delete newSeatData[seatNum];
+                                setSeatData(newSeatData);
+                                // Remover do expanded
+                                const newExpanded = new Set(expandedSeats);
+                                newExpanded.delete(seatNum);
+                                setExpandedSeats(newExpanded);
+                              } else {
+                                setSelectedSeats([...selectedSeats, seatNum]);
+                                // Inicializar dados do assento
+                                setSeatData({
+                                  ...seatData,
+                                  [seatNum]: { 
+                                    name: '', 
+                                    isChild: false,
+                                    phone: '',
+                                    whatsapp: '',
+                                    email: '',
+                                    document: '',
+                                    birthDate: '',
+                                    address: ''
+                                  }
+                                });
+                                // Expandir automaticamente o novo assento
+                                setExpandedSeats(new Set([...expandedSeats, seatNum]));
+                              }
+                            }
+                          }}
+                          disabled={!isAvailable}
+                          className={`px-3 py-2 rounded-lg font-bold transition text-sm ${
+                            isSelected
+                              ? 'bg-viva-blue text-white'
+                              : isAvailable
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-red-100 text-red-500 cursor-not-allowed opacity-50'
+                          }`}
+                          title={isAvailable ? 'Livre' : 'Ocupado'}
+                        >
+                          {isAvailable ? '✓' : '✗'}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {selectedSeat && (
+                  <div className="flex items-center gap-4 mt-2 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-4 bg-green-100 rounded"></div>
+                      <span>Livre</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-4 bg-red-100 rounded"></div>
+                      <span>Ocupado</span>
+                    </div>
+                  </div>
+                  {selectedSeats.length > 0 && (
                     <p className="mt-2 text-sm text-viva-blue font-semibold">
-                      Assento {selectedSeat} selecionado
+                      {selectedSeats.length} assento{selectedSeats.length > 1 ? 's' : ''} selecionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.sort((a, b) => a - b).join(', ')}
                     </p>
                   )}
                 </div>
 
-                {/* Dados do Cliente */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nome Completo *</label>
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                      placeholder="(48) 99999-9999"
-                    />
-                  </div>
-                </div>
+                {/* Dados por Assento - Accordion */}
+                {selectedSeats.length > 0 && (
+                  <div className="border-2 border-viva-blue/20 rounded-xl p-4 bg-viva-blue/5">
+                    <h3 className="text-lg font-bold text-viva-blue-dark mb-4">
+                      Dados dos Passageiros ({selectedSeats.length} {selectedSeats.length === 1 ? 'passageiro' : 'passageiros'})
+                    </h3>
+                    <div className="space-y-2">
+                      {selectedSeats.sort((a, b) => a - b).map((seatNum) => {
+                        const data = seatData[seatNum] || { 
+                          name: '', 
+                          isChild: false, 
+                          phone: '', 
+                          whatsapp: '', 
+                          email: '', 
+                          document: '', 
+                          birthDate: '',
+                          address: ''
+                        };
+                        const isExpanded = expandedSeats.has(seatNum);
+                        const base = selectedBoat.ticketPrice || 200;
+                        const seatPrice = data.isChild ? base / 2 : base;
+                        
+                        return (
+                          <div key={seatNum} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            {/* Header do Accordion */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newExpanded = new Set(expandedSeats);
+                                if (isExpanded) {
+                                  newExpanded.delete(seatNum);
+                                } else {
+                                  newExpanded.add(seatNum);
+                                }
+                                setExpandedSeats(newExpanded);
+                              }}
+                              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"
+                            >
+                              <div className="flex items-center gap-3 flex-1 text-left">
+                                <div className="bg-viva-blue text-white w-10 h-10 rounded-lg flex items-center justify-center font-bold shrink-0">
+                                  #{seatNum}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-viva-blue-dark">
+                                      {data.name || `Assento ${seatNum}`}
+                                    </h4>
+                                    {data.isChild && (
+                                      <span className="bg-viva-orange/20 text-viva-orange text-xs font-semibold px-2 py-0.5 rounded-full">
+                                        👶 Criança
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-500">
+                                    {data.name ? `${data.isChild ? 'Meia entrada' : 'Inteira'} - R$ ${seatPrice.toFixed(2)}` : 'Clique para preencher os dados'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="shrink-0 ml-2">
+                                {isExpanded ? (
+                                  <ChevronUp className="text-gray-400" size={20} />
+                                ) : (
+                                  <ChevronDown className="text-gray-400" size={20} />
+                                )}
+                              </div>
+                            </button>
+                            
+                            {/* Conteúdo do Accordion */}
+                            {isExpanded && (
+                              <div className="px-4 pb-4 border-t border-gray-200 pt-4 space-y-4">
+                                <div>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Nome Completo *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={data.name}
+                                    onChange={(e) => {
+                                      setSeatData({
+                                        ...seatData,
+                                        [seatNum]: { ...data, name: e.target.value }
+                                      });
+                                    }}
+                                    required
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                    placeholder={`Nome do passageiro do assento ${seatNum}`}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center gap-2 p-3 bg-viva-orange/10 rounded-lg">
+                                  <input
+                                    type="checkbox"
+                                    id={`child-${seatNum}`}
+                                    checked={data.isChild}
+                                    onChange={(e) => {
+                                      setSeatData({
+                                        ...seatData,
+                                        [seatNum]: { ...data, isChild: e.target.checked }
+                                      });
+                                    }}
+                                    className="w-5 h-5 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
+                                  />
+                                  <label htmlFor={`child-${seatNum}`} className="text-sm font-semibold text-viva-orange cursor-pointer flex-1">
+                                    👶 Menor de 7 anos (meia entrada - R$ {(base / 2).toFixed(2)})
+                                  </label>
+                                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp (opcional)</label>
-                  <input
-                    type="tel"
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                    placeholder="(48) 99999-9999"
-                  />
-                </div>
+                                {/* Dados de Contato do Passageiro */}
+                                <div className="border-t border-gray-200 pt-4 space-y-3">
+                                  <h5 className="text-sm font-bold text-gray-700">Dados de Contato</h5>
+                                  
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Telefone *
+                                      </label>
+                                      <input
+                                        type="tel"
+                                        value={data.phone}
+                                        onChange={(e) => {
+                                          setSeatData({
+                                            ...seatData,
+                                            [seatNum]: { ...data, phone: e.target.value }
+                                          });
+                                        }}
+                                        required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                        placeholder="(48) 99999-9999"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        WhatsApp (opcional)
+                                      </label>
+                                      <input
+                                        type="tel"
+                                        value={data.whatsapp}
+                                        onChange={(e) => {
+                                          setSeatData({
+                                            ...seatData,
+                                            [seatNum]: { ...data, whatsapp: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                        placeholder="(48) 99999-9999"
+                                      />
+                                    </div>
+                                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Endereço *</label>
-                  <textarea
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    required
-                    rows={2}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                  />
-                </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Email
+                                      </label>
+                                      <input
+                                        type="email"
+                                        value={data.email}
+                                        onChange={(e) => {
+                                          setSeatData({
+                                            ...seatData,
+                                            [seatNum]: { ...data, email: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                        placeholder="cliente@email.com"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Documento (CPF/RG)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={data.document}
+                                        onChange={(e) => {
+                                          setSeatData({
+                                            ...seatData,
+                                            [seatNum]: { ...data, document: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                        placeholder="000.000.000-00"
+                                      />
+                                    </div>
+                                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Forma de Pagamento *</label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                    >
-                      <option value="pix">PIX</option>
-                      <option value="cartao">Cartão</option>
-                      <option value="dinheiro">Dinheiro</option>
-                    </select>
+                                  <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                      Data de Nascimento
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={data.birthDate}
+                                      onChange={(e) => {
+                                        setSeatData({
+                                          ...seatData,
+                                          [seatNum]: { ...data, birthDate: e.target.value }
+                                        });
+                                      }}
+                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                      Endereço *
+                                    </label>
+                                    <textarea
+                                      value={data.address}
+                                      onChange={(e) => {
+                                        setSeatData({
+                                          ...seatData,
+                                          [seatNum]: { ...data, address: e.target.value }
+                                        });
+                                      }}
+                                      required
+                                      rows={2}
+                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                                      placeholder="Rua, número, bairro, cidade..."
+                                    />
+                                  </div>
+                                </div>
+
+                                {data.name && (
+                                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <p className="text-sm text-green-800">
+                                      <span className="font-semibold">Valor:</span> R$ {seatPrice.toFixed(2)} ({data.isChild ? 'meia entrada' : 'inteira'})
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Valor Total (R$) *</label>
-                    <input
-                      type="number"
-                      value={totalAmount}
-                      onChange={(e) => setTotalAmount(e.target.value)}
-                      required
-                      step="0.01"
-                      min="0"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                      placeholder="200.00"
-                    />
+                )}
+
+                {/* Informações de Pagamento */}
+                <div className="border-2 border-green-200 rounded-xl p-4 bg-green-50">
+                  <h3 className="text-lg font-bold text-green-800 mb-4">💰 Informações de Pagamento</h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Preço por Pessoa (Adulto)</label>
+                      <div className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-100 text-gray-700 font-bold">
+                        R$ {(selectedBoat.ticketPrice || 200).toFixed(2)}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade (R$ {((selectedBoat.ticketPrice || 200) / 2).toFixed(2)})</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Forma de Pagamento *</label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                      >
+                        <option value="pix">PIX</option>
+                        <option value="cartao">Cartão</option>
+                        <option value="dinheiro">Dinheiro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Resumo de Valores */}
+                  <div className="bg-white rounded-lg p-4 border border-green-300">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">Valor Total:</span>
+                        <span className="text-xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
+                      </div>
+                      {selectedSeats.length > 0 && (
+                        <div className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-200">
+                          <p className="font-semibold mb-1">Detalhamento:</p>
+                          <ul className="list-disc list-inside mt-1">
+                            {selectedSeats.sort((a, b) => a - b).map(seat => {
+                              const data = seatData[seat] || { name: '', isChild: false };
+                              const base = selectedBoat.ticketPrice || 200;
+                              const seatPrice = data.isChild ? base / 2 : base;
+                              return (
+                                <li key={seat}>
+                                  Assento {seat} ({data.isChild ? 'Criança' : 'Adulto'}): R$ {seatPrice.toFixed(2)}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -396,16 +776,15 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
                   </button>
                   <button
                     type="submit"
-                    disabled={loading || !selectedSeat}
+                    disabled={loading || selectedSeats.length === 0 || selectedSeats.some(seat => !seatData[seat]?.name?.trim())}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50"
                   >
-                    {loading ? 'Enviando...' : 'Enviar Solicitação'}
+                    {loading ? 'Enviando...' : 'Finalizar e Enviar para WhatsApp'}
                   </button>
                 </div>
               </>
             )}
           </form>
-        )}
       </div>
     </div>
   );

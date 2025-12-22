@@ -27,9 +27,19 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import PublicReservationModal from '@/components/PublicReservationModal';
+import { useSiteConfig, DEFAULT_SITE_CONFIG, DEFAULT_TOURS } from '@/lib/useSiteConfig';
+import { TourConfig, SiteConfig } from '@/types';
+
+// Interface para props compartilhadas entre componentes
+interface SharedProps {
+  tours: TourConfig[];
+  siteConfig: SiteConfig | null;
+  getWhatsAppLink: (message?: string) => string;
+  getCurrentPrice: (tour: TourConfig) => { adult: number; child: number; label: string } | null;
+}
 
 // Header Component
-function Header() {
+function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -59,13 +69,13 @@ function Header() {
           <div className="flex items-center justify-between py-2 text-sm border-b border-white/20">
             {/* Redes Sociais */}
             <div className="flex items-center gap-3">
-              <a href="https://wa.me/5548999999999" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-green-500 transition-colors">
+              <a href={getWhatsAppLink()} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-green-500 transition-colors">
                 <MessageCircle size={16} />
               </a>
-              <a href="https://instagram.com/vivalavida" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-pink-500 transition-colors">
+              <a href={siteConfig?.instagramUrl || DEFAULT_SITE_CONFIG.instagramUrl} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-pink-500 transition-colors">
                 <Instagram size={16} />
               </a>
-              <a href="https://facebook.com/vivalavida" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-blue-600 transition-colors">
+              <a href={siteConfig?.facebookUrl || DEFAULT_SITE_CONFIG.facebookUrl} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-blue-600 transition-colors">
                 <Facebook size={16} />
               </a>
             </div>
@@ -75,7 +85,7 @@ function Header() {
             
             {/* Botão Reservar */}
             <a 
-              href="https://wa.me/5548999999999" 
+              href={getWhatsAppLink()} 
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-lg"
             >
               <MessageCircle size={16} />
@@ -158,7 +168,7 @@ function Header() {
 
           {/* CTA Button - Desktop */}
           <a 
-            href="https://wa.me/5548999999999"
+            href={getWhatsAppLink()}
             className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all duration-300 shimmer ${
               scrolled 
                 ? 'bg-gradient-to-r from-viva-orange to-viva-yellow text-white hover:shadow-lg hover:scale-105' 
@@ -196,7 +206,7 @@ function Header() {
             </li>
             <li className="mt-2">
               <a 
-                href="https://wa.me/5548999999999"
+                href={getWhatsAppLink()}
                 className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full font-bold"
               >
                 <MessageCircle size={18} />
@@ -211,7 +221,7 @@ function Header() {
 }
 
 // Hero Section
-function Hero() {
+function Hero({ siteConfig, getWhatsAppLink }: SharedProps) {
   return (
     <section id="inicio" className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Video Background */}
@@ -278,7 +288,7 @@ function Hero() {
           {/* CTAs - GRANDE e fácil de tocar no mobile */}
           <div className="flex flex-col gap-3 sm:gap-4 px-2 sm:px-0 mb-8 sm:mb-10 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
             <a 
-              href="https://wa.me/5548999999999?text=Olá! Gostaria de saber mais sobre os passeios de lancha."
+              href={getWhatsAppLink('Olá! Gostaria de saber mais sobre os passeios de lancha.')}
               className="group relative bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-3 shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
             >
               <MessageCircle size={24} />
@@ -335,8 +345,16 @@ function Hero() {
   );
 }
 
-// Features Section - Chamada para os roteiros
-function Features() {
+// Features Section - Chamada para os roteiros (com dados dinâmicos)
+function Features({ tours, getWhatsAppLink }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string }) {
+  // Encontrar passeios ou usar defaults
+  const tourPanoramico = tours.find(t => t.type === 'panoramico');
+  const tourDesembarque = tours.find(t => t.type === 'desembarque');
+  
+  // Preços atuais
+  const precoPanoramico = tourPanoramico?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.panoramico.currentPrice;
+  const precoDesembarque = tourDesembarque?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.currentPrice;
+
   return (
     <section className="pt-10 sm:pt-20 pb-24 sm:pb-32 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden">
       {/* Background decorativo */}
@@ -364,30 +382,32 @@ function Features() {
           
           {/* Subtítulo */}
           <p className="text-white/80 text-base sm:text-xl max-w-2xl mx-auto mb-6 sm:mb-8">
-            Duas opções de passeio para você escolher a experiência perfeita!
+            {tours.length > 0 ? `${tours.length} opções de passeio para você escolher a experiência perfeita!` : 'Duas opções de passeio para você escolher a experiência perfeita!'}
           </p>
           
-          {/* Cards dos 2 roteiros */}
+          {/* Cards dos roteiros - Dinâmico */}
           <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 max-w-3xl mx-auto mb-8 sm:mb-10">
             {/* Tour Panorâmico */}
             <div className="relative bg-white/20 backdrop-blur-sm border-2 border-white/40 rounded-2xl p-5 sm:p-6">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-viva-orange text-white font-black text-xs px-3 py-1 rounded-full shadow-lg">
-                ⭐ MAIS VENDIDO
-              </div>
-              <span className="text-4xl sm:text-5xl block mb-3">🚤</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">Tour Panorâmico</h3>
-              <p className="text-white/70 text-sm mb-3">5h de passeio até a Ilha do Campeche</p>
+              {tourPanoramico?.isHighlighted && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-viva-orange text-white font-black text-xs px-3 py-1 rounded-full shadow-lg">
+                  ⭐ MAIS VENDIDO
+                </div>
+              )}
+              <span className="text-4xl sm:text-5xl block mb-3">{tourPanoramico?.emoji || '🚤'}</span>
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourPanoramico?.name || 'Tour Panorâmico'}</h3>
+              <p className="text-white/70 text-sm mb-3">{tourPanoramico?.duration || '5h'} de passeio até a Ilha do Campeche</p>
               <p className="text-white/90 text-sm">Atividades a bordo, comida e bebida inclusos!</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R$200</span></p>
+              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R${precoPanoramico}</span></p>
             </div>
             
             {/* Com Desembarque */}
             <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
-              <span className="text-4xl sm:text-5xl block mb-3">🏝️</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">Com Desembarque</h3>
+              <span className="text-4xl sm:text-5xl block mb-3">{tourDesembarque?.emoji || '🏝️'}</span>
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourDesembarque?.name || 'Com Desembarque'}</h3>
               <p className="text-white/70 text-sm mb-3">Desça na Ilha do Campeche • 3h em terra</p>
               <p className="text-white/90 text-sm">Explore praias de areia branca e águas cristalinas!</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R$300</span></p>
+              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R${precoDesembarque}</span></p>
             </div>
           </div>
           
@@ -486,8 +506,16 @@ function ImageCarousel() {
 }
 
 // Tours Section - ROTEIROS VIVA LA VIDA
-function Tours() {
+function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedProps) {
   const [showReservationModal, setShowReservationModal] = useState(false);
+  
+  // Encontrar passeios ou usar defaults
+  const tourPanoramico = tours.find(t => t.type === 'panoramico');
+  const tourDesembarque = tours.find(t => t.type === 'desembarque');
+  
+  // Obter preços atuais e todos os preços
+  const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
+  const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
 
   return (
     <section id="passeios" className="py-12 sm:py-20 bg-white relative">
@@ -522,7 +550,7 @@ function Tours() {
                 <div className="p-5 sm:p-8">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="bg-viva-blue/10 text-viva-blue px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                      ⏱️ 5 horas
+                      ⏱️ {tourPanoramico?.duration || '5 horas'}
                     </span>
                     <span className="bg-viva-green/10 text-viva-green px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
                       3h na água
@@ -530,84 +558,90 @@ function Tours() {
                   </div>
 
                   <h3 className="text-xl sm:text-3xl font-black text-viva-blue-dark mb-3 sm:mb-4">
-                    🚤 Tour Panorâmico<br/>
-                    <span className="gradient-text">VIVA LA VIDA</span>
+                    {tourPanoramico?.emoji || '🚤'} {tourPanoramico?.name || 'Tour Panorâmico'}<br/>
+                    <span className="gradient-text">{tourPanoramico?.subtitle || 'VIVA LA VIDA'}</span>
                   </h3>
 
                   <p className="text-gray-600 text-sm sm:text-base mb-4">
-                    A experiência mais completa! 3 horas em frente à Ilha do Campeche com diversas atividades na água!
+                    {tourPanoramico?.description || 'A experiência mais completa! 3 horas em frente à Ilha do Campeche com diversas atividades na água!'}
                   </p>
 
-                  {/* O que está incluso */}
+                  {/* O que está incluso - Dinâmico */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🍢</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Choripán</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🍹</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Caipirinha</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🛶</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Caiaque</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🏄‍♂️</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Stand Up</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🤿</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Snorkel</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🫧</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Piscina</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">🪷</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Flutuante</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                      <span className="text-lg sm:text-2xl">📸</span>
-                      <p className="text-xs sm:text-sm font-semibold text-gray-700">Foto Sub</p>
-                    </div>
+                    {(tourPanoramico?.features || [
+                      { icon: '🍢', label: 'Choripán' },
+                      { icon: '🍹', label: 'Caipirinha' },
+                      { icon: '🛶', label: 'Caiaque' },
+                      { icon: '🏄‍♂️', label: 'Stand Up' },
+                      { icon: '🤿', label: 'Snorkel' },
+                      { icon: '🫧', label: 'Piscina' },
+                      { icon: '🪷', label: 'Flutuante' },
+                      { icon: '📸', label: 'Foto Sub' },
+                    ]).map((item: { icon: string; label: string }, idx: number) => (
+                      <div key={idx} className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
+                        <span className="text-lg sm:text-2xl">{item.icon}</span>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-700">{item.label}</p>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Horários */}
                   <div className="flex flex-wrap gap-2 sm:gap-4 mb-4 text-xs sm:text-sm text-gray-600">
-                    <span>🕘 Check-in: 8:00h</span>
-                    <span>🚤 Saída: 9:15h</span>
+                    <span>🕘 Check-in: {tourPanoramico?.checkInTime || '8:00h'}</span>
+                    <span>🚤 Saída: {tourPanoramico?.departureTime || '9:15h'}</span>
                   </div>
 
-                  {/* Preços */}
+                  {/* Preços - Dinâmico */}
                   <div className="mb-4 sm:mb-6">
                     <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                      {/* Preço Até 25/12 */}
-                      <div className="bg-gradient-to-br from-viva-green/20 to-viva-green/5 border-2 border-viva-green/30 rounded-2xl p-4 text-center relative overflow-hidden">
-                        <div className="absolute top-0 right-0 bg-viva-green text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                          ATUAL
+                      {/* Preço Atual */}
+                      {pricePanoramico ? (
+                        <div className="bg-gradient-to-br from-viva-green/20 to-viva-green/5 border-2 border-viva-green/30 rounded-2xl p-4 text-center relative overflow-hidden">
+                          <div className="absolute top-0 right-0 bg-viva-green text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                            ATUAL
+                          </div>
+                          <p className="text-xs text-gray-500 mb-1">{pricePanoramico.label}</p>
+                          <p className="text-3xl sm:text-4xl font-black text-viva-green">R${pricePanoramico.adult}</p>
+                          <p className="text-[10px] text-gray-400">por pessoa</p>
                         </div>
-                        <p className="text-xs text-gray-500 mb-1">Até 25/12</p>
-                        <p className="text-3xl sm:text-4xl font-black text-viva-green">R$200</p>
-                        <p className="text-[10px] text-gray-400">por pessoa</p>
-                      </div>
+                      ) : (
+                        <div className="bg-gradient-to-br from-viva-green/20 to-viva-green/5 border-2 border-viva-green/30 rounded-2xl p-4 text-center relative overflow-hidden">
+                          <div className="absolute top-0 right-0 bg-viva-green text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                            ATUAL
+                          </div>
+                          <p className="text-xs text-gray-500 mb-1">Preço atual</p>
+                          <p className="text-3xl sm:text-4xl font-black text-viva-green">R${DEFAULT_TOURS.panoramico.currentPrice}</p>
+                          <p className="text-[10px] text-gray-400">por pessoa</p>
+                        </div>
+                      )}
                       
-                      {/* Preço Temporada */}
-                      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center">
-                        <p className="text-xs text-gray-500 mb-1">Alta Temporada</p>
-                        <p className="text-3xl sm:text-4xl font-black text-gray-400">R$250</p>
-                        <p className="text-[10px] text-gray-400">por pessoa</p>
-                      </div>
+                      {/* Outros preços do passeio */}
+                      {tourPanoramico?.pricing && tourPanoramico.pricing.length > 1 ? (
+                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center">
+                          <p className="text-xs text-gray-500 mb-1">
+                            {tourPanoramico.pricing.find(p => !p.isCurrent)?.label || 'Alta Temporada'}
+                          </p>
+                          <p className="text-3xl sm:text-4xl font-black text-gray-400">
+                            R${tourPanoramico.pricing.find(p => !p.isCurrent)?.adultPrice || DEFAULT_TOURS.panoramico.seasonPrice}
+                          </p>
+                          <p className="text-[10px] text-gray-400">por pessoa</p>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center">
+                          <p className="text-xs text-gray-500 mb-1">Alta Temporada</p>
+                          <p className="text-3xl sm:text-4xl font-black text-gray-400">R${DEFAULT_TOURS.panoramico.seasonPrice}</p>
+                          <p className="text-[10px] text-gray-400">por pessoa</p>
+                        </div>
+                      )}
                     </div>
                     
                     {/* Info crianças */}
                     <div className="flex justify-center gap-3 mt-3">
                       <span className="bg-viva-blue/10 text-viva-blue text-[10px] sm:text-xs font-semibold px-3 py-1 rounded-full">
-                        👶 Até 4 anos: GRÁTIS
+                        👶 Até {pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4} anos: GRÁTIS
                       </span>
                       <span className="bg-viva-orange/10 text-viva-orange text-[10px] sm:text-xs font-semibold px-3 py-1 rounded-full">
-                        👧 5-7 anos: MEIA
+                        👧 {(pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4) + 1}-{pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.halfPriceAgeLimit || 7) : 7} anos: MEIA
                       </span>
                     </div>
                   </div>
@@ -626,14 +660,14 @@ function Tours() {
           </div>
         </div>
 
-        {/* Opção 2 - COM Desembarque */}
+        {/* Opção 2 - COM Desembarque - Dinâmico */}
         <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white shadow-xl border border-gray-100">
           <div className="grid lg:grid-cols-2 gap-0">
             {/* Conteúdo */}
             <div className="p-5 sm:p-8 order-2 lg:order-1">
               <div className="flex items-center gap-2 mb-3">
                 <span className="bg-viva-blue/10 text-viva-blue px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                  ⏱️ 7 horas
+                  ⏱️ {tourDesembarque?.duration || '7 horas'}
                 </span>
                 <span className="bg-viva-teal/10 text-viva-teal px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
                   3h na ilha
@@ -641,12 +675,12 @@ function Tours() {
               </div>
 
               <h3 className="text-xl sm:text-2xl font-black text-viva-blue-dark mb-3">
-                🌴 Passeio com Desembarque<br/>
-                <span className="text-viva-teal">Ilha do Campeche</span>
+                {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || 'Passeio com Desembarque'}<br/>
+                <span className="text-viva-teal">{tourDesembarque?.subtitle || 'Ilha do Campeche'}</span>
               </h3>
 
               <p className="text-gray-600 text-sm sm:text-base mb-4">
-                Desembarque na ilha e explore por 3 horas! Praias de areia branca, águas cristalinas e contato com a natureza.
+                {tourDesembarque?.description || 'Desembarque na ilha e explore por 3 horas! Praias de areia branca, águas cristalinas e contato com a natureza.'}
               </p>
 
               {/* O que está incluso */}
@@ -665,41 +699,64 @@ function Tours() {
                 </li>
               </ul>
 
-              {/* Preços */}
+              {/* Preços - Dinâmico */}
               <div className="mb-4">
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Preço Até 25/12 */}
-                  <div className="bg-gradient-to-br from-viva-teal/20 to-viva-teal/5 border-2 border-viva-teal/30 rounded-xl p-3 text-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-viva-teal text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
-                      ATUAL
+                  {/* Preço Atual */}
+                  {priceDesembarque ? (
+                    <div className="bg-gradient-to-br from-viva-teal/20 to-viva-teal/5 border-2 border-viva-teal/30 rounded-xl p-3 text-center relative overflow-hidden">
+                      <div className="absolute top-0 right-0 bg-viva-teal text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
+                        ATUAL
+                      </div>
+                      <p className="text-[10px] text-gray-500 mb-1">{priceDesembarque.label}</p>
+                      <p className="text-2xl sm:text-3xl font-black text-viva-teal">R${priceDesembarque.adult}</p>
+                      <p className="text-[9px] text-gray-400">por pessoa</p>
                     </div>
-                    <p className="text-[10px] text-gray-500 mb-1">Até 25/12</p>
-                    <p className="text-2xl sm:text-3xl font-black text-viva-teal">R$300</p>
-                    <p className="text-[9px] text-gray-400">por pessoa</p>
-                  </div>
+                  ) : (
+                    <div className="bg-gradient-to-br from-viva-teal/20 to-viva-teal/5 border-2 border-viva-teal/30 rounded-xl p-3 text-center relative overflow-hidden">
+                      <div className="absolute top-0 right-0 bg-viva-teal text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
+                        ATUAL
+                      </div>
+                      <p className="text-[10px] text-gray-500 mb-1">Preço atual</p>
+                      <p className="text-2xl sm:text-3xl font-black text-viva-teal">R${DEFAULT_TOURS.desembarque.currentPrice}</p>
+                      <p className="text-[9px] text-gray-400">por pessoa</p>
+                    </div>
+                  )}
                   
-                  {/* Preço Temporada */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
-                    <p className="text-[10px] text-gray-500 mb-1">Alta Temporada</p>
-                    <p className="text-2xl sm:text-3xl font-black text-gray-400">R$350</p>
-                    <p className="text-[9px] text-gray-400">por pessoa</p>
-                  </div>
+                  {/* Outros preços */}
+                  {tourDesembarque?.pricing && tourDesembarque.pricing.length > 1 ? (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                      <p className="text-[10px] text-gray-500 mb-1">
+                        {tourDesembarque.pricing.find(p => !p.isCurrent)?.label || 'Alta Temporada'}
+                      </p>
+                      <p className="text-2xl sm:text-3xl font-black text-gray-400">
+                        R${tourDesembarque.pricing.find(p => !p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.seasonPrice}
+                      </p>
+                      <p className="text-[9px] text-gray-400">por pessoa</p>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                      <p className="text-[10px] text-gray-500 mb-1">Alta Temporada</p>
+                      <p className="text-2xl sm:text-3xl font-black text-gray-400">R${DEFAULT_TOURS.desembarque.seasonPrice}</p>
+                      <p className="text-[9px] text-gray-400">por pessoa</p>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Info crianças */}
                 <div className="flex justify-center gap-2 mt-2">
                   <span className="bg-viva-blue/10 text-viva-blue text-[9px] sm:text-[10px] font-semibold px-2 py-1 rounded-full">
-                    👶 Até 4 anos: GRÁTIS
+                    👶 Até {priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4} anos: GRÁTIS
                   </span>
                   <span className="bg-viva-orange/10 text-viva-orange text-[9px] sm:text-[10px] font-semibold px-2 py-1 rounded-full">
-                    👧 5-7 anos: MEIA
+                    👧 {(priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4) + 1}-{priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.halfPriceAgeLimit || 7) : 7} anos: MEIA
                   </span>
                 </div>
               </div>
 
-              {/* CTA */}
+              {/* CTA - Dinâmico */}
               <a 
-                href="https://wa.me/5548999999999?text=Olá! Quero reservar o passeio COM desembarque na Ilha do Campeche!"
+                href={getWhatsAppLink(tourDesembarque?.whatsappMessage || 'Olá! Quero reservar o passeio COM desembarque na Ilha do Campeche!')}
                 className="block w-full text-center bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base active:scale-95 transition-all"
               >
                 <MessageCircle className="inline mr-2" size={18} />
@@ -746,7 +803,15 @@ function Tours() {
 }
 
 // Routes Section - Comparativo dos Roteiros
-function Routes() {
+function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedProps) {
+  // Encontrar passeios ou usar defaults
+  const tourPanoramico = tours.find(t => t.type === 'panoramico');
+  const tourDesembarque = tours.find(t => t.type === 'desembarque');
+  
+  // Obter preços atuais
+  const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
+  const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
+
   return (
     <section id="roteiros" className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-teal relative overflow-hidden">
       {/* Animated background - esconde no mobile */}
@@ -802,7 +867,7 @@ function Routes() {
 
               <div className="text-center">
                 <p className="text-xs text-gray-500">A partir de</p>
-                <p className="text-3xl font-black text-viva-green">R$180</p>
+                <p className="text-3xl font-black text-viva-green">R${pricePanoramico?.adult || DEFAULT_TOURS.panoramico.currentPrice}</p>
               </div>
             </div>
           </div>
@@ -810,12 +875,12 @@ function Routes() {
           {/* Com Desembarque */}
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
             <h3 className="text-lg sm:text-xl font-black text-white mb-2">
-              🌴 Com Desembarque
+              {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || 'Com Desembarque'}
             </h3>
             <p className="text-viva-teal font-bold text-sm mb-3">Na Ilha do Campeche</p>
             
             <ul className="space-y-2 text-sm text-white/80 mb-4">
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> 7 horas total</li>
+              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {tourDesembarque?.duration || '7 horas'} total</li>
               <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> 3h na ilha</li>
               <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> Autorização inclusa</li>
               <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> Explore em terra</li>
@@ -825,7 +890,7 @@ function Routes() {
 
             <div className="text-center">
               <p className="text-xs text-white/60">A partir de</p>
-              <p className="text-3xl font-black text-white">R$250</p>
+              <p className="text-3xl font-black text-white">R${priceDesembarque?.adult || DEFAULT_TOURS.desembarque.currentPrice}</p>
             </div>
           </div>
         </div>
@@ -840,7 +905,7 @@ function Routes() {
               Fale com a gente! Te ajudamos a escolher o melhor roteiro!
             </p>
             <a 
-              href="https://wa.me/5548999999999?text=Olá! Estou em dúvida entre os roteiros. Podem me ajudar?"
+              href={getWhatsAppLink('Olá! Estou em dúvida entre os roteiros. Podem me ajudar?')}
               className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-10 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-xl shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
             >
               <MessageCircle size={24} />
@@ -854,7 +919,7 @@ function Routes() {
 }
 
 // Testimonials Section
-function Testimonials() {
+function Testimonials({ siteConfig }: SharedProps) {
   const testimonials = [
     {
       name: 'Victor Sbeghen',
@@ -939,7 +1004,7 @@ function Testimonials() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              <span className="text-gray-600 text-xs sm:text-base"><strong>44 avaliações</strong> no Google</span>
+              <span className="text-gray-600 text-xs sm:text-base"><strong>{siteConfig?.googleReviews || DEFAULT_SITE_CONFIG.googleReviews} avaliações</strong> no Google</span>
             </div>
           </div>
         </div>
@@ -949,7 +1014,7 @@ function Testimonials() {
 }
 
 // About Section
-function About() {
+function About({ siteConfig, getWhatsAppLink }: SharedProps) {
   return (
     <section id="sobre" className="py-12 sm:py-20 bg-white">
       <div className="container mx-auto px-4">
@@ -1015,7 +1080,7 @@ function About() {
             {/* CTAs */}
             <div className="flex flex-col gap-3 sm:gap-4">
               <a 
-                href="https://wa.me/5548999999999"
+                href={getWhatsAppLink()}
                 className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-full font-bold active:scale-95 transition-all shadow-lg"
               >
                 <MessageCircle size={20} />
@@ -1037,7 +1102,7 @@ function About() {
 }
 
 // Final CTA Section
-function FinalCTA() {
+function FinalCTA({ getWhatsAppLink }: SharedProps) {
   return (
     <section className="py-12 sm:py-20 bg-gradient-to-r from-viva-orange via-viva-yellow to-viva-green relative overflow-hidden">
       {/* Background pattern - esconde no mobile */}
@@ -1063,7 +1128,7 @@ function FinalCTA() {
           <strong>Atendimento 24h</strong>
         </p>
         <a 
-          href="https://wa.me/5548999999999?text=Olá! Gostaria de reservar um passeio de lancha."
+          href={getWhatsAppLink('Olá! Gostaria de reservar um passeio de lancha.')}
           className="inline-flex items-center gap-2 sm:gap-3 bg-white text-viva-blue-dark px-8 sm:px-12 py-4 sm:py-6 rounded-2xl sm:rounded-full font-black text-lg sm:text-2xl shadow-xl active:scale-95 transition-all"
         >
           <MessageCircle size={28} />
@@ -1075,7 +1140,15 @@ function FinalCTA() {
 }
 
 // Footer
-function Footer() {
+function Footer({ siteConfig, getWhatsAppLink }: SharedProps) {
+  // Valores do siteConfig ou defaults
+  const whatsappNumber = siteConfig?.whatsappNumber || DEFAULT_SITE_CONFIG.whatsappNumber;
+  const displayPhone = siteConfig?.phone || DEFAULT_SITE_CONFIG.phone;
+  const email = siteConfig?.email || DEFAULT_SITE_CONFIG.email;
+  const address = siteConfig?.address || DEFAULT_SITE_CONFIG.address;
+  const instagramUrl = siteConfig?.instagramUrl || DEFAULT_SITE_CONFIG.instagramUrl;
+  const facebookUrl = siteConfig?.facebookUrl || DEFAULT_SITE_CONFIG.facebookUrl;
+
   return (
     <footer id="contato" className="bg-viva-blue-navy text-white relative">
       {/* Wave top - esconde no mobile */}
@@ -1101,30 +1174,30 @@ function Footer() {
           
           {/* Redes Sociais - mais destaque no mobile */}
           <div className="flex justify-center gap-4 mb-8">
-            <a href="https://wa.me/5548999999999" className="w-12 h-12 sm:w-10 sm:h-10 bg-green-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
+            <a href={getWhatsAppLink()} className="w-12 h-12 sm:w-10 sm:h-10 bg-green-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
               <MessageCircle size={24} className="sm:w-5 sm:h-5" />
             </a>
-            <a href="https://instagram.com/vivalavida" className="w-12 h-12 sm:w-10 sm:h-10 bg-pink-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
+            <a href={instagramUrl} className="w-12 h-12 sm:w-10 sm:h-10 bg-pink-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
               <Instagram size={24} className="sm:w-5 sm:h-5" />
             </a>
-            <a href="https://facebook.com/vivalavida" className="w-12 h-12 sm:w-10 sm:h-10 bg-blue-600 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
+            <a href={facebookUrl} className="w-12 h-12 sm:w-10 sm:h-10 bg-blue-600 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
               <Facebook size={24} className="sm:w-5 sm:h-5" />
             </a>
           </div>
 
           {/* Contato - compacto no mobile */}
           <div className="space-y-3 mb-8">
-            <a href="tel:+5548999999999" className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
+            <a href={`tel:+55${whatsappNumber}`} className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
               <Phone size={16} />
-              (48) 99999-9999
+              {displayPhone}
             </a>
-            <a href="mailto:contato@vivalavida.com.br" className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
+            <a href={`mailto:${email}`} className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
               <Mail size={16} />
-              contato@vivalavida.com.br
+              {email}
             </a>
             <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 text-sm sm:text-base">
               <MapPin size={16} className="shrink-0" />
-              <span>Barra da Lagoa, Florianópolis - SC</span>
+              <span>{address}</span>
             </div>
             <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 text-sm sm:text-base">
               <Clock size={16} />
@@ -1135,7 +1208,6 @@ function Footer() {
           {/* Links - horizontal no mobile */}
           <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-8 text-sm">
             <a href="#inicio" className="text-white/70 active:text-white">Início</a>
-            <a href="#passeios" className="text-white/70 active:text-white">Passeios</a>
             <a href="#passeios" className="text-white/70 active:text-white">Passeios</a>
             <a href="#roteiros" className="text-white/70 active:text-white">Roteiros</a>
             <a href="#sobre" className="text-white/70 active:text-white">Sobre</a>
@@ -1156,7 +1228,7 @@ function Footer() {
 
       {/* Floating WhatsApp Button - MAIOR no mobile */}
       <a 
-        href="https://wa.me/5548999999999"
+        href={getWhatsAppLink()}
         className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 bg-green-500 text-white w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform pulse-ring"
         aria-label="WhatsApp"
       >
@@ -1210,6 +1282,9 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
+  
+  // Carregar configurações dinâmicas do site
+  const { tours, siteConfig, loading, getWhatsAppLink, getCurrentPrice } = useSiteConfig();
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -1217,19 +1292,27 @@ export default function Home() {
     setTimeout(() => setIsVisible(true), 100);
   };
 
+  // Props compartilhadas para todos os componentes
+  const sharedProps = {
+    tours,
+    siteConfig,
+    getWhatsAppLink,
+    getCurrentPrice,
+  };
+
   return (
     <>
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <main className={`transition-opacity duration-500 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
-        <Header />
-        <Hero />
-        <Features />
-        <Tours />
-        <Routes />
-        <Testimonials />
-        <About />
-        <FinalCTA />
-        <Footer />
+        <Header {...sharedProps} />
+        <Hero {...sharedProps} />
+        <Features tours={tours} getWhatsAppLink={getWhatsAppLink} />
+        <Tours {...sharedProps} />
+        <Routes {...sharedProps} />
+        <Testimonials {...sharedProps} />
+        <About {...sharedProps} />
+        <FinalCTA {...sharedProps} />
+        <Footer {...sharedProps} />
       </main>
     </>
   );
