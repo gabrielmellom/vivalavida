@@ -94,7 +94,17 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
     pdf.text(`Assento: #${reservation.seatNumber}`, margin, 79);
 
     // Informações do Passeio
-    const boatDate = new Date(boat.date).toLocaleDateString('pt-BR');
+    // Formatar data sem problemas de timezone (mesma lógica do checkin)
+    const formatDateForPDF = (dateString: string) => {
+      if (!dateString) return '';
+      const datePart = dateString.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+      if (!year || !month || !day) return dateString;
+      // Criar a data ao meio-dia para evitar problemas de timezone
+      const date = new Date(year, month - 1, day, 12, 0, 0);
+      return date.toLocaleDateString('pt-BR');
+    };
+    const boatDate = formatDateForPDF(boat.date);
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
     pdf.text('Informações do Passeio', margin, 95);
