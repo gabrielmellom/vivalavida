@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
 import { Reservation, Boat } from '@/types';
+
 
 // Função para gerar QR code usando API online
 const generateQRCodeImage = async (value: string): Promise<string> => {
@@ -34,8 +34,16 @@ const generateQRCodeImage = async (value: string): Promise<string> => {
 
 export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) => {
   try {
+    // Verificar se está no cliente
+    if (typeof window === 'undefined') {
+      throw new Error('Esta função só pode ser executada no navegador');
+    }
+
+    // Importar jsPDF dinamicamente
+    const { default: jsPDF } = await import('jspdf');
+
     // Criar URL do voucher (será escaneada pelo admin)
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const baseUrl = window.location.origin;
     const voucherUrl = `${baseUrl}/admin/voucher/${reservation.id}`;
     
     // Gerar QR code
