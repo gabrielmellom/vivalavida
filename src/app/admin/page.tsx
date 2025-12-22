@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
-import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles } from 'lucide-react';
+import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -20,18 +20,18 @@ const formatDate = (dateString: string) => {
   return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
 };
 
-// Cores para identificar grupos (paleta vibrante) - GLOBAL
+// Cores para identificar grupos (paleta profissional) - GLOBAL
 const GROUP_COLORS = [
-  { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-500' },
-  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-500' },
-  { bg: 'bg-pink-100', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
-  { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
-  { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
-  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-700', badge: 'bg-indigo-500' },
-  { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
-  { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
-  { bg: 'bg-lime-100', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-600' },
-  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+  { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700', badge: 'bg-slate-600' },
+  { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', badge: 'bg-blue-600' },
+  { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', badge: 'bg-gray-600' },
+  { bg: 'bg-slate-100', border: 'border-slate-400', text: 'text-slate-800', badge: 'bg-slate-700' },
+  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800', badge: 'bg-blue-700' },
+  { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', badge: 'bg-indigo-600' },
+  { bg: 'bg-slate-200', border: 'border-slate-500', text: 'text-slate-900', badge: 'bg-slate-800' },
+  { bg: 'bg-blue-200', border: 'border-blue-500', text: 'text-blue-900', badge: 'bg-blue-800' },
+  { bg: 'bg-gray-100', border: 'border-gray-400', text: 'text-gray-800', badge: 'bg-gray-700' },
+  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-800', badge: 'bg-indigo-700' },
 ];
 
 export default function AdminDashboard() {
@@ -667,7 +667,7 @@ export default function AdminDashboard() {
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Stats - Grid responsivo 2x2 no mobile */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-8">
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Barcos Ativos</p>
@@ -676,7 +676,7 @@ export default function AdminDashboard() {
               <Calendar className="text-viva-blue hidden sm:block" size={32} />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Pendentes</p>
@@ -685,7 +685,7 @@ export default function AdminDashboard() {
               <Clock className="text-orange-500 hidden sm:block" size={32} />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Aprovadas</p>
@@ -694,7 +694,7 @@ export default function AdminDashboard() {
               <CheckCircle className="text-green-500 hidden sm:block" size={32} />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm">
+          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Total Reservas</p>
@@ -709,49 +709,56 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-8">
           <button
             onClick={() => setShowReservationWizard(true)}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 sm:px-6 py-3 rounded-xl font-bold hover:shadow-lg transition text-sm sm:text-base col-span-2 sm:col-span-1"
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white px-3 sm:px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition text-sm sm:text-base col-span-2 sm:col-span-1 hover:from-green-700 hover:to-emerald-800"
           >
             <Sparkles size={18} />
             Criar Reserva
           </button>
           <button
             onClick={() => setShowBoatModal(true)}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white px-3 sm:px-6 py-3 rounded-xl font-bold hover:shadow-lg transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white px-3 sm:px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition text-sm sm:text-base"
           >
             <Plus size={18} />
             <span className="hidden xs:inline">Criar</span> Barco
           </button>
           <Link
             href="/admin/vendedores"
-            className="flex items-center justify-center gap-2 bg-white border-2 border-viva-blue text-viva-blue-dark px-3 sm:px-6 py-3 rounded-xl font-bold hover:bg-viva-blue/5 transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-white border border-viva-blue text-viva-blue-dark px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base"
           >
             <Users size={18} />
             <span className="hidden sm:inline">Gerenciar</span> Vendedores
           </Link>
           <Link
             href="/admin/checkin"
-            className="flex items-center justify-center gap-2 bg-white border-2 border-viva-orange text-viva-orange px-3 sm:px-6 py-3 rounded-xl font-bold hover:bg-viva-orange/5 transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-white border border-viva-orange text-viva-orange px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-viva-orange/5 transition text-sm sm:text-base"
           >
             <CheckCircle size={18} />
             Check-in
           </Link>
           <Link
+            href="/admin/vouchers"
+            className="flex items-center justify-center gap-2 bg-white border border-indigo-600 text-indigo-600 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-indigo-50 transition text-sm sm:text-base"
+          >
+            <QrCode size={18} />
+            <span className="hidden xs:inline">Gerar</span> Vouchers
+          </Link>
+          <Link
             href="/admin/relatorios"
-            className="flex items-center justify-center gap-2 bg-white border-2 border-purple-600 text-purple-600 px-3 sm:px-6 py-3 rounded-xl font-bold hover:bg-purple-600/5 transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-white border border-slate-600 text-slate-700 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-slate-50 transition text-sm sm:text-base"
           >
             <BarChart3 size={18} />
             Relatórios
           </Link>
           <Link
             href="/admin/financeiro"
-            className="flex items-center justify-center gap-2 bg-white border-2 border-red-600 text-red-600 px-3 sm:px-6 py-3 rounded-xl font-bold hover:bg-red-600/5 transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-white border border-red-600 text-red-600 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-red-50 transition text-sm sm:text-base"
           >
             <DollarSign size={18} />
             Financeiro
           </Link>
           <Link
             href="/admin/config-site"
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-teal-600 text-white px-3 sm:px-6 py-3 rounded-xl font-bold hover:shadow-lg transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-teal-600 text-white px-3 sm:px-6 py-3 rounded-lg font-bold hover:shadow-lg transition text-sm sm:text-base"
           >
             <Settings size={18} />
             Config Site
@@ -765,14 +772,14 @@ export default function AdminDashboard() {
             <div className="relative date-filter-container">
               <button
                 onClick={() => setShowDateFilter(!showDateFilter)}
-                className="flex items-center gap-2 bg-white border-2 border-viva-blue text-viva-blue-dark px-3 sm:px-4 py-2 rounded-xl font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base w-full sm:w-auto justify-center"
+                className="flex items-center gap-2 bg-white border border-viva-blue text-viva-blue-dark px-3 sm:px-4 py-2 rounded-lg font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base w-full sm:w-auto justify-center"
               >
                 <Calendar size={18} />
                 {filterDate ? formatDate(filterDate) : 'Ver Todos'}
               </button>
               
               {showDateFilter && (
-                <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-10 min-w-[280px]">
+                <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-10 min-w-[280px]">
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -831,7 +838,7 @@ export default function AdminDashboard() {
 
             if (filteredBoats.length === 0) {
               return (
-                <div className="bg-white rounded-xl p-12 text-center">
+                <div className="bg-white rounded-lg p-12 text-center">
                   <Calendar className="mx-auto text-gray-400 mb-4" size={48} />
                   <p className="text-gray-600 font-semibold mb-2">
                     {filterDate 
@@ -849,7 +856,7 @@ export default function AdminDashboard() {
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {filteredBoats.filter(b => b.status === 'active').map((boat) => (
-              <div key={boat.id} className="bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-gray-100">
+              <div key={boat.id} className="bg-white rounded-lg p-4 sm:p-5 shadow-sm border border-gray-100">
                 {/* Header do Card */}
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex-1 min-w-0">
@@ -859,12 +866,17 @@ export default function AdminDashboard() {
                           ? 'bg-blue-100 text-blue-700' 
                           : 'bg-purple-100 text-purple-700'
                       }`}>
-                        {boat.boatType === 'escuna' ? '🚢 Escuna' : '🚤 Lancha'}
+                        {boat.boatType === 'escuna' ? 'Escuna' : 'Lancha'}
                       </span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
                         boat.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                       }`}>
-                        {boat.status === 'active' ? '✓ Ativo' : 'Inativo'}
+                        {boat.status === 'active' ? (
+                          <>
+                            <CheckCircle size={12} className="inline mr-1" />
+                            Ativo
+                          </>
+                        ) : 'Inativo'}
                       </span>
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark truncate">{boat.name}</h3>
@@ -967,7 +979,7 @@ export default function AdminDashboard() {
           {/* Versão Mobile - Cards */}
           <div className="sm:hidden space-y-3">
             {pendingReservations.length === 0 ? (
-              <div className="bg-white rounded-xl p-6 text-center">
+              <div className="bg-white rounded-lg p-6 text-center">
                 <CheckCircle className="mx-auto text-green-400 mb-2" size={32} />
                 <p className="text-gray-500 text-sm">Nenhuma reserva pendente</p>
               </div>
@@ -977,7 +989,7 @@ export default function AdminDashboard() {
                 const groupSize = reservation.groupId ? pendingGroupCounts.get(reservation.groupId) || 0 : 0;
                 
                 return (
-                <div key={reservation.id} className={`rounded-xl p-4 shadow-sm border-2 ${
+                <div key={reservation.id} className={`rounded-lg p-4 shadow-sm border-2 ${
                   groupColor
                     ? `${groupColor.bg} ${groupColor.border}`
                     : reservation.status === 'pre_reserved' 
@@ -1034,7 +1046,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Versão Desktop - Tabela */}
-          <div className="hidden sm:block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="hidden sm:block bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -1128,8 +1140,11 @@ export default function AdminDashboard() {
       {/* Modal Criar Barco */}
       {showBoatModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-md w-full max-h-[95vh] overflow-y-auto">
-            <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark mb-4 sm:mb-6">🚢 Criar Novo Barco</h2>
+          <div className="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-md w-full max-h-[95vh] overflow-y-auto">
+            <h2 className="flex items-center gap-2 text-xl sm:text-2xl font-bold text-viva-blue-dark mb-4 sm:mb-6">
+              <Users size={24} className="text-viva-blue" />
+              Criar Novo Barco
+            </h2>
             <form onSubmit={handleCreateBoat} className="space-y-4">
               {/* Tipo de Embarcação */}
               <div>
@@ -1138,32 +1153,32 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setBoatType('escuna')}
-                    className={`px-3 sm:px-4 py-3 sm:py-4 rounded-xl font-bold transition flex flex-col items-center gap-1 ${
+                    className={`px-3 sm:px-4 py-3 sm:py-4 rounded-lg font-bold transition flex flex-col items-center gap-1 ${
                       boatType === 'escuna'
                         ? 'bg-viva-blue text-white shadow-lg'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span className="text-2xl">🚢</span>
+                    <Users size={24} />
                     <span>Escuna</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setBoatType('lancha')}
-                    className={`px-3 sm:px-4 py-3 sm:py-4 rounded-xl font-bold transition flex flex-col items-center gap-1 ${
+                    className={`px-3 sm:px-4 py-3 sm:py-4 rounded-lg font-bold transition flex flex-col items-center gap-1 ${
                       boatType === 'lancha'
                         ? 'bg-viva-blue text-white shadow-lg'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span className="text-2xl">🚤</span>
+                    <Users size={24} />
                     <span>Lancha</span>
                   </button>
                 </div>
               </div>
 
               {/* Opção de criar em lote */}
-              <div className="bg-gray-50 rounded-xl p-4">
+              <div className="bg-gray-50 rounded-lg p-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1183,27 +1198,33 @@ export default function AdminDashboard() {
 
               {createBulk ? (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">📅 Mês/Ano *</label>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                    <Calendar size={16} className="text-gray-500" />
+                    Mês/Ano *
+                  </label>
                   <input
                     type="month"
                     value={bulkMonth}
                     onChange={(e) => setBulkMonth(e.target.value)}
                     required
                     min={new Date().toISOString().slice(0, 7)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">Serão criados barcos para todos os dias do mês selecionado</p>
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">📅 Data do Passeio *</label>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                    <Calendar size={16} className="text-gray-500" />
+                    Data do Passeio *
+                  </label>
                   <input
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     required
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
                   />
                 </div>
               )}
@@ -1215,11 +1236,14 @@ export default function AdminDashboard() {
                   onChange={(e) => setSeatsTotal(Number(e.target.value))}
                   required
                   min={1}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">💰 Preço do Ingresso por Pessoa (R$) *</label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                  <DollarSign size={16} className="text-gray-500" />
+                  Preço do Ingresso por Pessoa (R$) *
+                </label>
                 <input
                   type="number"
                   value={ticketPrice}
@@ -1227,7 +1251,7 @@ export default function AdminDashboard() {
                   required
                   step="0.01"
                   min="0"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
                   placeholder="200.00"
                 />
                 <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade deste valor</p>
@@ -1239,15 +1263,25 @@ export default function AdminDashboard() {
                     setShowBoatModal(false);
                     setBoatType('escuna');
                   }}
-                  className="w-full sm:flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition order-2 sm:order-1"
+                  className="w-full sm:flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition order-2 sm:order-1"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:flex-1 px-6 py-3 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-bold hover:shadow-lg transition order-1 sm:order-2"
+                  className="w-full sm:flex-1 px-6 py-3 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-lg font-bold hover:shadow-lg transition order-1 sm:order-2"
                 >
-                  {createBulk ? '✓ Criar Barcos do Mês' : '✓ Criar Barco'}
+                  {createBulk ? (
+                    <>
+                      <CheckCircle size={18} className="inline mr-1" />
+                      Criar Barcos do Mês
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={18} className="inline mr-1" />
+                      Criar Barco
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1354,11 +1388,11 @@ function EditBoatModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+      <div className="bg-white rounded-lg p-8 max-w-md w-full">
         <h2 className="text-2xl font-black text-viva-blue-dark mb-6">Editar Barco - {boat.name}</h2>
         
         <div className="space-y-4 mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800 font-semibold mb-2">📌 ID do Barco:</p>
             <p className="text-xs text-blue-600 font-mono break-all">{boat.id}</p>
             <p className="text-xs text-blue-600 mt-2">
@@ -1366,9 +1400,12 @@ function EditBoatModal({
             </p>
           </div>
           
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <p className="text-sm text-yellow-800 mb-2">
-              <strong>⚠️ Atenção:</strong> Ao alterar a data do barco, todas as {boat.seatsTaken} reservas aprovadas serão automaticamente realocadas para a nova data.
+              <strong className="flex items-center gap-1">
+                <span className="text-yellow-600">⚠</span>
+                Atenção:
+              </strong> Ao alterar a data do barco, todas as {boat.seatsTaken} reservas aprovadas serão automaticamente realocadas para a nova data.
             </p>
           </div>
 
@@ -1380,7 +1417,7 @@ function EditBoatModal({
               type="text"
               value={formatDate(boat.date)}
               disabled
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-100 text-gray-600"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
             />
           </div>
 
@@ -1394,7 +1431,7 @@ function EditBoatModal({
               onChange={(e) => setNewDate(e.target.value)}
               required
               min={new Date().toISOString().split('T')[0]}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
             />
           </div>
         </div>
@@ -1404,7 +1441,7 @@ function EditBoatModal({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition disabled:opacity-50"
+            className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -1412,7 +1449,7 @@ function EditBoatModal({
             type="button"
             onClick={handleSubmit}
             disabled={loading || newDate === currentDateString}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50"
+            className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
           >
             {loading ? 'Atualizando...' : 'Realocar Barco'}
           </button>
@@ -1475,14 +1512,15 @@ function BoatSeatsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4 sm:mb-6">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-2xl font-black text-viva-blue-dark truncate">{boat.name}</h2>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className="text-xs sm:text-sm text-gray-600 flex items-center gap-1">
-                📅 {formatDate(boat.date)}
+                <Calendar size={14} className="text-gray-500" />
+                {formatDate(boat.date)}
               </span>
               <span className="text-xs sm:text-sm font-bold text-viva-blue-dark">
                 👥 {boat.seatsTaken}/{boat.seatsTotal}
@@ -1499,15 +1537,15 @@ function BoatSeatsModal({
 
         {/* Stats rápidos */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
-          <div className="bg-red-50 rounded-xl p-4 text-center">
+          <div className="bg-red-50 rounded-lg p-4 text-center">
             <p className="text-2xl sm:text-3xl font-black text-red-600">{boat.seatsTaken}</p>
             <p className="text-xs sm:text-sm text-red-600 font-medium">Ocupadas</p>
           </div>
-          <div className="bg-green-50 rounded-xl p-4 text-center">
+          <div className="bg-green-50 rounded-lg p-4 text-center">
             <p className="text-2xl sm:text-3xl font-black text-green-600">{availableSeats}</p>
             <p className="text-xs sm:text-sm text-green-600 font-medium">Disponíveis</p>
           </div>
-          <div className="bg-purple-50 rounded-xl p-4 text-center">
+          <div className="bg-purple-50 rounded-lg p-4 text-center">
             <p className="text-2xl sm:text-3xl font-black text-purple-600">{totalGroups}</p>
             <p className="text-xs sm:text-sm text-purple-600 font-medium">Grupos</p>
           </div>
@@ -1551,7 +1589,7 @@ function BoatSeatsModal({
                   return (
                   <div
                     key={reservation.id}
-                    className={`rounded-xl p-3 sm:p-4 border-2 ${
+                    className={`rounded-lg p-3 sm:p-4 border-2 ${
                       groupColor 
                         ? `${groupColor.bg} ${groupColor.border}` 
                         : 'bg-gray-50 border-transparent'
@@ -1580,12 +1618,18 @@ function BoatSeatsModal({
                           </span>
                           {reservation.amountPaid > 0 && (
                             <span className="text-xs text-green-600">
-                              ✓ Pago: R$ {reservation.amountPaid.toFixed(2)}
+                              <span className="flex items-center gap-1">
+                                <CheckCircle size={12} className="text-green-600" />
+                                Pago: R$ {reservation.amountPaid.toFixed(2)}
+                              </span>
                             </span>
                           )}
                           {reservation.amountDue > 0 && (
                             <span className="text-xs text-orange-600 font-bold">
-                              ⚠ Falta: R$ {reservation.amountDue.toFixed(2)}
+                              <span className="flex items-center gap-1">
+                                <DollarSign size={12} className="text-orange-600" />
+                                Falta: R$ {reservation.amountDue.toFixed(2)}
+                              </span>
                             </span>
                           )}
                         </div>
@@ -1617,7 +1661,7 @@ function BoatSeatsModal({
 
           <button
             onClick={onClose}
-            className="w-full px-6 py-3 bg-viva-blue text-white rounded-xl font-bold hover:bg-viva-blue-dark transition"
+            className="w-full px-6 py-3 bg-viva-blue text-white rounded-lg font-bold hover:bg-viva-blue-dark transition"
           >
             Fechar
           </button>
@@ -1647,7 +1691,7 @@ function ReservationDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark">Detalhes da Reserva</h2>
@@ -1660,13 +1704,13 @@ function ReservationDetailModal({
         </div>
         
         {/* Card do Cliente */}
-        <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-xl p-4 mb-4 text-white">
+        <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white">
           <div className="flex items-center justify-between mb-2">
             <div className="flex-1 min-w-0">
               <p className="text-white/70 text-xs mb-1">Cliente</p>
               <p className="font-bold text-lg sm:text-xl truncate">{reservation.customerName}</p>
             </div>
-            <div className="bg-white text-viva-blue-dark font-black text-xl sm:text-2xl px-3 sm:px-4 py-2 rounded-xl ml-3">
+            <div className="bg-white text-viva-blue-dark font-black text-xl sm:text-2xl px-3 sm:px-4 py-2 rounded-lg ml-3">
               #{reservation.seatNumber}
             </div>
           </div>
@@ -1695,7 +1739,7 @@ function ReservationDetailModal({
 
         {/* Aviso para Pré-reserva */}
         {reservation.status === 'pre_reserved' && (
-          <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 mb-4">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
             <p className="text-sm font-bold text-orange-800 mb-1">⏳ PRÉ-RESERVA</p>
             <p className="text-xs text-orange-700">
               Esta é uma pré-reserva criada sem dados completos do cliente. Complete os dados antes de aprovar.
@@ -1705,31 +1749,43 @@ function ReservationDetailModal({
 
         {/* Informações em Grid */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
-          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
-            <p className="text-xs text-gray-500 mb-1">📅 Data do Passeio</p>
+          <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+            <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+              <Calendar size={14} className="text-gray-400" />
+              Data do Passeio
+            </p>
             <p className="font-bold text-sm sm:text-base text-gray-800">{formatDate(reservation.rideDate)}</p>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+          <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
             <p className="text-xs text-gray-500 mb-1">💳 Pagamento</p>
             <p className="font-bold text-sm sm:text-base text-gray-800 capitalize">{reservation.paymentMethod}</p>
           </div>
           {reservation.escunaType && (
-            <div className="bg-gray-50 rounded-xl p-3 sm:p-4 col-span-2">
-              <p className="text-xs text-gray-500 mb-1">🚢 Tipo de Passeio</p>
+            <div className="bg-gray-50 rounded-lg p-3 sm:p-4 col-span-2">
+              <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                <Users size={14} className="text-gray-400" />
+                Tipo de Passeio
+              </p>
               <p className="font-bold text-sm sm:text-base text-gray-800">
-                {reservation.escunaType === 'com-desembarque' ? '🏝️ Com Desembarque na Ilha' : '🌊 Sem Desembarque (Panorâmico)'}
+                {reservation.escunaType === 'com-desembarque' ? 'Com Desembarque na Ilha' : 'Sem Desembarque (Panorâmico)'}
               </p>
             </div>
           )}
-          <div className="bg-gray-50 rounded-xl p-3 sm:p-4 col-span-2">
-            <p className="text-xs text-gray-500 mb-1">📍 Endereço</p>
+          <div className="bg-gray-50 rounded-lg p-3 sm:p-4 col-span-2">
+            <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+              <MapPin size={14} className="text-gray-400" />
+              Endereço
+            </p>
             <p className="font-bold text-sm sm:text-base text-gray-800">{reservation.address}</p>
           </div>
         </div>
 
         {/* Valores - Responsivo */}
-        <div className="bg-gray-50 rounded-xl p-3 sm:p-4 mb-4">
-          <p className="text-xs text-gray-500 mb-3 font-semibold">💰 Valores</p>
+        <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
+          <p className="flex items-center gap-1 text-xs text-gray-500 mb-3 font-semibold">
+            <DollarSign size={14} className="text-gray-400" />
+            Valores
+          </p>
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div className="text-center p-2 sm:p-3 bg-white rounded-lg">
               <p className="text-xs text-gray-500 mb-1">Total</p>
@@ -1774,21 +1830,21 @@ function ReservationDetailModal({
                   }
                   onApprove(reservation, paid);
                 }}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
+                className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
               >
                 <CheckCircle size={20} />
                 Aprovar Reserva
               </button>
               <button
                 onClick={() => onReject(reservation.id)}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
+                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
               >
                 <XCircle size={18} />
                 Recusar
               </button>
               <button
                 onClick={onClose}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition"
+                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
               >
                 Fechar
               </button>
@@ -1797,13 +1853,13 @@ function ReservationDetailModal({
             <>
               <button
                 onClick={() => setShowReallocationModal(true)}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-purple-500 text-white rounded-xl font-bold hover:bg-purple-600 transition flex items-center justify-center gap-2"
+                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition flex items-center justify-center gap-2"
               >
                 🔄 Realocar Pessoa
               </button>
               <button
                 onClick={onClose}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition"
+                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
               >
                 Fechar
               </button>
@@ -1811,7 +1867,7 @@ function ReservationDetailModal({
           ) : (
             <button
               onClick={onClose}
-              className="w-full px-6 py-3 bg-viva-blue text-white rounded-xl font-bold hover:bg-viva-blue-dark transition"
+              className="w-full px-6 py-3 bg-viva-blue text-white rounded-lg font-bold hover:bg-viva-blue-dark transition"
             >
               Fechar
             </button>
@@ -1967,7 +2023,7 @@ function ReallocationModal({
   
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-black text-viva-blue-dark mb-4">Realocar Reserva</h3>
         <p className="text-gray-600 mb-4">
           Movendo: <strong>{reservation.customerName}</strong> (Assento #{reservation.seatNumber} no barco {currentBoat.name})
@@ -1979,7 +2035,7 @@ function ReallocationModal({
             <select
               value={selectedBoatId}
               onChange={(e) => setSelectedBoatId(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
             >
               {boats.filter(b => b.status === 'active').map(boat => (
                 <option key={boat.id} value={boat.id}>
@@ -1994,7 +2050,7 @@ function ReallocationModal({
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Selecione o Novo Assento ({availableSeats.length} disponíveis)
               </label>
-              <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto p-2 border border-gray-200 rounded-xl">
+              <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto p-2 border border-gray-200 rounded-lg">
                 {Array.from({ length: selectedBoat.seatsTotal }, (_, i) => {
                   const seatNum = i + 1;
                   const isAvailable = availableSeats.includes(seatNum);
@@ -2017,7 +2073,13 @@ function ReallocationModal({
                       }`}
                       title={isCurrent ? 'Assento atual' : isAvailable ? 'Livre' : 'Ocupado'}
                     >
-                      {isCurrent ? '📍' : isAvailable ? '✓' : '✗'}
+                      {isCurrent ? (
+                        <MapPin size={14} className="text-white" />
+                      ) : isAvailable ? (
+                        <CheckCircle size={14} className="text-white" />
+                      ) : (
+                        <XCircle size={14} className="text-white" />
+                      )}
                     </button>
                   );
                 })}
@@ -2035,7 +2097,7 @@ function ReallocationModal({
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -2065,7 +2127,7 @@ function DeleteBoatModal({
 }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-lg w-full">
+      <div className="bg-white rounded-lg p-8 max-w-lg w-full">
         <div className="text-center mb-6">
           <div className="mx-auto w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
             <Trash2 className="text-red-600" size={40} />
@@ -2073,7 +2135,7 @@ function DeleteBoatModal({
           <h2 className="text-3xl font-black text-red-600 mb-4">
             ATENÇÃO!
           </h2>
-          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 mb-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
             <p className="text-2xl font-bold text-red-700 mb-2">
               Você está excluindo o barco
             </p>
@@ -2086,7 +2148,7 @@ function DeleteBoatModal({
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-6 mb-6 space-y-3">
+        <div className="bg-gray-50 rounded-lg p-6 mb-6 space-y-3">
           <div>
             <p className="text-sm text-gray-600 mb-1">Barco:</p>
             <p className="font-bold text-lg text-gray-900">{boat.name}</p>
@@ -2109,22 +2171,25 @@ function DeleteBoatModal({
           </div>
         </div>
 
-        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4 mb-6">
+        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-6">
           <p className="text-sm font-bold text-yellow-800 text-center">
-            ⚠️ Esta ação NÃO pode ser desfeita! O barco e todas as reservas serão permanentemente removidos.
+            <span className="flex items-center justify-center gap-2">
+              <span className="text-yellow-600">⚠</span>
+              Esta ação NÃO pode ser desfeita! O barco e todas as reservas serão permanentemente removidos.
+            </span>
           </p>
         </div>
 
         <div className="flex gap-4">
           <button
             onClick={onClose}
-            className="flex-1 px-6 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:bg-gray-50 transition"
+            className="flex-1 px-6 py-4 border border-gray-300 text-gray-700 rounded-lg font-bold text-lg hover:bg-gray-50 transition"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-6 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-bold text-lg hover:shadow-lg transition"
+            className="flex-1 px-6 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-bold text-lg hover:shadow-lg transition"
           >
             SIM, EXCLUIR TUDO
           </button>
@@ -2390,7 +2455,7 @@ function AdminReservationWizard({
                   w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all
                   ${isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-blue-600 text-white ring-4 ring-blue-200' : 'bg-gray-200 text-gray-500'}
                 `}>
-                  {isCompleted ? '✓' : stepNum}
+                  {isCompleted ? <CheckCircle size={20} className="text-white" /> : stepNum}
                 </div>
                 <span className={`text-xs mt-1 text-center ${isActive ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>
                   {label}
@@ -2454,7 +2519,7 @@ function AdminReservationWizard({
                 <select
                   value={selectedVendorId}
                   onChange={(e) => setSelectedVendorId(e.target.value)}
-                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
+                  className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
                 >
                   <option value="">Selecione um vendedor...</option>
                   {vendors.map((vendor) => (
@@ -2467,7 +2532,10 @@ function AdminReservationWizard({
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  📅 Data do Passeio
+                  <span className="flex items-center gap-2">
+                    <Calendar size={16} className="text-gray-500" />
+                    Data do Passeio
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -2478,7 +2546,7 @@ function AdminReservationWizard({
                     setSelectedSeats([]);
                   }}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
+                  className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg"
                 />
                 {selectedDate && (
                   <p className="mt-2 text-sm text-green-600 font-medium">
@@ -2490,10 +2558,13 @@ function AdminReservationWizard({
               {selectedDate && (
                 <div className="animate-fadeIn">
                   <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    🚢 Selecione o Barco
+                    <span className="flex items-center gap-2">
+                      <Users size={16} className="text-gray-500" />
+                      Selecione o Barco
+                    </span>
                   </label>
                   {boatsForDate.length === 0 ? (
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
                       <p className="text-orange-700 font-medium">Nenhum barco disponível para esta data</p>
                     </div>
                   ) : (
@@ -2510,7 +2581,7 @@ function AdminReservationWizard({
                               setSelectedSeats([]);
                             }}
                             disabled={availableCount === 0}
-                            className={`p-4 rounded-xl border-2 transition-all text-left ${
+                            className={`p-4 rounded-lg border-2 transition-all text-left ${
                               isSelected 
                                 ? 'border-green-500 bg-green-50 ring-2 ring-green-200' 
                                 : availableCount === 0
@@ -2521,7 +2592,7 @@ function AdminReservationWizard({
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <span>{boat.boatType === 'escuna' ? '🚢' : '🚤'}</span>
+                                  <Users size={16} className="text-gray-600" />
                                   <span className="font-bold text-gray-800">{boat.name}</span>
                                 </div>
                                 <p className="text-sm text-gray-500 mt-1">
@@ -2550,7 +2621,7 @@ function AdminReservationWizard({
                     <button
                       type="button"
                       onClick={() => setEscunaType('sem-desembarque')}
-                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                      className={`px-4 py-3 rounded-lg font-bold transition ${
                         escunaType === 'sem-desembarque'
                           ? 'bg-green-600 text-white shadow-lg'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -2561,7 +2632,7 @@ function AdminReservationWizard({
                     <button
                       type="button"
                       onClick={() => setEscunaType('com-desembarque')}
-                      className={`px-4 py-3 rounded-xl font-bold transition ${
+                      className={`px-4 py-3 rounded-lg font-bold transition ${
                         escunaType === 'com-desembarque'
                           ? 'bg-green-600 text-white shadow-lg'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -2591,7 +2662,7 @@ function AdminReservationWizard({
                 const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
                 return (
                   <>
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
                       <p className="text-green-800 text-lg">
                         🎫 <strong>{vagasDisponiveis}</strong> vagas disponíveis de <strong>{selectedBoat.seatsTotal}</strong>
                       </p>
@@ -2620,7 +2691,7 @@ function AdminReservationWizard({
                     </div>
 
                     {numberOfPeople > 0 && (
-                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center animate-fadeIn">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center animate-fadeIn">
                         <p className="text-green-800 font-medium text-lg">
                           ✅ {numberOfPeople} {numberOfPeople === 1 ? 'vaga será reservada' : 'vagas serão reservadas'}
                         </p>
@@ -2678,7 +2749,7 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         placeholder="Nome completo do passageiro"
                       />
                     </div>
@@ -2697,7 +2768,7 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         placeholder="000.000.000-00"
                       />
                     </div>
@@ -2716,7 +2787,7 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         placeholder="(48) 99999-9999"
                       />
                     </div>
@@ -2735,7 +2806,7 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                       />
                     </div>
 
@@ -2752,7 +2823,7 @@ function AdminReservationWizard({
                           newPeople[personIndex] = { ...person, email: e.target.value };
                           setPeople(newPeople);
                         }}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         placeholder="email@exemplo.com"
                       />
                     </div>
@@ -2770,15 +2841,18 @@ function AdminReservationWizard({
                           newPeople[personIndex] = { ...person, address: e.target.value };
                           setPeople(newPeople);
                         }}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         placeholder="Rua, número, bairro..."
                       />
                     </div>
 
                     {/* Valor do Passeio */}
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <label className="block text-sm font-semibold text-green-800 mb-2">
-                        💰 Valor do Passeio (R$) *
+                        <span className="flex items-center gap-2">
+                          <DollarSign size={16} className="text-green-600" />
+                          Valor do Passeio (R$) *
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -2791,13 +2865,13 @@ function AdminReservationWizard({
                         min="0"
                         step="0.01"
                         required
-                        className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold bg-white"
+                        className="w-full px-4 py-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold bg-white"
                         placeholder="200.00"
                       />
                     </div>
 
                     {/* É criança / Meia entrada */}
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <div className="flex items-center gap-3 mb-3">
                         <input
                           type="checkbox"
@@ -2849,7 +2923,7 @@ function AdminReservationWizard({
               </div>
 
               {/* Resumo Total */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-5">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-gray-700 font-medium">Valor Total:</span>
                   <span className="text-2xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
@@ -2869,7 +2943,7 @@ function AdminReservationWizard({
               {/* Pagamento por pessoa */}
               <div className="space-y-4">
                 {people.map((person, index) => (
-                  <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-4">
+                  <div key={index} className="bg-white border border-gray-300 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <span className="font-bold text-gray-800">Pessoa {index + 1}: {person.name}</span>
@@ -2918,7 +2992,7 @@ function AdminReservationWizard({
                 ))}
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
                 <p className="text-blue-800 font-medium">
                   ⏳ A reserva será criada como <strong>pendente</strong> e precisará ser aprovada
                 </p>
@@ -2929,7 +3003,7 @@ function AdminReservationWizard({
 
         {/* Erro */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mt-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mt-4">
             {error}
           </div>
         )}
@@ -2941,7 +3015,7 @@ function AdminReservationWizard({
               type="button"
               onClick={handleBack}
               disabled={loading}
-              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <ChevronLeft size={20} />
               Voltar
@@ -2953,7 +3027,7 @@ function AdminReservationWizard({
               type="button"
               onClick={handleNext}
               disabled={!canProceed()}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Próximo
               <ChevronRight size={20} />
@@ -2963,7 +3037,7 @@ function AdminReservationWizard({
               type="button"
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <>

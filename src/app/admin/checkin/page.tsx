@@ -1,25 +1,26 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc } from 'firebase/firestore';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation, Boat, Payment, PaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-// Cores para identificar grupos (paleta vibrante)
+// Cores para identificar grupos (paleta profissional)
 const GROUP_COLORS = [
-  { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', badge: 'bg-purple-500' },
-  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', badge: 'bg-blue-500' },
-  { bg: 'bg-pink-100', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
-  { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
-  { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
-  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-700', badge: 'bg-indigo-500' },
-  { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
-  { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
-  { bg: 'bg-lime-100', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-600' },
-  { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+  { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700', badge: 'bg-slate-600' },
+  { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', badge: 'bg-blue-600' },
+  { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', badge: 'bg-gray-600' },
+  { bg: 'bg-slate-100', border: 'border-slate-400', text: 'text-slate-800', badge: 'bg-slate-700' },
+  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800', badge: 'bg-blue-700' },
+  { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', badge: 'bg-indigo-600' },
+  { bg: 'bg-slate-200', border: 'border-slate-500', text: 'text-slate-900', badge: 'bg-slate-800' },
+  { bg: 'bg-blue-200', border: 'border-blue-500', text: 'text-blue-900', badge: 'bg-blue-800' },
+  { bg: 'bg-gray-100', border: 'border-gray-400', text: 'text-gray-800', badge: 'bg-gray-700' },
+  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-800', badge: 'bg-indigo-700' },
 ];
 
 // Função para obter cor do grupo baseado no groupId
@@ -42,8 +43,9 @@ const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatO
   return date.toLocaleDateString('pt-BR', options);
 };
 
-export default function CheckInPage() {
+function CheckInPageContent() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [boat, setBoat] = useState<Boat | null>(null);
@@ -122,6 +124,37 @@ export default function CheckInPage() {
       }
     };
   }, [selectedDate]);
+
+  // Processar voucher escaneado (quando vem da URL)
+  useEffect(() => {
+    const reservationId = searchParams?.get('reservationId');
+    
+    if (reservationId && reservations.length > 0) {
+      const reservation = reservations.find(r => r.id === reservationId);
+      
+      if (reservation) {
+        // Se tem pagamento pendente, abrir modal
+        if (reservation.amountDue > 0) {
+          setReservationToCheckIn(reservation);
+          setRemainingAmount(reservation.amountDue.toString());
+          setPaymentMethod('pix');
+          setShowPaymentConfirm(true);
+          
+          // Limpar URL
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', '/admin/checkin');
+          }
+        } else {
+          // Se não tem pendência, fazer check-in direto
+          handleCheckIn(reservation.id, false);
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', '/admin/checkin');
+          }
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, reservations]);
 
   const handleCheckIn = async (reservationId: string, currentlyCheckedIn: boolean) => {
     // Se já está marcado, pode desmarcar direto
@@ -303,57 +336,68 @@ export default function CheckInPage() {
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Filtro de Data - Compacto no mobile */}
-        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm mb-4 sm:mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            📅 Data do Passeio
+        <div className="bg-white rounded-lg p-4 sm:p-6 shadow-sm mb-4 sm:mb-6 border border-gray-200">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+            <Calendar size={18} className="text-gray-500" />
+            Data do Passeio
           </label>
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full sm:w-auto px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+            className="w-full sm:w-auto px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
           />
         </div>
 
         {boat ? (
           <>
             {/* Stats - Grid 2x2 no mobile */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
-              <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm text-center">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm text-center border border-gray-200">
                 <p className="text-gray-600 text-xs sm:text-sm mb-1">Total</p>
-                <p className="text-xl sm:text-2xl font-black text-viva-blue">{reservations.length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-viva-blue">{reservations.length}</p>
               </div>
-              <div className="bg-green-50 rounded-xl p-3 sm:p-4 shadow-sm text-center border-2 border-green-200">
-                <p className="text-green-700 text-xs sm:text-sm mb-1">✓ Check-in</p>
+              <div className="bg-green-50 rounded-lg p-3 sm:p-4 shadow-sm text-center border border-green-200">
+                <p className="flex items-center justify-center gap-1 text-green-700 text-xs sm:text-sm mb-1">
+                  <CheckCircle size={14} className="text-green-600" />
+                  Check-in
+                </p>
                 <p className="text-xl sm:text-2xl font-black text-green-600">{checkedInCount}</p>
               </div>
-              <div className="bg-orange-50 rounded-xl p-3 sm:p-4 shadow-sm text-center border-2 border-orange-200">
+              <div className="bg-orange-50 rounded-lg p-3 sm:p-4 shadow-sm text-center border border-orange-200">
                 <p className="text-orange-700 text-xs sm:text-sm mb-1">Pendentes</p>
                 <p className="text-xl sm:text-2xl font-black text-orange-600">{reservations.length - checkedInCount}</p>
               </div>
-              <div className="bg-red-50 rounded-xl p-3 sm:p-4 shadow-sm text-center border-2 border-red-200">
-                <p className="text-red-700 text-xs sm:text-sm mb-1">💰 Devendo</p>
+              <div className="bg-red-50 rounded-lg p-3 sm:p-4 shadow-sm text-center border border-red-200">
+                <p className="flex items-center justify-center gap-1 text-red-700 text-xs sm:text-sm mb-1">
+                  <DollarSign size={14} className="text-red-600" />
+                  Devendo
+                </p>
                 <p className="text-xl sm:text-2xl font-black text-red-600">{pendingPayment.length}</p>
               </div>
             </div>
 
             {/* Lista de Reservas */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
               <div className="p-3 sm:p-6 border-b">
-                <h2 className="text-base sm:text-xl font-bold text-viva-blue-dark mb-3">
-                  🚢 {boat.name}
+                <h2 className="flex items-center gap-2 text-base sm:text-xl font-bold text-viva-blue-dark mb-3">
+                  <Users size={20} className="text-viva-blue" />
+                  {boat.name}
                 </h2>
                 <p className="text-xs sm:text-sm text-gray-600 mb-3">
                   {formatDateForDisplay(boat.date, { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
                 <div>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="🔍 Buscar cliente..."
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar cliente..."
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
+                    />
+                    <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  </div>
                   {searchTerm && (
                     <p className="mt-2 text-xs sm:text-sm text-gray-600">
                       Mostrando {filteredReservations.length} de {reservations.length}
@@ -378,9 +422,9 @@ export default function CheckInPage() {
                     return (
                     <div 
                       key={reservation.id} 
-                      className={`rounded-xl p-4 border-2 transition ${
+                      className={`rounded-lg p-4 border transition ${
                         reservation.checkedIn 
-                          ? 'bg-green-50 border-green-300' 
+                          ? 'bg-green-50 border-green-200' 
                           : groupColor
                             ? `${groupColor.bg} ${groupColor.border}`
                             : reservation.amountDue > 0 
@@ -399,7 +443,7 @@ export default function CheckInPage() {
                       {/* Header do Card */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg ${
                             reservation.checkedIn 
                               ? 'bg-green-500 text-white' 
                               : groupColor
@@ -414,15 +458,16 @@ export default function CheckInPage() {
                           </div>
                         </div>
                         {reservation.checkedIn && (
-                          <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                            ✓ OK
+                          <span className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-2.5 py-1 rounded-md">
+                            <CheckCircle size={12} />
+                            Confirmado
                           </span>
                         )}
                       </div>
 
                       {/* Info de Pagamento */}
-                      <div className={`rounded-lg p-3 mb-3 ${
-                        reservation.amountDue > 0 ? 'bg-orange-100' : 'bg-gray-100'
+                      <div className={`rounded-lg p-3 mb-3 border ${
+                        reservation.amountDue > 0 ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'
                       }`}>
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-gray-600">Total:</span>
@@ -434,7 +479,10 @@ export default function CheckInPage() {
                         </div>
                         {reservation.amountDue > 0 && (
                           <div className="flex justify-between items-center text-sm mt-1 pt-1 border-t border-orange-200">
-                            <span className="text-orange-700 font-semibold">⚠️ Falta:</span>
+                            <span className="flex items-center gap-1 text-orange-700 font-semibold">
+                              <DollarSign size={14} />
+                              Falta:
+                            </span>
                             <span className="font-black text-orange-600">R$ {reservation.amountDue.toFixed(2)}</span>
                           </div>
                         )}
@@ -444,12 +492,12 @@ export default function CheckInPage() {
                       <button
                         onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
                         disabled={!reservation.id}
-                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-base transition disabled:opacity-50 ${
+                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-base transition disabled:opacity-50 ${
                           reservation.checkedIn
-                            ? 'bg-green-500 text-white active:bg-green-600'
+                            ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
                             : groupColor
-                              ? `${groupColor.badge} text-white`
-                              : 'bg-viva-blue text-white active:bg-viva-blue-dark'
+                              ? `${groupColor.badge} text-white hover:opacity-90`
+                              : 'bg-viva-blue text-white hover:bg-viva-blue-dark active:bg-viva-blue-navy'
                         }`}
                       >
                         {reservation.checkedIn ? (
@@ -592,7 +640,7 @@ export default function CheckInPage() {
             </div>
           </>
         ) : (
-          <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+          <div className="bg-white rounded-lg p-12 shadow-sm text-center border border-gray-200">
             <Calendar className="mx-auto text-gray-400 mb-4" size={48} />
             <p className="text-gray-600 text-lg">Nenhum passeio encontrado para esta data</p>
           </div>
@@ -600,27 +648,27 @@ export default function CheckInPage() {
 
         {/* Modal Confirmação Pagamento - Responsivo */}
         {showPaymentConfirm && reservationToCheckIn && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[95vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[95vh] overflow-y-auto shadow-xl border border-gray-200">
               {/* Header */}
               <div className="text-center mb-4">
-                <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-orange-100 rounded-full flex items-center justify-center mb-3">
+                <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-orange-50 rounded-full flex items-center justify-center mb-3 border border-orange-200">
                   <DollarSign className="text-orange-600" size={28} />
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-orange-600">
-                  💰 Pagamento Pendente
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
+                  Pagamento Pendente
                 </h2>
               </div>
 
               {/* Card do Cliente */}
-              <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-xl p-4 mb-4 text-white">
+              <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white shadow-sm">
                 <p className="text-white/70 text-xs mb-1">Cliente</p>
                 <p className="font-bold text-lg">{reservationToCheckIn.customerName}</p>
                 <p className="text-white/80 text-sm">Assento #{reservationToCheckIn.seatNumber}</p>
               </div>
 
               {/* Valores */}
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 mb-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-white rounded-lg p-2">
                     <p className="text-xs text-gray-500">Total</p>
@@ -662,7 +710,7 @@ export default function CheckInPage() {
                     step="0.01"
                     min="0"
                     max={reservationToCheckIn.amountDue}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-bold"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-semibold bg-white"
                     placeholder="0.00"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -677,7 +725,7 @@ export default function CheckInPage() {
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
                   >
                     <option value="pix">PIX</option>
                     <option value="cartao">Cartão</option>
@@ -690,23 +738,23 @@ export default function CheckInPage() {
               <div className="space-y-2">
                 <button
                   onClick={confirmCheckInWithPayment}
-                  className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base"
+                  className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-green-700 hover:to-green-800"
                 >
                   <CheckCircle size={20} />
-                  ✓ Registrar Pagamento e Fazer Check-in
+                  Registrar Pagamento e Fazer Check-in
                 </button>
 
                 <button
                   onClick={confirmCheckInWithGratuity}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base"
+                  className="w-full px-4 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-slate-700 hover:to-slate-800"
                 >
                   <User size={20} />
-                  🎁 Gratuidade (Cortesia)
+                  Gratuidade (Cortesia)
                 </button>
 
                 <button
                   onClick={confirmCheckInWithoutCharge}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base"
+                  className="w-full px-4 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-orange-700 hover:to-orange-800"
                 >
                   <CheckCircle size={20} />
                   Não Cobrar - Fazer Check-in
@@ -718,7 +766,7 @@ export default function CheckInPage() {
                     setReservationToCheckIn(null);
                     setRemainingAmount('');
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold active:bg-gray-100 transition"
+                  className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold active:bg-gray-50 transition hover:bg-gray-50"
                 >
                   Cancelar
                 </button>
@@ -728,6 +776,21 @@ export default function CheckInPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CheckInPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-viva-blue mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <CheckInPageContent />
+    </Suspense>
   );
 }
 
