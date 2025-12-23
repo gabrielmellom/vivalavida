@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, addDoc, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Boat, Reservation, PaymentMethod } from '@/types';
-import { Calendar, Users, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Users, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
@@ -44,6 +44,10 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Estados do calendário
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [boatsForSelectedDate, setBoatsForSelectedDate] = useState<Boat[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -145,26 +149,24 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
     setError('');
   };
 
-  // Calcular valores totais usando o preço do barco
-  const calculateTotals = () => {
-    if (!selectedBoat) return { totalAmount: 0 };
+  // Calcular valores totais usando o preço do barco (com useMemo para garantir reatividade)
+  const totalAmount = useMemo(() => {
+    if (!selectedBoat) return 0;
     
     const base = selectedBoat.ticketPrice || 200;
-    let totalAmount = 0;
+    let total = 0;
     
     selectedSeats.forEach(seat => {
       const data = seatData[seat];
       if (data?.isChild) {
-        totalAmount += base / 2; // Meia entrada para crianças
+        total += base / 2; // Meia entrada para crianças
       } else {
-        totalAmount += base;
+        total += base;
       }
     });
     
-    return { totalAmount };
-  };
-
-  const { totalAmount } = calculateTotals();
+    return total;
+  }, [selectedBoat, selectedSeats, seatData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,6 +300,8 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
       setSeatData({});
       setExpandedSeats(new Set());
       setPaymentMethod('pix');
+      setSelectedDate(null);
+      setBoatsForSelectedDate([]);
     } catch (err: any) {
       setError(err.message || 'Erro ao criar reserva. Tente novamente.');
     } finally {
@@ -321,39 +325,177 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Seleção de Barco */}
+            {/* Seleção de Barco via Calendário */}
             {!selectedBoat ? (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-4">
                   Selecione a Data do Passeio
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {boats.map((boat) => {
-                    const availableCount = boat.seatsTotal - boat.seatsTaken;
-                    return (
-                      <button
-                        key={boat.id}
-                        type="button"
-                        onClick={() => handleSelectBoat(boat)}
-                        disabled={availableCount === 0}
-                        className="text-left p-4 border-2 border-gray-200 rounded-xl hover:border-viva-blue hover:bg-viva-blue/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={18} className="text-viva-blue" />
-                            <span className="font-bold text-viva-blue-dark">
-                              {formatDateForDisplay(boat.date, { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Users size={16} />
-                          <span>{availableCount} vagas disponíveis</span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                
+                {/* Calendário */}
+                <div className="bg-white border-2 border-gray-200 rounded-xl p-4 mb-4">
+                  {/* Header do Calendário */}
+                  <div className="flex items-center justify-between mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <h3 className="font-bold text-viva-blue-dark capitalize">
+                      {currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+
+                  {/* Dias da semana */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                      <div key={day} className="text-center text-xs font-semibold text-gray-500 py-2">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dias do mês */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {(() => {
+                      const year = currentMonth.getFullYear();
+                      const month = currentMonth.getMonth();
+                      const firstDay = new Date(year, month, 1);
+                      const lastDay = new Date(year, month + 1, 0);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      
+                      const days = [];
+                      
+                      // Dias vazios antes do primeiro dia do mês
+                      for (let i = 0; i < firstDay.getDay(); i++) {
+                        days.push(<div key={`empty-${i}`} className="p-2" />);
+                      }
+                      
+                      // Dias do mês
+                      for (let day = 1; day <= lastDay.getDate(); day++) {
+                        const date = new Date(year, month, day, 12, 0, 0);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const isPast = date < today;
+                        
+                        // Verificar se tem barco nesse dia
+                        const boatsOnDay = boats.filter(b => {
+                          const boatDateStr = b.date.split('T')[0];
+                          return boatDateStr === dateStr;
+                        });
+                        const hasBoat = boatsOnDay.length > 0;
+                        const totalAvailable = boatsOnDay.reduce((sum, b) => sum + (b.seatsTotal - b.seatsTaken), 0);
+                        const isSelected = selectedDate === dateStr;
+                        
+                        days.push(
+                          <button
+                            key={day}
+                            type="button"
+                            disabled={isPast || !hasBoat}
+                            onClick={() => {
+                              setSelectedDate(dateStr);
+                              setBoatsForSelectedDate(boatsOnDay);
+                            }}
+                            className={`relative p-2 rounded-lg text-sm font-semibold transition ${
+                              isSelected
+                                ? 'bg-viva-blue text-white'
+                                : isPast
+                                  ? 'text-gray-300 cursor-not-allowed'
+                                  : hasBoat
+                                    ? 'bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer'
+                                    : 'text-gray-400 hover:bg-gray-100'
+                            }`}
+                          >
+                            {day}
+                            {hasBoat && !isPast && (
+                              <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${
+                                isSelected ? 'bg-white' : 'bg-green-500'
+                              }`} />
+                            )}
+                          </button>
+                        );
+                      }
+                      
+                      return days;
+                    })()}
+                  </div>
+
+                  {/* Legenda */}
+                  <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-200 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-green-100 rounded border border-green-300" />
+                      <span className="text-gray-600">Com passeio</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-gray-100 rounded border border-gray-300" />
+                      <span className="text-gray-600">Sem passeio</span>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Barcos do dia selecionado */}
+                {selectedDate && boatsForSelectedDate.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-gray-700 flex items-center gap-2">
+                      <Calendar size={18} className="text-viva-blue" />
+                      Barcos em {formatDateForDisplay(selectedDate, { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      {boatsForSelectedDate.map((boat) => {
+                        const availableCount = boat.seatsTotal - boat.seatsTaken;
+                        return (
+                          <button
+                            key={boat.id}
+                            type="button"
+                            onClick={() => handleSelectBoat(boat)}
+                            disabled={availableCount === 0}
+                            className="text-left p-4 border-2 border-gray-200 rounded-xl hover:border-viva-blue hover:bg-viva-blue/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-bold text-viva-blue-dark">{boat.name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {boat.boatType === 'escuna' ? '🚢 Escuna' : '🚤 Lancha'} • R$ {(boat.ticketPrice || 200).toFixed(2)}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className={`flex items-center gap-1 text-sm font-semibold ${
+                                  availableCount > 10 ? 'text-green-600' : availableCount > 0 ? 'text-orange-600' : 'text-red-600'
+                                }`}>
+                                  <Users size={16} />
+                                  <span>{availableCount} vagas</span>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {selectedDate && boatsForSelectedDate.length === 0 && (
+                  <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-xl">
+                    Nenhum barco disponível nesta data
+                  </div>
+                )}
+
+                {!selectedDate && boats.length > 0 && (
+                  <div className="text-center py-4 text-gray-500 bg-blue-50 rounded-xl">
+                    <Calendar className="mx-auto mb-2 text-viva-blue" size={24} />
+                    <p>Clique em um dia verde para ver os barcos disponíveis</p>
+                  </div>
+                )}
+
                 {boats.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     Não há passeios disponíveis no momento
@@ -378,6 +520,8 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
                         setSelectedSeats([]);
                         setSeatData({});
                         setExpandedSeats(new Set());
+                        setSelectedDate(null);
+                        setBoatsForSelectedDate([]);
                       }}
                       className="text-sm text-viva-blue hover:text-viva-blue-dark font-semibold"
                     >

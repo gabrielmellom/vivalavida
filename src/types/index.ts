@@ -37,6 +37,15 @@ export interface Reservation {
   updatedAt: Date;
   checkedIn?: boolean; // para check-in no dia do passeio
   voucherSent?: boolean; // se o voucher foi enviado para o cliente
+  // Campos de aceite de termos
+  acceptedTerms?: boolean; // aceitou os termos de uso do barco
+  acceptedTermsAt?: Date; // data/hora do aceite dos termos
+  acceptedImageRights?: boolean; // aceitou o uso de imagem
+  acceptedImageRightsAt?: Date; // data/hora do aceite de imagem
+  acceptedFromIP?: string; // IP do dispositivo que aceitou
+  acceptedUserAgent?: string; // browser/dispositivo usado
+  termsLinkSent?: boolean; // se o link de termos foi enviado
+  termsLinkSentAt?: Date; // quando o link foi enviado
 }
 
 export interface UserRole {

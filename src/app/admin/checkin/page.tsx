@@ -54,6 +54,12 @@ function CheckInPageContent() {
   const [reservationToCheckIn, setReservationToCheckIn] = useState<Reservation | null>(null);
   const [remainingAmount, setRemainingAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  // Suporte para 2 formas de pagamento
+  const [useTwoPaymentMethods, setUseTwoPaymentMethods] = useState(false);
+  const [firstPaymentAmount, setFirstPaymentAmount] = useState('');
+  const [firstPaymentMethod, setFirstPaymentMethod] = useState<PaymentMethod>('pix');
+  const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState<PaymentMethod>('dinheiro');
   const pendingReservationIdRef = useRef<string | null>(null);
   const hasProcessedVoucherRef = useRef(false);
 
@@ -242,25 +248,74 @@ function CheckInPageContent() {
   const confirmCheckInWithPayment = async () => {
     if (!reservationToCheckIn || !user) return;
 
-    const paidAmount = parseFloat(remainingAmount) || 0;
-    if (paidAmount < 0 || paidAmount > reservationToCheckIn.amountDue) {
-      alert('Valor inválido!');
-      return;
+    let totalPaidNow = 0;
+
+    if (useTwoPaymentMethods) {
+      // Pagamento com 2 formas
+      const firstAmount = parseFloat(firstPaymentAmount) || 0;
+      const secondAmount = parseFloat(secondPaymentAmount) || 0;
+      totalPaidNow = firstAmount + secondAmount;
+
+      if (firstAmount <= 0 || secondAmount <= 0) {
+        alert('Ambos os valores devem ser maiores que zero quando usar 2 formas de pagamento!');
+        return;
+      }
+
+      if (totalPaidNow > reservationToCheckIn.amountDue) {
+        alert(`O total (R$ ${totalPaidNow.toFixed(2)}) não pode ser maior que o valor pendente (R$ ${reservationToCheckIn.amountDue.toFixed(2)})!`);
+        return;
+      }
+
+      if (firstPaymentMethod === secondPaymentMethod) {
+        alert('Selecione formas de pagamento diferentes!');
+        return;
+      }
+    } else {
+      // Pagamento com 1 forma
+      totalPaidNow = parseFloat(remainingAmount) || 0;
+      if (totalPaidNow < 0 || totalPaidNow > reservationToCheckIn.amountDue) {
+        alert('Valor inválido!');
+        return;
+      }
     }
 
     try {
-      const newAmountPaid = reservationToCheckIn.amountPaid + paidAmount;
+      const newAmountPaid = reservationToCheckIn.amountPaid + totalPaidNow;
       const newAmountDue = reservationToCheckIn.totalAmount - newAmountPaid;
 
-      // Criar registro de pagamento
-      await addDoc(collection(db, 'payments'), {
-        reservationId: reservationToCheckIn.id,
-        amount: paidAmount,
-        method: paymentMethod,
-        source: 'checkin',
-        createdAt: Timestamp.now(),
-        createdBy: user.uid,
-      });
+      if (useTwoPaymentMethods) {
+        // Criar 2 registros de pagamento
+        const firstAmount = parseFloat(firstPaymentAmount) || 0;
+        const secondAmount = parseFloat(secondPaymentAmount) || 0;
+
+        await addDoc(collection(db, 'payments'), {
+          reservationId: reservationToCheckIn.id,
+          amount: firstAmount,
+          method: firstPaymentMethod,
+          source: 'checkin',
+          createdAt: Timestamp.now(),
+          createdBy: user.uid,
+        });
+
+        await addDoc(collection(db, 'payments'), {
+          reservationId: reservationToCheckIn.id,
+          amount: secondAmount,
+          method: secondPaymentMethod,
+          source: 'checkin',
+          createdAt: Timestamp.now(),
+          createdBy: user.uid,
+        });
+      } else {
+        // Criar 1 registro de pagamento
+        await addDoc(collection(db, 'payments'), {
+          reservationId: reservationToCheckIn.id,
+          amount: totalPaidNow,
+          method: paymentMethod,
+          source: 'checkin',
+          createdAt: Timestamp.now(),
+          createdBy: user.uid,
+        });
+      }
 
       // Atualizar reserva
       await updateDoc(doc(db, 'reservations', reservationToCheckIn.id), {
@@ -273,6 +328,9 @@ function CheckInPageContent() {
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
       setRemainingAmount('');
+      setUseTwoPaymentMethods(false);
+      setFirstPaymentAmount('');
+      setSecondPaymentAmount('');
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -785,47 +843,179 @@ function CheckInPageContent() {
                 </div>
               </div>
 
+              {/* Toggle para 2 formas de pagamento */}
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseTwoPaymentMethods(!useTwoPaymentMethods);
+                    if (!useTwoPaymentMethods) {
+                      // Ao ativar, dividir o valor pendente em 2
+                      const halfAmount = (reservationToCheckIn.amountDue / 2).toFixed(2);
+                      setFirstPaymentAmount(halfAmount);
+                      setSecondPaymentAmount(halfAmount);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition border-2 ${
+                    useTwoPaymentMethods
+                      ? 'bg-purple-100 border-purple-400 text-purple-700'
+                      : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <DollarSign size={18} />
+                  {useTwoPaymentMethods ? '✓ Pagando com 2 Formas' : 'Pagar com 2 Formas de Pagamento'}
+                </button>
+              </div>
+
               {/* Campos de Pagamento */}
               <div className="space-y-3 mb-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Valor Pendente (R$)
-                  </label>
-                  <input
-                    type="number"
-                    value={remainingAmount}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const numValue = parseFloat(value);
-                      if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservationToCheckIn.amountDue)) {
-                        setRemainingAmount(value);
-                      }
-                    }}
-                    step="0.01"
-                    min="0"
-                    max={reservationToCheckIn.amountDue}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-semibold bg-white"
-                    placeholder="0.00"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Máximo: R$ {reservationToCheckIn.amountDue.toFixed(2)}
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Método de Pagamento
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
-                  >
-                    <option value="pix">PIX</option>
-                    <option value="cartao">Cartão</option>
-                    <option value="dinheiro">Dinheiro</option>
-                  </select>
-                </div>
+                {!useTwoPaymentMethods ? (
+                  <>
+                    {/* Pagamento simples - 1 forma */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Valor a Pagar (R$)
+                      </label>
+                      <input
+                        type="number"
+                        value={remainingAmount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const numValue = parseFloat(value);
+                          if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservationToCheckIn.amountDue)) {
+                            setRemainingAmount(value);
+                          }
+                        }}
+                        step="0.01"
+                        min="0"
+                        max={reservationToCheckIn.amountDue}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-semibold bg-white"
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Máximo: R$ {reservationToCheckIn.amountDue.toFixed(2)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Método de Pagamento
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
+                      >
+                        <option value="pix">PIX</option>
+                        <option value="cartao">Cartão</option>
+                        <option value="dinheiro">Dinheiro</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Pagamento dividido - 2 formas */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
+                      <p className="text-sm font-semibold text-purple-800 text-center">
+                        Dividir R$ {reservationToCheckIn.amountDue.toFixed(2)} em 2 pagamentos
+                      </p>
+                      
+                      {/* Primeira forma */}
+                      <div className="bg-white rounded-lg p-3 border border-purple-200">
+                        <p className="text-xs font-bold text-purple-600 mb-2">1ª Forma de Pagamento</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
+                            <input
+                              type="number"
+                              value={firstPaymentAmount}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFirstPaymentAmount(value);
+                                // Calcular o restante automaticamente
+                                const firstVal = parseFloat(value) || 0;
+                                const remaining = reservationToCheckIn.amountDue - firstVal;
+                                if (remaining >= 0) {
+                                  setSecondPaymentAmount(remaining.toFixed(2));
+                                }
+                              }}
+                              step="0.01"
+                              min="0"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none font-semibold bg-white"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Método</label>
+                            <select
+                              value={firstPaymentMethod}
+                              onChange={(e) => setFirstPaymentMethod(e.target.value as PaymentMethod)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white"
+                            >
+                              <option value="pix">PIX</option>
+                              <option value="cartao">Cartão</option>
+                              <option value="dinheiro">Dinheiro</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Segunda forma */}
+                      <div className="bg-white rounded-lg p-3 border border-purple-200">
+                        <p className="text-xs font-bold text-purple-600 mb-2">2ª Forma de Pagamento</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
+                            <input
+                              type="number"
+                              value={secondPaymentAmount}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSecondPaymentAmount(value);
+                                // Calcular o restante automaticamente
+                                const secondVal = parseFloat(value) || 0;
+                                const remaining = reservationToCheckIn.amountDue - secondVal;
+                                if (remaining >= 0) {
+                                  setFirstPaymentAmount(remaining.toFixed(2));
+                                }
+                              }}
+                              step="0.01"
+                              min="0"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none font-semibold bg-white"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Método</label>
+                            <select
+                              value={secondPaymentMethod}
+                              onChange={(e) => setSecondPaymentMethod(e.target.value as PaymentMethod)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white"
+                            >
+                              <option value="pix">PIX</option>
+                              <option value="cartao">Cartão</option>
+                              <option value="dinheiro">Dinheiro</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Resumo */}
+                      <div className="bg-purple-100 rounded-lg p-3 text-center">
+                        <p className="text-sm text-purple-800">
+                          <span className="font-bold">Total:</span>{' '}
+                          R$ {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)).toFixed(2)}
+                          {' '}de R$ {reservationToCheckIn.amountDue.toFixed(2)}
+                        </p>
+                        {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) !== reservationToCheckIn.amountDue && (
+                          <p className="text-xs text-orange-600 mt-1">
+                            ⚠️ O total não corresponde ao valor pendente
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Botões de Ação */}
@@ -859,6 +1049,9 @@ function CheckInPageContent() {
                     setShowPaymentConfirm(false);
                     setReservationToCheckIn(null);
                     setRemainingAmount('');
+                    setUseTwoPaymentMethods(false);
+                    setFirstPaymentAmount('');
+                    setSecondPaymentAmount('');
                   }}
                   className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold active:bg-gray-50 transition hover:bg-gray-50"
                 >
