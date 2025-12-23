@@ -12,14 +12,20 @@ import Link from 'next/link';
 export default function VoucherPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     const processVoucher = async () => {
+      // Aguardar o Firebase terminar de verificar autenticação
+      if (authLoading) {
+        return; // Vai rodar de novo quando authLoading mudar
+      }
+
       if (!user) {
-        setError('Você precisa estar logado para acessar este voucher');
+        setError('Você precisa estar logado para acessar este voucher. Faça login e escaneie novamente.');
         setLoading(false);
         return;
       }
@@ -71,7 +77,15 @@ export default function VoucherPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas a data
 
-        const boatDate = new Date(boat.date);
+        // Corrigir problema de timezone - extrair apenas a parte da data
+        const parseDateString = (dateString: string): Date => {
+          const datePart = dateString.split('T')[0]; // Pegar só "YYYY-MM-DD"
+          const [year, month, day] = datePart.split('-').map(Number);
+          // Criar data ao meio-dia para evitar problemas de timezone
+          return new Date(year, month - 1, day, 12, 0, 0);
+        };
+
+        const boatDate = parseDateString(boat.date);
         boatDate.setHours(0, 0, 0, 0);
 
         // Formatar data para exibição
@@ -99,7 +113,17 @@ export default function VoucherPage() {
         }
 
         // Data válida (hoje) - redirecionar para check-in
+        setRedirecting(true);
         router.push(`/admin/checkin?reservationId=${reservationId}`);
+        
+        // Timeout de segurança - se o redirecionamento falhar, mostrar mensagem
+        setTimeout(() => {
+          if (document.visibilityState === 'visible') {
+            setRedirecting(false);
+            setLoading(false);
+            setError('Não foi possível redirecionar. Clique no botão abaixo para ir ao check-in.');
+          }
+        }, 5000);
       } catch (err) {
         console.error('Erro ao processar voucher:', err);
         setError('Erro ao processar voucher. Tente novamente.');
@@ -108,14 +132,24 @@ export default function VoucherPage() {
     };
 
     processVoucher();
-  }, [params.id, user, router]);
+  }, [params.id, user, authLoading, router]);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
           <Loader2 className="mx-auto animate-spin text-viva-blue mb-4" size={48} />
-          <p className="text-gray-600">Processando voucher...</p>
+          <p className="text-gray-600 mb-2">
+            {redirecting ? 'Redirecionando para check-in...' : 'Processando voucher...'}
+          </p>
+          {redirecting && (
+            <Link
+              href={`/admin/checkin?reservationId=${params.id}`}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 mt-4 bg-viva-blue text-white rounded-lg hover:bg-viva-blue-dark transition text-sm"
+            >
+              Clique aqui se não redirecionar
+            </Link>
+          )}
         </div>
       </div>
     );
