@@ -185,8 +185,29 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
     pdf.text('Este voucher deve ser apresentado no embarque', pageWidth / 2, pageHeight - 10, { align: 'center' });
     pdf.text(`ID: ${reservation.id}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
 
-    // Abrir PDF em nova guia ao invés de fazer download
-    pdf.output('dataurlnewwindow');
+    // Gerar nome do arquivo
+    const fileName = `voucher-${reservation.customerName.replace(/\s+/g, '-').toLowerCase()}-${reservation.seatNumber}.pdf`;
+    
+    // Método compatível com celular: criar blob e forçar download
+    const pdfBlob = pdf.output('blob');
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    
+    // Criar link invisível e simular clique para download
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    
+    // Forçar clique para iniciar download
+    link.click();
+    
+    // Limpar após pequeno delay
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    }, 100);
+    
   } catch (error) {
     console.error('Erro ao gerar voucher PDF:', error);
     throw error;
