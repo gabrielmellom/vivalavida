@@ -27,8 +27,10 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import PublicReservationModal from '@/components/PublicReservationModal';
+import LanguageSelector from '@/components/LanguageSelector';
 import { useSiteConfig, DEFAULT_SITE_CONFIG, DEFAULT_TOURS } from '@/lib/useSiteConfig';
 import { TourConfig, SiteConfig } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Interface para props compartilhadas entre componentes
 interface SharedProps {
@@ -36,10 +38,11 @@ interface SharedProps {
   siteConfig: SiteConfig | null;
   getWhatsAppLink: (message?: string) => string;
   getCurrentPrice: (tour: TourConfig) => { adult: number; child: number; label: string } | null;
+  t: (key: string) => string;
 }
 
 // Header Component
-function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
+function Header({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -50,11 +53,11 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
   }, []);
 
   const navItems = [
-    { label: 'Início', href: '#inicio' },
-    { label: 'Passeios', href: '#passeios' },
-    { label: 'Roteiros', href: '#roteiros' },
-    { label: 'Sobre', href: '#sobre' },
-    { label: 'Contato', href: '#contato' },
+    { label: t('nav.home'), href: '#inicio' },
+    { label: t('nav.tours'), href: '#passeios' },
+    { label: t('nav.routes'), href: '#roteiros' },
+    { label: t('nav.about'), href: '#sobre' },
+    { label: t('nav.contact'), href: '#contato' },
   ];
 
   return (
@@ -80,17 +83,21 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
               </a>
             </div>
             
-            {/* Texto central - só no desktop */}
-            <p className="text-white/90 hidden md:block text-center flex-1">🏝️ Ilha do Campeche • Florianópolis</p>
+            {/* Language Selector + Texto central */}
+            <div className="flex items-center gap-4 flex-1 justify-center">
+              <p className="text-white/90 hidden md:block text-center">{t('hero.badge')}</p>
+            </div>
             
             {/* Botão Reservar */}
-            <a 
-              href={getWhatsAppLink()} 
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-lg"
-            >
-              <MessageCircle size={16} />
-              RESERVAR
-            </a>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <a 
+                href={getWhatsAppLink()} 
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-lg"
+              >
+                <MessageCircle size={16} />
+                <span className="hidden sm:inline">{t('nav.book')}</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -112,7 +119,7 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
           {/* Logo - centered */}
           <a href="#inicio" className="z-10">
             <Image 
-              src="/imagemlogo.png" 
+              src="/imagemlogo1.png" 
               alt="Viva la Vida" 
               width={scrolled ? 120 : 140} 
               height={scrolled ? 48 : 56}
@@ -120,6 +127,11 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
               style={{ width: scrolled ? '120px' : '140px', height: 'auto' }}
             />
           </a>
+
+          {/* Language selector - absolute right (mobile) */}
+          <div className="absolute right-0 z-10">
+            <LanguageSelector variant={scrolled ? 'light' : 'dark'} compact />
+          </div>
         </nav>
 
         {/* Desktop Nav */}
@@ -127,7 +139,7 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
           {/* Logo */}
           <a href="#inicio" className="relative z-10">
             <Image 
-              src="/imagemlogo.png" 
+              src="/imagemlogo1.png" 
               alt="Viva la Vida" 
               width={scrolled ? 140 : 180} 
               height={scrolled ? 56 : 72}
@@ -161,8 +173,12 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
                 }`}
               >
                 <LogIn size={18} />
-                Login
+                {t('nav.login')}
               </a>
+            </li>
+            {/* Language Selector - Desktop */}
+            <li>
+              <LanguageSelector variant={scrolled ? 'light' : 'dark'} />
             </li>
           </ul>
 
@@ -176,12 +192,12 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
             }`}
           >
             <MessageCircle size={18} />
-            RESERVAR AGORA
+            {t('nav.bookNow')}
           </a>
         </nav>
 
         {/* Mobile Menu */}
-        <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? 'max-h-96 py-4' : 'max-h-0'}`}>
+        <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? 'max-h-[500px] py-4' : 'max-h-0'}`}>
           <ul className="flex flex-col gap-2 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl">
             {navItems.map((item) => (
               <li key={item.href}>
@@ -201,7 +217,7 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
                 className="flex items-center gap-2 px-4 py-3 text-viva-blue-dark font-semibold hover:bg-viva-blue/10 rounded-lg transition-colors"
               >
                 <LogIn size={18} />
-                Login
+                {t('nav.login')}
               </a>
             </li>
             <li className="mt-2">
@@ -210,7 +226,7 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
                 className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full font-bold"
               >
                 <MessageCircle size={18} />
-                RESERVAR AGORA
+                {t('nav.bookNow')}
               </a>
             </li>
           </ul>
@@ -221,7 +237,7 @@ function Header({ siteConfig, getWhatsAppLink }: SharedProps) {
 }
 
 // Hero Section
-function Hero({ siteConfig, getWhatsAppLink }: SharedProps) {
+function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   return (
     <section id="inicio" className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Video Background */}
@@ -257,48 +273,48 @@ function Hero({ siteConfig, getWhatsAppLink }: SharedProps) {
           {/* Badge - menor no mobile */}
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 sm:px-6 py-2 mb-6 sm:mb-8 animate-fade-in-up mt-6 sm:mt-0">
             <Sparkles className="text-viva-yellow" size={16} />
-            <span className="text-white font-medium text-xs sm:text-sm">🏝️ Ilha do Campeche • Florianópolis</span>
+            <span className="text-white font-medium text-xs sm:text-sm">{t('hero.badge')}</span>
           </div>
 
           {/* Main heading - responsivo com animação */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white mb-4 sm:mb-6 leading-tight" style={{ fontFamily: 'Sora, sans-serif' }}>
             <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-              Viva
+              {t('hero.title1')}
             </span>{' '}
             <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.5s', animationFillMode: 'forwards' }}>
-              Momentos
+              {t('hero.title2')}
             </span>
             <span className="block gradient-text opacity-0 animate-word-appear" style={{ animationDelay: '0.8s', animationFillMode: 'forwards' }}>
-              Inesquecíveis
+              {t('hero.title3')}
             </span>
             <span className="block text-viva-yellow opacity-0 animate-word-appear" style={{ animationDelay: '1.1s', animationFillMode: 'forwards' }}>
-              em Florianópolis!
+              {t('hero.title4')}
             </span>
           </h1>
 
           {/* Subheading - texto menor no mobile */}
           <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto mb-6 sm:mb-8 px-2 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            Embarque no <strong className="text-viva-yellow">Barco Viva La Vida</strong> e conheça a 
-            <strong className="text-viva-yellow"> Ilha do Campeche</strong>!
+            {t('hero.subtitle')} <strong className="text-viva-yellow">{t('hero.boatName')}</strong> {t('hero.and')} 
+            <strong className="text-viva-yellow"> {t('hero.island')}</strong>!
             <br className="hidden sm:block" />
-            <span className="text-viva-green"> Caiaque, stand up, snorkel, drinks a bordo</span> e muito mais!
+            <span className="text-viva-green"> {t('hero.activities')}</span> {t('hero.andMore')}
           </p>
 
 
           {/* CTAs - GRANDE e fácil de tocar no mobile */}
           <div className="flex flex-col gap-3 sm:gap-4 px-2 sm:px-0 mb-8 sm:mb-10 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
             <a 
-              href={getWhatsAppLink('Olá! Gostaria de saber mais sobre os passeios de lancha.')}
+              href={getWhatsAppLink(t('whatsapp.moreInfo'))}
               className="group relative bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-3 shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
             >
               <MessageCircle size={24} />
-              RESERVAR PELO WHATSAPP
+              {t('hero.ctaWhatsapp')}
             </a>
             <a 
               href="#passeios"
               className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
             >
-              VER PASSEIOS
+              {t('hero.ctaTours')}
               <ChevronDown size={20} />
             </a>
           </div>
@@ -311,17 +327,17 @@ function Hero({ siteConfig, getWhatsAppLink }: SharedProps) {
                   <Star key={i} size={12} className="text-viva-yellow fill-viva-yellow sm:w-[18px] sm:h-[18px]" />
                 ))}
               </div>
-              <span className="font-semibold text-xs sm:text-base">5.0 Google</span>
+              <span className="font-semibold text-xs sm:text-base">5.0 {t('hero.google')}</span>
             </div>
             <div className="hidden sm:block h-6 w-px bg-white/30" />
             <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white/80">
               <Shield size={18} className="text-viva-green sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-base">100% Seguro</span>
+              <span className="font-semibold text-xs sm:text-base">{t('hero.safe')}</span>
             </div>
             <div className="hidden sm:block h-6 w-px bg-white/30" />
             <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white/80">
               <Users size={18} className="text-viva-yellow sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-base">+500 clientes</span>
+              <span className="font-semibold text-xs sm:text-base">{t('hero.clients')}</span>
             </div>
           </div>
         </div>
@@ -346,7 +362,7 @@ function Hero({ siteConfig, getWhatsAppLink }: SharedProps) {
 }
 
 // Features Section - Chamada para os roteiros (com dados dinâmicos)
-function Features({ tours, getWhatsAppLink }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string }) {
+function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string; t: (key: string) => string }) {
   // Encontrar passeios ou usar defaults
   const tourPanoramico = tours.find(t => t.type === 'panoramico');
   const tourDesembarque = tours.find(t => t.type === 'desembarque');
@@ -371,18 +387,18 @@ function Features({ tours, getWhatsAppLink }: { tours: TourConfig[]; getWhatsApp
           {/* Badge da ilha */}
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold px-4 sm:px-6 py-2 rounded-full text-sm sm:text-base mb-4 sm:mb-6">
             <span>🏝️</span>
-            <span>ILHA DO CAMPECHE</span>
+            <span>{t('features.badge')}</span>
           </div>
           
           {/* Título principal */}
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-4 sm:mb-6 leading-tight">
-            Conheça a Ilha <span className="text-viva-yellow">Mais Bonita</span><br/>
-            de Florianópolis!
+            {t('features.title1')} <span className="text-viva-yellow">{t('features.title2')}</span><br/>
+            {t('features.title3')}
           </h2>
           
           {/* Subtítulo */}
           <p className="text-white/80 text-base sm:text-xl max-w-2xl mx-auto mb-6 sm:mb-8">
-            {tours.length > 0 ? `${tours.length} opções de passeio para você escolher a experiência perfeita!` : 'Duas opções de passeio para você escolher a experiência perfeita!'}
+            {tours.length > 0 ? `${tours.length} ${t('features.subtitle')}` : t('features.twoOptions')}
           </p>
           
           {/* Cards dos roteiros - Dinâmico */}
@@ -391,43 +407,43 @@ function Features({ tours, getWhatsAppLink }: { tours: TourConfig[]; getWhatsApp
             <div className="relative bg-white/20 backdrop-blur-sm border-2 border-white/40 rounded-2xl p-5 sm:p-6">
               {tourPanoramico?.isHighlighted && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-viva-orange text-white font-black text-xs px-3 py-1 rounded-full shadow-lg">
-                  ⭐ MAIS VENDIDO
+                  ⭐ {t('routes.recommended').replace('⭐ ', '')}
                 </div>
               )}
               <span className="text-4xl sm:text-5xl block mb-3">{tourPanoramico?.emoji || '🚤'}</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourPanoramico?.name || 'Tour Panorâmico'}</h3>
-              <p className="text-white/70 text-sm mb-3">{tourPanoramico?.duration || '5h'} de passeio até a Ilha do Campeche</p>
-              <p className="text-white/90 text-sm">Atividades a bordo, comida e bebida inclusos!</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R${precoPanoramico}</span></p>
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourPanoramico?.name || t('features.panoramic')}</h3>
+              <p className="text-white/70 text-sm mb-3">{tourPanoramico?.duration || '5h'} {t('features.tripToIsland')}</p>
+              <p className="text-white/90 text-sm">{t('features.panoramicDesc')}</p>
+              <p className="text-white font-black text-xl sm:text-2xl mt-3">{t('features.fromPrice')} <span className="text-viva-yellow">R${precoPanoramico}</span></p>
             </div>
             
             {/* Com Desembarque */}
             <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
               <span className="text-4xl sm:text-5xl block mb-3">{tourDesembarque?.emoji || '🏝️'}</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourDesembarque?.name || 'Com Desembarque'}</h3>
-              <p className="text-white/70 text-sm mb-3">Desça na Ilha do Campeche • 3h em terra</p>
-              <p className="text-white/90 text-sm">Explore praias de areia branca e águas cristalinas!</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">A partir de <span className="text-viva-yellow">R${precoDesembarque}</span></p>
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourDesembarque?.name || t('features.landing')}</h3>
+              <p className="text-white/70 text-sm mb-3">{t('features.landOnIsland')}</p>
+              <p className="text-white/90 text-sm">{t('features.landingDesc')}</p>
+              <p className="text-white font-black text-xl sm:text-2xl mt-3">{t('features.fromPrice')} <span className="text-viva-yellow">R${precoDesembarque}</span></p>
             </div>
           </div>
           
           {/* Tags de público */}
-          <p className="text-white/60 text-sm mb-3">Perfeito para:</p>
+          <p className="text-white/60 text-sm mb-3">{t('features.perfectFor')}</p>
           <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
             <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              👶 Bebês
+              {t('features.babies')}
             </span>
             <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              👧 Crianças
+              {t('features.children')}
             </span>
             <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              👨‍👩‍👧‍👦 Famílias
+              {t('features.families')}
             </span>
             <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              👴 Idosos
+              {t('features.seniors')}
             </span>
             <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              🎉 Grupos
+              {t('features.groups')}
             </span>
           </div>
           
@@ -437,7 +453,7 @@ function Features({ tours, getWhatsAppLink }: { tours: TourConfig[]; getWhatsApp
             className="inline-flex items-center gap-2 bg-white text-viva-blue-dark font-black px-6 sm:px-10 py-3 sm:py-4 rounded-full text-base sm:text-xl shadow-2xl hover:scale-105 transition-transform"
           >
             <span>👇</span>
-            VER DETALHES DOS PASSEIOS
+            {t('features.seeDetails')}
           </a>
         </div>
       </div>
@@ -506,12 +522,12 @@ function ImageCarousel() {
 }
 
 // Tours Section - ROTEIROS VIVA LA VIDA
-function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedProps) {
+function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
   const [showReservationModal, setShowReservationModal] = useState(false);
   
   // Encontrar passeios ou usar defaults
-  const tourPanoramico = tours.find(t => t.type === 'panoramico');
-  const tourDesembarque = tours.find(t => t.type === 'desembarque');
+  const tourPanoramico = tours.find(tour => tour.type === 'panoramico');
+  const tourDesembarque = tours.find(tour => tour.type === 'desembarque');
   
   // Obter preços atuais e todos os preços
   const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
@@ -523,13 +539,13 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12">
           <span className="inline-block bg-viva-orange/10 text-viva-orange font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4">
-            📋 DETALHES COMPLETOS
+            {t('tours.badge')}
           </span>
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-viva-blue-dark mb-3 sm:mb-4">
-            Escolha seu <span className="gradient-text">Roteiro</span>
+            {t('tours.title')} <span className="gradient-text">{t('tours.titleHighlight')}</span>
           </h2>
           <p className="text-gray-600 text-sm sm:text-lg px-2">
-            Confira todos os detalhes e escolha a experiência ideal para você!
+            {t('tours.subtitle')}
           </p>
         </div>
 
@@ -538,7 +554,7 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
           <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-gradient-to-br from-viva-orange via-viva-yellow to-viva-green p-1">
             {/* Badge de destaque */}
             <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-r from-viva-orange to-viva-yellow text-white text-center py-2 sm:py-3 font-black text-sm sm:text-lg">
-              ⭐ MAIS VENDIDO • MELHOR CUSTO-BENEFÍCIO ⭐
+              {t('tours.bestSeller')}
             </div>
             
             <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden mt-8 sm:mt-10">
@@ -652,7 +668,7 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
                     className="block w-full text-center bg-gradient-to-r from-green-500 to-green-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-base sm:text-xl shadow-lg shadow-green-500/30 active:scale-95 transition-all"
                   >
                     <MessageCircle className="inline mr-2" size={20} />
-                    RESERVAR TOUR PANORÂMICO
+                    {t('tours.bookPanoramic')}
                   </button>
                 </div>
               </div>
@@ -756,11 +772,11 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
 
               {/* CTA - Dinâmico */}
               <a 
-                href={getWhatsAppLink(tourDesembarque?.whatsappMessage || 'Olá! Quero reservar o passeio COM desembarque na Ilha do Campeche!')}
+                href={getWhatsAppLink(t('whatsapp.bookLanding'))}
                 className="block w-full text-center bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base active:scale-95 transition-all"
               >
                 <MessageCircle className="inline mr-2" size={18} />
-                RESERVAR COM DESEMBARQUE
+                {t('tours.bookLanding')}
               </a>
             </div>
 
@@ -783,12 +799,12 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
 
         {/* Info importante */}
         <div className="mt-8 sm:mt-12 bg-viva-blue-navy/5 rounded-2xl p-4 sm:p-6">
-          <h4 className="font-bold text-viva-blue-dark mb-3 text-sm sm:text-base">📋 Informações importantes:</h4>
+          <h4 className="font-bold text-viva-blue-dark mb-3 text-sm sm:text-base">{t('info.title')}</h4>
           <ul className="grid sm:grid-cols-2 gap-2 text-xs sm:text-sm text-gray-600">
-            <li>• Documento de identidade obrigatório (inclusive menores)</li>
-            <li>• Traga protetor solar, roupa de banho e toalha</li>
-            <li>• Não são permitidos animais de estimação</li>
-            <li>• Proibido fumar no barco</li>
+            <li>• {t('info.doc')}</li>
+            <li>• {t('info.bring')}</li>
+            <li>• {t('info.noPets')}</li>
+            <li>• {t('info.noSmoke')}</li>
           </ul>
         </div>
       </div>
@@ -803,10 +819,10 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedPr
 }
 
 // Routes Section - Comparativo dos Roteiros
-function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedProps) {
+function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
   // Encontrar passeios ou usar defaults
-  const tourPanoramico = tours.find(t => t.type === 'panoramico');
-  const tourDesembarque = tours.find(t => t.type === 'desembarque');
+  const tourPanoramico = tours.find(tour => tour.type === 'panoramico');
+  const tourDesembarque = tours.find(tour => tour.type === 'desembarque');
   
   // Obter preços atuais
   const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
@@ -836,10 +852,10 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedP
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4">
-            Compare os <span className="text-viva-yellow">Roteiros</span>
+            {t('routes.title')} <span className="text-viva-yellow">{t('routes.titleHighlight')}</span>
           </h2>
           <p className="text-white/80 text-sm sm:text-lg max-w-2xl mx-auto px-2">
-            Qual experiência combina mais com você?
+            {t('routes.subtitle')}
           </p>
         </div>
 
@@ -848,25 +864,25 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedP
           {/* Tour Panorâmico - DESTAQUE */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-viva-orange to-viva-yellow text-white text-center py-1.5 text-xs sm:text-sm font-bold">
-              ⭐ RECOMENDADO
+              {t('routes.recommended')}
             </div>
             <div className="pt-6">
               <h3 className="text-lg sm:text-xl font-black text-viva-blue-dark mb-2">
-                🚤 Tour Panorâmico
+                🚤 {t('features.panoramic')}
               </h3>
-              <p className="text-viva-orange font-bold text-sm mb-3">Atividades a bordo</p>
+              <p className="text-viva-orange font-bold text-sm mb-3">{t('routes.onboard')}</p>
               
               <ul className="space-y-2 text-sm text-gray-600 mb-4">
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> 5 horas de passeio</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> 3h em frente à ilha</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Choripán + Caipirinha</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Caiaque e Stand Up</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Snorkel e foto sub</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> Piscina inflável</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.tripHours')}</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.frontIsland')}</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.food')}</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.kayakSup')}</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.snorkelPhoto')}</li>
+                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.inflatablePool')}</li>
               </ul>
 
               <div className="text-center">
-                <p className="text-xs text-gray-500">A partir de</p>
+                <p className="text-xs text-gray-500">{t('features.fromPrice')}</p>
                 <p className="text-3xl font-black text-viva-green">R${pricePanoramico?.adult || DEFAULT_TOURS.panoramico.currentPrice}</p>
               </div>
             </div>
@@ -875,21 +891,21 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedP
           {/* Com Desembarque */}
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
             <h3 className="text-lg sm:text-xl font-black text-white mb-2">
-              {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || 'Com Desembarque'}
+              {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || t('features.landing')}
             </h3>
-            <p className="text-viva-teal font-bold text-sm mb-3">Na Ilha do Campeche</p>
+            <p className="text-viva-teal font-bold text-sm mb-3">{t('routes.onIsland')}</p>
             
             <ul className="space-y-2 text-sm text-white/80 mb-4">
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {tourDesembarque?.duration || '7 horas'} total</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> 3h na ilha</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> Autorização inclusa</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> Explore em terra</li>
-              <li className="flex items-center gap-2 text-white/50"><span>—</span> Sem atividades aquáticas</li>
-              <li className="flex items-center gap-2 text-white/50"><span>—</span> Alimentação não inclusa</li>
+              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {tourDesembarque?.duration || '7 horas'} {t('routes.totalHours')}</li>
+              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.hoursOnIsland')}</li>
+              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.authIncluded')}</li>
+              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.exploreOnLand')}</li>
+              <li className="flex items-center gap-2 text-white/50"><span>—</span> {t('routes.noActivities')}</li>
+              <li className="flex items-center gap-2 text-white/50"><span>—</span> {t('routes.noFood')}</li>
             </ul>
 
             <div className="text-center">
-              <p className="text-xs text-white/60">A partir de</p>
+              <p className="text-xs text-white/60">{t('features.fromPrice')}</p>
               <p className="text-3xl font-black text-white">R${priceDesembarque?.adult || DEFAULT_TOURS.desembarque.currentPrice}</p>
             </div>
           </div>
@@ -899,17 +915,17 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedP
         <div className="mt-10 sm:mt-16 text-center px-2">
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4">
-              Ainda em dúvida? 🤔
+              {t('routes.doubt')} 🤔
             </h3>
             <p className="text-white/80 text-sm sm:text-base mb-5 sm:mb-6 max-w-lg mx-auto">
-              Fale com a gente! Te ajudamos a escolher o melhor roteiro!
+              {t('routes.helpChoose')}
             </p>
             <a 
-              href={getWhatsAppLink('Olá! Estou em dúvida entre os roteiros. Podem me ajudar?')}
+              href={getWhatsAppLink(t('whatsapp.doubt'))}
               className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-10 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-xl shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
             >
               <MessageCircle size={24} />
-              TIRAR DÚVIDAS
+              {t('routes.askQuestions')}
             </a>
           </div>
         </div>
@@ -919,7 +935,7 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice }: SharedP
 }
 
 // Testimonials Section
-function Testimonials({ siteConfig }: SharedProps) {
+function Testimonials({ siteConfig, t }: SharedProps) {
   const testimonials = [
     {
       name: 'Victor Sbeghen',
@@ -952,10 +968,10 @@ function Testimonials({ siteConfig }: SharedProps) {
       <div className="container mx-auto px-4">
         <div className="text-center mb-6 sm:mb-12">
           <span className="inline-block bg-viva-yellow/20 text-viva-orange font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4">
-            ⭐ DEPOIMENTOS
+            {t('testimonials.badge')}
           </span>
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-viva-blue-dark mb-2 sm:mb-4">
-            <span className="gradient-text">Mar de elogios!</span>
+            <span className="gradient-text">{t('testimonials.title')}</span>
           </h2>
         </div>
 
@@ -1004,7 +1020,7 @@ function Testimonials({ siteConfig }: SharedProps) {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              <span className="text-gray-600 text-xs sm:text-base"><strong>{siteConfig?.googleReviews || DEFAULT_SITE_CONFIG.googleReviews} avaliações</strong> no Google</span>
+              <span className="text-gray-600 text-xs sm:text-base"><strong>{siteConfig?.googleReviews || DEFAULT_SITE_CONFIG.googleReviews} {t('testimonials.reviews')}</strong> {t('testimonials.onGoogle')}</span>
             </div>
           </div>
         </div>
@@ -1014,7 +1030,7 @@ function Testimonials({ siteConfig }: SharedProps) {
 }
 
 // About Section
-function About({ siteConfig, getWhatsAppLink }: SharedProps) {
+function About({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   return (
     <section id="sobre" className="py-12 sm:py-20 bg-white">
       <div className="container mx-auto px-4">
@@ -1037,7 +1053,7 @@ function About({ siteConfig, getWhatsAppLink }: SharedProps) {
                   <Shield className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <div className="font-bold text-viva-blue-dark text-xs sm:text-base">Certificada</div>
+                  <div className="font-bold text-viva-blue-dark text-xs sm:text-base">{t('about.certified')}</div>
                   <div className="text-gray-500 text-[10px] sm:text-sm">Cadastur</div>
                 </div>
               </div>
@@ -1047,21 +1063,21 @@ function About({ siteConfig, getWhatsAppLink }: SharedProps) {
           {/* Texto */}
           <div className="order-2 lg:order-1 text-center lg:text-left">
             <span className="inline-block bg-viva-blue/10 text-viva-blue font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4">
-              🚤 SOBRE NÓS
+              {t('about.badge')}
             </span>
             <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-viva-blue-dark mb-4 sm:mb-6">
-              Viva <span className="gradient-text">la Vida!</span>
+              {t('about.title')} <span className="gradient-text">{t('about.titleHighlight')}</span>
             </h2>
             <p className="text-gray-600 text-sm sm:text-lg mb-4 sm:mb-6 leading-relaxed">
-              Somos apaixonados pelo mar de Florianópolis! Nossa missão é proporcionar 
-              <strong className="text-viva-blue"> experiências inesquecíveis</strong> com segurança e diversão.
+              {t('about.description')} 
+              <strong className="text-viva-blue"> {t('about.descHighlight')}</strong> {t('about.descEnd')}
             </p>
 
             {/* Stats grid - mais compacto no mobile */}
             <div className="grid grid-cols-4 sm:grid-cols-2 gap-2 sm:gap-4 mb-6 sm:mb-8">
               <div className="bg-gradient-to-br from-viva-orange/10 to-viva-yellow/10 rounded-xl p-2 sm:p-4">
                 <div className="text-xl sm:text-3xl font-black text-viva-orange">500+</div>
-                <div className="text-gray-600 text-[10px] sm:text-sm">Clientes</div>
+                <div className="text-gray-600 text-[10px] sm:text-sm">{t('about.clients')}</div>
               </div>
               <div className="bg-gradient-to-br from-viva-blue/10 to-viva-teal/10 rounded-xl p-2 sm:p-4">
                 <div className="text-xl sm:text-3xl font-black text-viva-blue">5.0</div>
@@ -1069,11 +1085,11 @@ function About({ siteConfig, getWhatsAppLink }: SharedProps) {
               </div>
               <div className="bg-gradient-to-br from-viva-green/10 to-viva-teal/10 rounded-xl p-2 sm:p-4">
                 <div className="text-xl sm:text-3xl font-black text-viva-green">2</div>
-                <div className="text-gray-600 text-[10px] sm:text-sm">Roteiros</div>
+                <div className="text-gray-600 text-[10px] sm:text-sm">{t('about.routes')}</div>
               </div>
               <div className="bg-gradient-to-br from-viva-blue-dark/10 to-viva-blue/10 rounded-xl p-2 sm:p-4">
                 <div className="text-xl sm:text-3xl font-black text-viva-blue-dark">10+</div>
-                <div className="text-gray-600 text-[10px] sm:text-sm">Roteiros</div>
+                <div className="text-gray-600 text-[10px] sm:text-sm">{t('about.routes')}</div>
               </div>
             </div>
 
@@ -1084,14 +1100,14 @@ function About({ siteConfig, getWhatsAppLink }: SharedProps) {
                 className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-full font-bold active:scale-95 transition-all shadow-lg"
               >
                 <MessageCircle size={20} />
-                Fale Conosco
+                {t('about.contactUs')}
               </a>
               <a 
                 href="#contato"
                 className="flex items-center justify-center gap-2 bg-viva-blue/10 text-viva-blue-dark px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-full font-bold active:bg-viva-blue/20 transition-colors"
               >
                 <MapPin size={20} />
-                Nossa Localização
+                {t('about.ourLocation')}
               </a>
             </div>
           </div>
@@ -1102,7 +1118,7 @@ function About({ siteConfig, getWhatsAppLink }: SharedProps) {
 }
 
 // Final CTA Section
-function FinalCTA({ getWhatsAppLink }: SharedProps) {
+function FinalCTA({ getWhatsAppLink, t }: SharedProps) {
   return (
     <section className="py-12 sm:py-20 bg-gradient-to-r from-viva-orange via-viva-yellow to-viva-green relative overflow-hidden">
       {/* Background pattern - esconde no mobile */}
@@ -1120,19 +1136,19 @@ function FinalCTA({ getWhatsAppLink }: SharedProps) {
 
       <div className="container mx-auto px-4 text-center relative z-10">
         <h2 className="text-2xl sm:text-4xl md:text-6xl font-black text-white mb-4 sm:mb-6">
-          Pronto para Viver?
+          {t('cta.title')}
         </h2>
         <p className="text-white/90 text-sm sm:text-xl mb-6 sm:mb-10 max-w-2xl mx-auto px-2">
-          Reserve agora e garanta momentos inesquecíveis!
+          {t('cta.subtitle')}
           <br />
-          <strong>Atendimento 24h</strong>
+          <strong>{t('cta.support')}</strong>
         </p>
         <a 
-          href={getWhatsAppLink('Olá! Gostaria de reservar um passeio de lancha.')}
+          href={getWhatsAppLink(t('whatsapp.book'))}
           className="inline-flex items-center gap-2 sm:gap-3 bg-white text-viva-blue-dark px-8 sm:px-12 py-4 sm:py-6 rounded-2xl sm:rounded-full font-black text-lg sm:text-2xl shadow-xl active:scale-95 transition-all"
         >
           <MessageCircle size={28} />
-          RESERVAR AGORA
+          {t('cta.book')}
         </a>
       </div>
     </section>
@@ -1140,7 +1156,7 @@ function FinalCTA({ getWhatsAppLink }: SharedProps) {
 }
 
 // Footer
-function Footer({ siteConfig, getWhatsAppLink }: SharedProps) {
+function Footer({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   // Valores do siteConfig ou defaults
   const whatsappNumber = siteConfig?.whatsappNumber || DEFAULT_SITE_CONFIG.whatsappNumber;
   const displayPhone = siteConfig?.phone || DEFAULT_SITE_CONFIG.phone;
@@ -1164,7 +1180,7 @@ function Footer({ siteConfig, getWhatsAppLink }: SharedProps) {
           {/* Logo centralizado no mobile */}
           <div className="flex justify-center sm:justify-start mb-6">
             <Image 
-              src="/imagemlogo.png" 
+              src="/imagemlogo1.png" 
               alt="Viva la Vida" 
               width={160} 
               height={64}
@@ -1201,26 +1217,26 @@ function Footer({ siteConfig, getWhatsAppLink }: SharedProps) {
             </div>
             <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 text-sm sm:text-base">
               <Clock size={16} />
-              <span>Atendimento 24h</span>
+              <span>{t('footer.support')}</span>
             </div>
           </div>
 
           {/* Links - horizontal no mobile */}
           <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-8 text-sm">
-            <a href="#inicio" className="text-white/70 active:text-white">Início</a>
-            <a href="#passeios" className="text-white/70 active:text-white">Passeios</a>
-            <a href="#roteiros" className="text-white/70 active:text-white">Roteiros</a>
-            <a href="#sobre" className="text-white/70 active:text-white">Sobre</a>
+            <a href="#inicio" className="text-white/70 active:text-white">{t('nav.home')}</a>
+            <a href="#passeios" className="text-white/70 active:text-white">{t('nav.tours')}</a>
+            <a href="#roteiros" className="text-white/70 active:text-white">{t('nav.routes')}</a>
+            <a href="#sobre" className="text-white/70 active:text-white">{t('nav.about')}</a>
           </div>
         </div>
 
         {/* Bottom */}
         <div className="border-t border-white/10 pt-6 sm:pt-8 text-center">
           <p className="text-white/50 text-xs sm:text-sm mb-2">
-            © 2025 Viva la Vida - Todos os direitos reservados.
+            {t('footer.rights')}
           </p>
           <div className="flex items-center justify-center gap-2 text-white/50 text-xs sm:text-sm">
-            <span>Empresa Certificada</span>
+            <span>{t('footer.certified')}</span>
             <span className="text-viva-yellow font-bold">Cadastur</span>
           </div>
         </div>
@@ -1259,7 +1275,7 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
       {/* Logo container */}
       <div className="relative animate-splash-logo">
         <Image 
-          src="/imagemlogo.png" 
+          src="/imagemlogo1.png" 
           alt="Viva la Vida" 
           width={400} 
           height={160}
@@ -1285,6 +1301,9 @@ export default function Home() {
   
   // Carregar configurações dinâmicas do site
   const { tours, siteConfig, loading, getWhatsAppLink, getCurrentPrice } = useSiteConfig();
+  
+  // Hook de internacionalização
+  const { t } = useLanguage();
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -1298,6 +1317,7 @@ export default function Home() {
     siteConfig,
     getWhatsAppLink,
     getCurrentPrice,
+    t,
   };
 
   return (
@@ -1306,7 +1326,7 @@ export default function Home() {
       <main className={`transition-opacity duration-500 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         <Header {...sharedProps} />
         <Hero {...sharedProps} />
-        <Features tours={tours} getWhatsAppLink={getWhatsAppLink} />
+        <Features tours={tours} getWhatsAppLink={getWhatsAppLink} t={t} />
         <Tours {...sharedProps} />
         <Routes {...sharedProps} />
         <Testimonials {...sharedProps} />
