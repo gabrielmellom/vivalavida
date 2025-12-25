@@ -153,5 +153,8 @@ export const translations: Record<string, string> = {
   // Language selector
   'language.select': 'Sprache',
   'language.change': 'Sprache ändern',
+
+  // Splash
+  'splash.tagline': 'Referenz für Bootstouren in Florianópolis',
 };
 

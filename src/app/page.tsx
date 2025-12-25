@@ -105,31 +105,33 @@ function Header({ siteConfig, getWhatsAppLink, t }: SharedProps) {
       {/* Main nav */}
       <div className="container mx-auto px-4">
         {/* Mobile Nav - Logo centralizada */}
-        <nav className="lg:hidden flex items-center justify-center relative py-2">
-          {/* Mobile menu button - absolute left */}
-          <button 
-            className="absolute left-0 z-10 p-2"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            <div className={`w-6 h-0.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? 'rotate-45 translate-y-1.5' : ''}`} />
-            <div className={`w-6 h-0.5 mt-1.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? 'opacity-0' : ''}`} />
-            <div className={`w-6 h-0.5 mt-1.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
-          </button>
+        <nav className="lg:hidden flex items-center justify-between py-2">
+          {/* Mobile menu button - left com largura fixa para balancear */}
+          <div className="w-24 flex justify-start">
+            <button 
+              className="z-10 p-2"
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              <div className={`w-6 h-0.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? 'rotate-45 translate-y-1.5' : ''}`} />
+              <div className={`w-6 h-0.5 mt-1.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? 'opacity-0' : ''}`} />
+              <div className={`w-6 h-0.5 mt-1.5 transition-all duration-300 ${scrolled ? 'bg-viva-blue-dark' : 'bg-white'} ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+            </button>
+          </div>
 
           {/* Logo - centered */}
-          <a href="#inicio" className="z-10">
+          <a href="#inicio" className="z-10 flex-shrink-0">
             <Image 
               src="/imagemlogo1.png" 
               alt="Viva la Vida" 
-              width={scrolled ? 120 : 140} 
-              height={scrolled ? 48 : 56}
+              width={scrolled ? 110 : 130} 
+              height={scrolled ? 44 : 52}
               className="transition-all duration-300"
-              style={{ width: scrolled ? '120px' : '140px', height: 'auto' }}
+              style={{ width: scrolled ? '110px' : '130px', height: 'auto' }}
             />
           </a>
 
-          {/* Language selector - absolute right (mobile) */}
-          <div className="absolute right-0 z-10">
+          {/* Language selector - right com largura fixa para balancear */}
+          <div className="w-24 flex justify-end z-10">
             <LanguageSelector variant={scrolled ? 'light' : 'dark'} compact />
           </div>
         </nav>
@@ -1255,11 +1257,11 @@ function Footer({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 }
 
 // Splash Screen Component
-function SplashScreen({ onComplete }: { onComplete: () => void }) {
+function SplashScreen({ onComplete, t }: { onComplete: () => void; t: (key: string) => string }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       onComplete();
-    }, 2000); // 2 segundos total (1s animação entrada + 1s saída)
+    }, 2500); // 2.5 segundos para dar tempo de ler a frase
     
     return () => clearTimeout(timer);
   }, [onComplete]);
@@ -1272,8 +1274,8 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
         <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-viva-yellow/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '0.5s' }} />
       </div>
       
-      {/* Logo container */}
-      <div className="relative animate-splash-logo">
+      {/* Logo container + Tagline */}
+      <div className="relative animate-splash-logo flex flex-col items-center">
         <Image 
           src="/imagemlogo1.png" 
           alt="Viva la Vida" 
@@ -1282,6 +1284,15 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
           className="w-72 sm:w-96 md:w-[450px] h-auto drop-shadow-2xl"
           priority
         />
+        {/* Tagline */}
+        <p 
+          className="mt-6 text-white/90 text-sm sm:text-base md:text-lg font-medium text-center px-4 opacity-0"
+          style={{ 
+            animation: 'fadeIn 1s ease-out 0.5s forwards'
+          }}
+        >
+          ⭐ {t('splash.tagline')} ⭐
+        </p>
       </div>
       
       {/* Texto de loading */}
@@ -1322,7 +1333,7 @@ export default function Home() {
 
   return (
     <>
-      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} t={t} />}
       <main className={`transition-opacity duration-500 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         <Header {...sharedProps} />
         <Hero {...sharedProps} />

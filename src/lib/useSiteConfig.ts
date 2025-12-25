@@ -103,7 +103,7 @@ export const DEFAULT_SITE_CONFIG = {
   instagramUrl: 'https://instagram.com/vivalavida',
   facebookUrl: 'https://facebook.com/vivalavida',
   googleRating: 5.0,
-  googleReviews: 44,
+  googleReviews: 400,
 };
 
 export const DEFAULT_TOURS = {

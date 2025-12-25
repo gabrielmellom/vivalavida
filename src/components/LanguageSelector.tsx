@@ -35,8 +35,8 @@ export default function LanguageSelector({ variant = 'light', compact = false }:
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full
-          transition-all duration-200 font-semibold text-sm
+          flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full
+          transition-all duration-200 font-semibold text-xs sm:text-sm
           ${isDark 
             ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20' 
             : 'bg-viva-blue/10 hover:bg-viva-blue/20 text-viva-blue-dark border border-viva-blue/20'
@@ -44,11 +44,11 @@ export default function LanguageSelector({ variant = 'light', compact = false }:
         `}
         aria-label="Selecionar idioma"
       >
-        <span className="text-base">🌍</span>
-        <span>{currentLang.name}</span>
+        <span className="text-sm sm:text-base">🌍</span>
+        <span className={compact ? 'text-[11px]' : ''}>{currentLang.name}</span>
         <ChevronDown 
-          size={14} 
-          className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+          size={12} 
+          className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} sm:w-[14px] sm:h-[14px]`} 
         />
       </button>
 

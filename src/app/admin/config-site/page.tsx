@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
 import { TourConfig, TourPricing, TourFeature, SiteConfig } from '@/types';
 import { 
   ArrowLeft, 
@@ -23,7 +24,9 @@ import {
   Facebook,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  ImagePlus,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -70,7 +73,7 @@ export default function ConfigSitePage() {
           email: 'contato@vivalavida.com.br',
           phone: '(48) 99999-9999',
           address: 'Barra da Lagoa, Florianópolis - SC',
-          googleReviews: 44,
+          googleReviews: 400,
           googleRating: 5.0,
           heroTitle: 'Viva Momentos Inesquecíveis',
           heroSubtitle: 'Embarque no Barco Viva La Vida e conheça a Ilha do Campeche!',
@@ -695,6 +698,66 @@ function TourEditModal({
   const [newFeatureIcon, setNewFeatureIcon] = useState('');
   const [newFeatureLabel, setNewFeatureLabel] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingImage(true);
+    const newImages: string[] = [...(formData.images || [])];
+
+    try {
+      for (const file of Array.from(files)) {
+        // Validar tamanho (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`Arquivo ${file.name} é muito grande. Máximo 5MB.`);
+          continue;
+        }
+
+        // Validar tipo
+        if (!file.type.startsWith('image/')) {
+          alert(`Arquivo ${file.name} não é uma imagem válida.`);
+          continue;
+        }
+
+        // Upload para Firebase Storage
+        const fileName = `tours/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        newImages.push(downloadURL);
+      }
+
+      setFormData({ ...formData, images: newImages });
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      alert('Erro ao fazer upload da imagem');
+    } finally {
+      setUploadingImage(false);
+      // Limpar input
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveImage = async (imageUrl: string) => {
+    if (!confirm('Deseja remover esta imagem?')) return;
+
+    try {
+      // Tentar deletar do Storage (pode falhar se for URL externa)
+      if (imageUrl.includes('firebase')) {
+        const imageRef = ref(storage, imageUrl);
+        await deleteObject(imageRef).catch(() => {});
+      }
+
+      setFormData({
+        ...formData,
+        images: (formData.images || []).filter(img => img !== imageUrl),
+      });
+    } catch (error) {
+      console.error('Erro ao remover imagem:', error);
+    }
+  };
 
   const handleAddFeature = () => {
     if (!newFeatureIcon || !newFeatureLabel) return;
@@ -920,6 +983,72 @@ function TourEditModal({
                 <Plus size={18} />
               </button>
             </div>
+          </div>
+
+          {/* Fotos do Passeio */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              📷 Fotos do Passeio
+            </label>
+            <p className="text-xs text-gray-500 mb-3">
+              Adicione fotos para exibir no carrossel do passeio. Máximo 5MB por imagem.
+            </p>
+            
+            {/* Grid de imagens */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              {(formData.images || []).map((imageUrl, index) => (
+                <div key={index} className="relative group aspect-video rounded-xl overflow-hidden border border-gray-200">
+                  <img 
+                    src={imageUrl} 
+                    alt={`Foto ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(imageUrl)}
+                      className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <span className="absolute top-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
+                    {index + 1}
+                  </span>
+                </div>
+              ))}
+              
+              {/* Botão de adicionar */}
+              <label className={`
+                aspect-video rounded-xl border-2 border-dashed border-gray-300 
+                flex flex-col items-center justify-center cursor-pointer
+                hover:border-viva-blue hover:bg-viva-blue/5 transition
+                ${uploadingImage ? 'opacity-50 cursor-wait' : ''}
+              `}>
+                {uploadingImage ? (
+                  <Loader2 size={24} className="text-viva-blue animate-spin" />
+                ) : (
+                  <>
+                    <ImagePlus size={24} className="text-gray-400 mb-1" />
+                    <span className="text-xs text-gray-500">Adicionar</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  disabled={uploadingImage}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            
+            {(formData.images || []).length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-2">
+                Nenhuma foto adicionada ainda
+              </p>
+            )}
           </div>
 
           {/* Preços */}

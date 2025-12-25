@@ -195,6 +195,16 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* Fade in simples - só aparece */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Animação de palavras aparecendo uma a uma */
 @keyframes wordAppear {
   0% {
@@ -213,24 +223,20 @@ h1, h2, h3, h4, h5, h6 {
   animation: wordAppear 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Animação da Splash Screen - Zoom In */
+/* Animação da Splash Screen - Zoom In (não some) */
 @keyframes splashLogo {
   0% {
     opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
+    transform: scale(0.8);
   }
   100% {
-    opacity: 0;
-    transform: scale(1.2);
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
 .animate-splash-logo {
-  animation: splashLogo 2s ease-out forwards;
+  animation: splashLogo 0.8s ease-out forwards;
 }
 
 /* Glow effect */
