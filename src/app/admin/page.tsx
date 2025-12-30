@@ -20,18 +20,18 @@ const formatDate = (dateString: string) => {
   return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
 };
 
-// Cores para identificar grupos (paleta profissional) - GLOBAL
+// Cores para identificar grupos (paleta vibrante e colorida)
 const GROUP_COLORS = [
-  { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700', badge: 'bg-slate-600' },
-  { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', badge: 'bg-blue-600' },
-  { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', badge: 'bg-gray-600' },
-  { bg: 'bg-slate-100', border: 'border-slate-400', text: 'text-slate-800', badge: 'bg-slate-700' },
-  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800', badge: 'bg-blue-700' },
-  { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', badge: 'bg-indigo-600' },
-  { bg: 'bg-slate-200', border: 'border-slate-500', text: 'text-slate-900', badge: 'bg-slate-800' },
-  { bg: 'bg-blue-200', border: 'border-blue-500', text: 'text-blue-900', badge: 'bg-blue-800' },
-  { bg: 'bg-gray-100', border: 'border-gray-400', text: 'text-gray-800', badge: 'bg-gray-700' },
-  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-800', badge: 'bg-indigo-700' },
+  { bg: 'bg-rose-50', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
+  { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-500' },
+  { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', badge: 'bg-violet-500' },
+  { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
+  { bg: 'bg-cyan-50', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
+  { bg: 'bg-pink-50', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
+  { bg: 'bg-teal-50', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
+  { bg: 'bg-orange-50', border: 'border-orange-400', text: 'text-orange-700', badge: 'bg-orange-500' },
+  { bg: 'bg-fuchsia-50', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+  { bg: 'bg-lime-50', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-500' },
 ];
 
 export default function AdminDashboard() {
@@ -40,6 +40,8 @@ export default function AdminDashboard() {
   const [showBoatModal, setShowBoatModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [seatsTotal, setSeatsTotal] = useState(40);
+  const [seatsWithLanding, setSeatsWithLanding] = useState(10); // Vagas com desembarque
+  const [seatsWithoutLanding, setSeatsWithoutLanding] = useState(30); // Vagas sem desembarque
   const [ticketPrice, setTicketPrice] = useState('200');
   const [boatType, setBoatType] = useState<'escuna' | 'lancha'>('escuna');
   const [createBulk, setCreateBulk] = useState(false);
@@ -51,7 +53,7 @@ export default function AdminDashboard() {
   const [showDeleteBoatModal, setShowDeleteBoatModal] = useState(false);
   const [boatToDelete, setBoatToDelete] = useState<Boat | null>(null);
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
-  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -192,24 +194,6 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Fechar filtro ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showDateFilter && !target.closest('.date-filter-container')) {
-        setShowDateFilter(false);
-      }
-    };
-
-    if (showDateFilter) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showDateFilter]);
-
   const handleCreateBoat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -240,6 +224,11 @@ export default function AdminDashboard() {
             seatsTaken: 0,
             status: 'active',
             boatType,
+            // Vagas por tipo de serviço (apenas para escunas)
+            seatsWithLanding: boatType === 'escuna' ? seatsWithLanding : undefined,
+            seatsWithLandingTaken: boatType === 'escuna' ? 0 : undefined,
+            seatsWithoutLanding: boatType === 'escuna' ? seatsWithoutLanding : undefined,
+            seatsWithoutLandingTaken: boatType === 'escuna' ? 0 : undefined,
             ticketPrice: parseFloat(ticketPrice) || 200,
             createdBy: user.uid,
             createdAt: Timestamp.now(),
@@ -268,6 +257,11 @@ export default function AdminDashboard() {
           seatsTaken: 0,
           status: 'active',
           boatType,
+          // Vagas por tipo de serviço (apenas para escunas)
+          seatsWithLanding: boatType === 'escuna' ? seatsWithLanding : undefined,
+          seatsWithLandingTaken: boatType === 'escuna' ? 0 : undefined,
+          seatsWithoutLanding: boatType === 'escuna' ? seatsWithoutLanding : undefined,
+          seatsWithoutLandingTaken: boatType === 'escuna' ? 0 : undefined,
           ticketPrice: parseFloat(ticketPrice) || 200,
           createdBy: user.uid,
           createdAt: Timestamp.now(),
@@ -280,6 +274,8 @@ export default function AdminDashboard() {
       setShowBoatModal(false);
       setSelectedDate('');
       setSeatsTotal(40);
+      setSeatsWithLanding(10);
+      setSeatsWithoutLanding(30);
       setTicketPrice('200');
       setBoatType('escuna');
       setCreateBulk(false);
@@ -313,16 +309,35 @@ export default function AdminDashboard() {
         return;
       }
       
-      const boatData = boatDocSnap.data();
+      const boatData = boatDocSnap.data() as Boat;
       const currentSeatsTaken = boatData.seatsTaken || 0;
       
       // Se a reserva já estava aprovada, não incrementar seatsTaken novamente
       const wasAlreadyApproved = reservation.status === 'approved';
       
-      // Verificar se ainda há vagas disponíveis
+      // Verificar se ainda há vagas disponíveis (geral)
       if (!wasAlreadyApproved && currentSeatsTaken >= boatData.seatsTotal) {
         alert('Não há mais vagas disponíveis neste barco!');
         return;
+      }
+
+      // Verificar vagas por tipo de serviço (para escunas)
+      if (!wasAlreadyApproved && boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
+        const isWithLanding = reservation.escunaType === 'com-desembarque';
+        
+        if (isWithLanding) {
+          const currentWithLandingTaken = boatData.seatsWithLandingTaken || 0;
+          if (currentWithLandingTaken >= (boatData.seatsWithLanding || 0)) {
+            alert(`Não há mais vagas com desembarque disponíveis! (${currentWithLandingTaken}/${boatData.seatsWithLanding})`);
+            return;
+          }
+        } else {
+          const currentWithoutLandingTaken = boatData.seatsWithoutLandingTaken || 0;
+          if (currentWithoutLandingTaken >= (boatData.seatsWithoutLanding || 0)) {
+            alert(`Não há mais vagas panorâmicas disponíveis! (${currentWithoutLandingTaken}/${boatData.seatsWithoutLanding})`);
+            return;
+          }
+        }
       }
 
       await updateDoc(reservationRef, {
@@ -334,10 +349,22 @@ export default function AdminDashboard() {
 
       // Incrementar seatsTaken apenas se não estava aprovado antes
       if (!wasAlreadyApproved) {
-        await updateDoc(boatRef, {
+        const updateData: Record<string, unknown> = {
           seatsTaken: currentSeatsTaken + 1,
           updatedAt: Timestamp.now(),
-        });
+        };
+        
+        // Atualizar contadores por tipo de serviço (para escunas)
+        if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
+          const isWithLanding = reservation.escunaType === 'com-desembarque';
+          if (isWithLanding) {
+            updateData.seatsWithLandingTaken = (boatData.seatsWithLandingTaken || 0) + 1;
+          } else {
+            updateData.seatsWithoutLandingTaken = (boatData.seatsWithoutLandingTaken || 0) + 1;
+          }
+        }
+        
+        await updateDoc(boatRef, updateData);
       }
 
       setSelectedReservation(null);
@@ -364,15 +391,33 @@ export default function AdminDashboard() {
         const boatDocSnap = await getDoc(boatRef);
         
         if (boatDocSnap.exists()) {
-          const boatData = boatDocSnap.data();
+          const boatData = boatDocSnap.data() as Boat;
           const currentSeatsTaken = boatData.seatsTaken || 0;
           
           // Decrementar apenas se for maior que zero
           if (currentSeatsTaken > 0) {
-            await updateDoc(boatRef, {
+            const updateData: Record<string, unknown> = {
               seatsTaken: currentSeatsTaken - 1,
               updatedAt: Timestamp.now(),
-            });
+            };
+            
+            // Decrementar contadores por tipo de serviço (para escunas)
+            if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
+              const isWithLanding = reservation.escunaType === 'com-desembarque';
+              if (isWithLanding) {
+                const currentWithLandingTaken = boatData.seatsWithLandingTaken || 0;
+                if (currentWithLandingTaken > 0) {
+                  updateData.seatsWithLandingTaken = currentWithLandingTaken - 1;
+                }
+              } else {
+                const currentWithoutLandingTaken = boatData.seatsWithoutLandingTaken || 0;
+                if (currentWithoutLandingTaken > 0) {
+                  updateData.seatsWithoutLandingTaken = currentWithoutLandingTaken - 1;
+                }
+              }
+            }
+            
+            await updateDoc(boatRef, updateData);
           }
         }
       }
@@ -533,6 +578,74 @@ export default function AdminDashboard() {
     const reservationDate = new Date(r.rideDate).toISOString().split('T')[0];
     return reservationDate === today;
   });
+
+  // Dados do calendário - quais dias têm barco e quais têm reservas
+  const calendarData = useMemo(() => {
+    const boatDates = new Map<string, { hasBoat: boolean; hasReservations: boolean; reservationCount: number }>();
+    
+    // Marcar dias com barco
+    boats.forEach(boat => {
+      if (boat.status !== 'active') return;
+      const dateKey = new Date(boat.date).toISOString().split('T')[0];
+      if (!boatDates.has(dateKey)) {
+        boatDates.set(dateKey, { hasBoat: true, hasReservations: false, reservationCount: 0 });
+      }
+    });
+    
+    // Marcar dias com reservas
+    reservations.forEach(r => {
+      if (r.status === 'cancelled') return;
+      const dateKey = new Date(r.rideDate).toISOString().split('T')[0];
+      const existing = boatDates.get(dateKey);
+      if (existing) {
+        existing.hasReservations = true;
+        existing.reservationCount++;
+      }
+    });
+    
+    return boatDates;
+  }, [boats, reservations]);
+
+  // Funções do calendário
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay(); // 0 = domingo
+    
+    const days: (Date | null)[] = [];
+    
+    // Adicionar espaços vazios para os dias antes do primeiro dia do mês
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+    
+    // Adicionar os dias do mês
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const getCalendarDayStatus = (date: Date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    const data = calendarData.get(dateKey);
+    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isSelected = dateKey === filterDate;
+    
+    return {
+      hasBoat: data?.hasBoat || false,
+      hasReservations: data?.hasReservations || false,
+      reservationCount: data?.reservationCount || 0,
+      isToday,
+      isSelected,
+    };
+  };
+
+  const calendarMonthName = calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   // Reservas pendentes e pré-reservas devem aparecer TODAS, independente da data do passeio
   // Ordenar para manter grupos juntos
@@ -769,68 +882,110 @@ export default function AdminDashboard() {
         <div className="mb-4 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-lg sm:text-xl font-bold text-viva-blue-dark">Barcos Programados</h2>
-            <div className="relative date-filter-container">
+          </div>
+
+          {/* Calendário Visual */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-4 max-w-xs">
+            {/* Header do Calendário */}
+            <div className="flex items-center justify-between mb-3">
               <button
-                onClick={() => setShowDateFilter(!showDateFilter)}
-                className="flex items-center gap-2 bg-white border border-viva-blue text-viva-blue-dark px-3 sm:px-4 py-2 rounded-lg font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base w-full sm:w-auto justify-center"
+                onClick={() => {
+                  const newMonth = new Date(calendarMonth);
+                  newMonth.setMonth(newMonth.getMonth() - 1);
+                  setCalendarMonth(newMonth);
+                }}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition"
               >
-                <Calendar size={18} />
-                {filterDate ? formatDate(filterDate) : 'Ver Todos'}
+                <ChevronLeft size={16} className="text-gray-600" />
               </button>
-              
-              {showDateFilter && (
-                <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-10 min-w-[280px]">
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Selecionar Data
-                      </label>
-                      <input
-                        type="date"
-                        value={filterDate}
-                        onChange={(e) => {
-                          setFilterDate(e.target.value);
-                          setShowDateFilter(false);
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          const today = new Date().toISOString().split('T')[0];
-                          setFilterDate(today);
-                          setShowDateFilter(false);
-                        }}
-                        className="flex-1 px-3 py-2 bg-viva-blue/10 text-viva-blue rounded-lg text-sm font-semibold hover:bg-viva-blue/20 transition"
-                      >
-                        Hoje
-                      </button>
-                      <button
-                        onClick={() => {
-                          const tomorrow = new Date();
-                          tomorrow.setDate(tomorrow.getDate() + 1);
-                          setFilterDate(tomorrow.toISOString().split('T')[0]);
-                          setShowDateFilter(false);
-                        }}
-                        className="flex-1 px-3 py-2 bg-viva-blue/10 text-viva-blue rounded-lg text-sm font-semibold hover:bg-viva-blue/20 transition"
-                      >
-                        Amanhã
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setFilterDate('');
-                        setShowDateFilter(false);
-                      }}
-                      className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition"
-                    >
-                      Ver Todos
-                    </button>
-                  </div>
-                </div>
-              )}
+              <h3 className="text-sm font-bold text-gray-800 capitalize">{calendarMonthName}</h3>
+              <button
+                onClick={() => {
+                  const newMonth = new Date(calendarMonth);
+                  newMonth.setMonth(newMonth.getMonth() + 1);
+                  setCalendarMonth(newMonth);
+                }}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+              >
+                <ChevronRight size={16} className="text-gray-600" />
+              </button>
             </div>
+
+            {/* Dias da Semana */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+                <div key={day} className="text-center text-[10px] font-semibold text-gray-500 py-1">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Dias do Mês */}
+            <div className="grid grid-cols-7 gap-1">
+              {getDaysInMonth(calendarMonth).map((date, index) => {
+                if (!date) {
+                  return <div key={`empty-${index}`} className="w-9 h-9" />;
+                }
+
+                const status = getCalendarDayStatus(date);
+                const dateStr = date.toISOString().split('T')[0];
+
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setFilterDate(dateStr)}
+                    className={`w-9 h-9 rounded-md flex flex-col items-center justify-center text-xs font-medium transition relative ${
+                      status.isSelected
+                        ? 'bg-viva-blue text-white ring-2 ring-viva-blue ring-offset-1'
+                        : status.hasReservations
+                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        : status.hasBoat
+                        ? 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                        : status.isToday
+                        ? 'bg-blue-50 text-viva-blue border-2 border-viva-blue hover:bg-blue-100'
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    <span>{date.getDate()}</span>
+                    {status.hasReservations && !status.isSelected && (
+                      <span className="text-[8px] font-bold">{status.reservationCount}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Legenda */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded bg-green-500"></div>
+                <span className="text-[10px] text-gray-600">Com reservas</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded bg-gray-300"></div>
+                <span className="text-[10px] text-gray-600">Barco</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded border-2 border-viva-blue bg-blue-50"></div>
+                <span className="text-[10px] text-gray-600">Hoje</span>
+              </div>
+            </div>
+
+            {/* Botão Voltar para Hoje */}
+            {filterDate !== new Date().toISOString().split('T')[0] && (
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={() => {
+                    const todayDate = new Date();
+                    setFilterDate(todayDate.toISOString().split('T')[0]);
+                    setCalendarMonth(todayDate);
+                  }}
+                  className="text-xs text-viva-blue hover:text-viva-blue-dark font-semibold"
+                >
+                  ← Voltar para Hoje
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Filtrar barcos pela data selecionada */}
@@ -909,9 +1064,52 @@ export default function AdminDashboard() {
                       style={{ width: `${Math.min((boat.seatsTaken / boat.seatsTotal) * 100, 100)}%` }}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1.5">
-                    {boat.seatsTotal - boat.seatsTaken} vagas disponíveis
-                  </p>
+                  
+                  {/* Vagas por tipo de serviço - apenas para escunas */}
+                  {boat.boatType === 'escuna' && boat.seatsWithLanding !== undefined && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">🏝️ Com Desembarque:</span>
+                        <span className={`font-bold ${
+                          (boat.seatsWithLandingTaken || 0) >= (boat.seatsWithLanding || 0) 
+                            ? 'text-red-600' 
+                            : 'text-green-600'
+                        }`}>
+                          {boat.seatsWithLandingTaken || 0} / {boat.seatsWithLanding || 0}
+                          <span className="text-gray-500 font-normal ml-1">
+                            ({(boat.seatsWithLanding || 0) - (boat.seatsWithLandingTaken || 0)} livres)
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">🚤 Panorâmico:</span>
+                        <span className={`font-bold ${
+                          (boat.seatsWithoutLandingTaken || 0) >= (boat.seatsWithoutLanding || 0) 
+                            ? 'text-red-600' 
+                            : 'text-blue-600'
+                        }`}>
+                          {boat.seatsWithoutLandingTaken || 0} / {boat.seatsWithoutLanding || 0}
+                          <span className="text-gray-500 font-normal ml-1">
+                            ({(boat.seatsWithoutLanding || 0) - (boat.seatsWithoutLandingTaken || 0)} livres)
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mensagem para barcos antigos sem divisão */}
+                  {boat.boatType === 'escuna' && boat.seatsWithLanding === undefined && (
+                    <p className="text-xs text-gray-400 mt-2 italic">
+                      Barco sem divisão de vagas por tipo
+                    </p>
+                  )}
+                  
+                  {/* Vagas disponíveis geral */}
+                  {boat.boatType !== 'escuna' && (
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      {boat.seatsTotal - boat.seatsTaken} vagas disponíveis
+                    </p>
+                  )}
                 </div>
 
                 {/* Botões de Ação */}
@@ -1229,16 +1427,76 @@ export default function AdminDashboard() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">👥 Número de Vagas *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">👥 Número Total de Vagas *</label>
                 <input
                   type="number"
                   value={seatsTotal}
-                  onChange={(e) => setSeatsTotal(Number(e.target.value))}
+                  onChange={(e) => {
+                    const total = Number(e.target.value);
+                    setSeatsTotal(total);
+                    // Atualizar automaticamente a divisão de vagas
+                    if (boatType === 'escuna') {
+                      const withLanding = Math.round(total * 0.25); // 25% com desembarque
+                      setSeatsWithLanding(withLanding);
+                      setSeatsWithoutLanding(total - withLanding);
+                    }
+                  }}
                   required
                   min={1}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
                 />
               </div>
+
+              {/* Vagas por tipo de serviço - apenas para Escuna */}
+              {boatType === 'escuna' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                  <p className="text-sm font-bold text-blue-800 flex items-center gap-2">
+                    🏝️ Distribuição de Vagas por Tipo de Serviço
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-blue-700 mb-1">
+                        Com Desembarque
+                      </label>
+                      <input
+                        type="number"
+                        value={seatsWithLanding}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setSeatsWithLanding(val);
+                          setSeatsWithoutLanding(seatsTotal - val);
+                        }}
+                        min={0}
+                        max={seatsTotal}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none text-base font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-blue-700 mb-1">
+                        Sem Desembarque (Panorâmico)
+                      </label>
+                      <input
+                        type="number"
+                        value={seatsWithoutLanding}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setSeatsWithoutLanding(val);
+                          setSeatsWithLanding(seatsTotal - val);
+                        }}
+                        min={0}
+                        max={seatsTotal}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none text-base font-semibold"
+                      />
+                    </div>
+                  </div>
+                  {seatsWithLanding + seatsWithoutLanding !== seatsTotal && (
+                    <p className="text-xs text-red-600 font-semibold">
+                      ⚠️ A soma ({seatsWithLanding + seatsWithoutLanding}) deve ser igual ao total ({seatsTotal})
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                   <DollarSign size={16} className="text-gray-500" />
@@ -2337,7 +2595,12 @@ function AdminReservationWizard({
     if (currentStep >= 3 && currentStep < 3 + numberOfPeople) {
       const personIndex = currentStep - 3;
       const person = people[personIndex];
-      return person && person.name && person.document && person.phone && person.birthDate;
+      // Telefone obrigatório apenas para o primeiro do grupo (responsável)
+      if (personIndex === 0) {
+        return person && person.name && person.document && person.phone && person.birthDate;
+      }
+      // Demais pessoas: telefone opcional
+      return person && person.name && person.document && person.birthDate;
     }
     return true;
   };
@@ -2365,11 +2628,28 @@ function AdminReservationWizard({
       return;
     }
 
-    // Verificar se há vagas suficientes
+    // Verificar se há vagas suficientes (geral)
     const vagasDisponiveis = selectedBoat.seatsTotal - selectedBoat.seatsTaken;
     if (numberOfPeople > vagasDisponiveis) {
       setError(`Não há vagas suficientes. Disponíveis: ${vagasDisponiveis}`);
       return;
+    }
+
+    // Verificar vagas por tipo de serviço (para escunas)
+    if (selectedBoat.boatType === 'escuna' && selectedBoat.seatsWithLanding !== undefined) {
+      if (escunaType === 'com-desembarque') {
+        const vagasDesembarque = (selectedBoat.seatsWithLanding || 0) - (selectedBoat.seatsWithLandingTaken || 0);
+        if (numberOfPeople > vagasDesembarque) {
+          setError(`Não há vagas COM DESEMBARQUE suficientes. Disponíveis: ${vagasDesembarque}`);
+          return;
+        }
+      } else {
+        const vagasPanoramico = (selectedBoat.seatsWithoutLanding || 0) - (selectedBoat.seatsWithoutLandingTaken || 0);
+        if (numberOfPeople > vagasPanoramico) {
+          setError(`Não há vagas PANORÂMICAS suficientes. Disponíveis: ${vagasPanoramico}`);
+          return;
+        }
+      }
     }
 
     setError('');
@@ -2408,7 +2688,11 @@ function AdminReservationWizard({
           updatedAt: Timestamp.now(),
         };
 
-        if (groupId) reservationData.groupId = groupId;
+        if (groupId) {
+          reservationData.groupId = groupId;
+          // Primeiro do grupo é o responsável/líder
+          reservationData.isGroupLeader = index === 0;
+        }
         if (selectedBoat.boatType === 'escuna') {
           reservationData.escunaType = escunaType;
         }
@@ -2618,28 +2902,59 @@ function AdminReservationWizard({
                 <div className="animate-fadeIn">
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Passeio</label>
                   <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEscunaType('sem-desembarque')}
-                      className={`px-4 py-3 rounded-lg font-bold transition ${
-                        escunaType === 'sem-desembarque'
-                          ? 'bg-green-600 text-white shadow-lg'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Sem Desembarque
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEscunaType('com-desembarque')}
-                      className={`px-4 py-3 rounded-lg font-bold transition ${
-                        escunaType === 'com-desembarque'
-                          ? 'bg-green-600 text-white shadow-lg'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Com Desembarque
-                    </button>
+                    {(() => {
+                      const vagasPanoramico = selectedBoat.seatsWithLanding !== undefined
+                        ? (selectedBoat.seatsWithoutLanding || 0) - (selectedBoat.seatsWithoutLandingTaken || 0)
+                        : selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+                      const vagasDesembarque = selectedBoat.seatsWithLanding !== undefined
+                        ? (selectedBoat.seatsWithLanding || 0) - (selectedBoat.seatsWithLandingTaken || 0)
+                        : selectedBoat.seatsTotal - selectedBoat.seatsTaken;
+                      
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEscunaType('sem-desembarque')}
+                            disabled={vagasPanoramico <= 0}
+                            className={`px-4 py-3 rounded-lg font-bold transition ${
+                              escunaType === 'sem-desembarque'
+                                ? 'bg-blue-600 text-white shadow-lg'
+                                : vagasPanoramico <= 0
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <div>🚤 Panorâmico</div>
+                            <div className={`text-xs mt-1 ${
+                              escunaType === 'sem-desembarque' ? 'text-blue-100' : 
+                              vagasPanoramico <= 0 ? 'text-red-400' : 'text-gray-500'
+                            }`}>
+                              {vagasPanoramico > 0 ? `${vagasPanoramico} vagas` : 'Esgotado'}
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEscunaType('com-desembarque')}
+                            disabled={vagasDesembarque <= 0}
+                            className={`px-4 py-3 rounded-lg font-bold transition ${
+                              escunaType === 'com-desembarque'
+                                ? 'bg-green-600 text-white shadow-lg'
+                                : vagasDesembarque <= 0
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <div>🏝️ Com Desembarque</div>
+                            <div className={`text-xs mt-1 ${
+                              escunaType === 'com-desembarque' ? 'text-green-100' : 
+                              vagasDesembarque <= 0 ? 'text-red-400' : 'text-gray-500'
+                            }`}>
+                              {vagasDesembarque > 0 ? `${vagasDesembarque} vagas` : 'Esgotado'}
+                            </div>
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -2773,10 +3088,13 @@ function AdminReservationWizard({
                       />
                     </div>
 
-                    {/* Telefone */}
+                    {/* Telefone - Obrigatório apenas para o responsável (primeiro do grupo) */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <Phone className="inline w-4 h-4 mr-1" /> Telefone *
+                        <Phone className="inline w-4 h-4 mr-1" /> Telefone {personIndex === 0 ? '*' : <span className="text-gray-400 font-normal">(opcional)</span>}
+                        {personIndex === 0 && numberOfPeople > 1 && (
+                          <span className="text-xs text-blue-600 ml-2 font-normal">(Responsável do grupo)</span>
+                        )}
                       </label>
                       <input
                         type="tel"
@@ -2786,9 +3104,9 @@ function AdminReservationWizard({
                           newPeople[personIndex] = { ...person, phone: e.target.value };
                           setPeople(newPeople);
                         }}
-                        required
+                        required={personIndex === 0}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        placeholder="(48) 99999-9999"
+                        placeholder={personIndex === 0 ? "(48) 99999-9999" : "Opcional"}
                       />
                     </div>
 

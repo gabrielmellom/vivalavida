@@ -1,5 +1,23 @@
 import { Reservation, Boat } from '@/types';
+import { translations as ptBR } from './translations/pt-BR';
+import { translations as en } from './translations/en';
+import { translations as es } from './translations/es';
+import { translations as de } from './translations/de';
+import { translations as fr } from './translations/fr';
 
+// Mapa de traduções
+const translationsMap: Record<string, Record<string, string>> = {
+  'pt-BR': ptBR,
+  'en': en,
+  'es': es,
+  'de': de,
+  'fr': fr,
+};
+
+// Função para obter tradução
+const t = (key: string, lang: string = 'pt-BR'): string => {
+  return translationsMap[lang]?.[key] || translationsMap['pt-BR']?.[key] || key;
+};
 
 // Função para gerar QR code usando API online
 const generateQRCodeImage = async (value: string): Promise<string> => {
@@ -32,7 +50,9 @@ const generateQRCodeImage = async (value: string): Promise<string> => {
   });
 };
 
-export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) => {
+export type SupportedLanguage = 'pt-BR' | 'en' | 'es' | 'de' | 'fr';
+
+export const generateVoucherPDF = async (reservation: Reservation, boat: Boat, language: SupportedLanguage = 'pt-BR') => {
   try {
     // Verificar se está no cliente
     if (typeof window === 'undefined') {
@@ -83,19 +103,19 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
     
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('Voucher de Embarque', pageWidth / 2, 35, { align: 'center' });
+    pdf.text(t('voucher.title', language), pageWidth / 2, 35, { align: 'center' });
 
     // Informações do cliente (sem box)
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Dados do Passageiro', margin, 68);
+    pdf.text(t('voucher.passenger', language), margin, 68);
 
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Nome: ${reservation.customerName}`, margin, 76);
-    pdf.text(`Telefone: ${reservation.phone}`, margin, 83);
-    pdf.text(`Assento: #${reservation.seatNumber}`, margin, 90);
+    pdf.text(`${reservation.customerName}`, margin, 76);
+    pdf.text(`${t('voucher.phone', language)}: ${reservation.phone}`, margin, 83);
+    pdf.text(`#${reservation.seatNumber}`, margin, 90);
 
     // Informações do Passeio
     // Formatar data sem problemas de timezone (mesma lógica do checkin)
@@ -106,29 +126,37 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
       if (!year || !month || !day) return dateString;
       // Criar a data ao meio-dia para evitar problemas de timezone
       const date = new Date(year, month - 1, day, 12, 0, 0);
-      return date.toLocaleDateString('pt-BR');
+      // Usar locale baseado no idioma
+      const locale = language === 'pt-BR' ? 'pt-BR' : language === 'de' ? 'de-DE' : language === 'fr' ? 'fr-FR' : language === 'es' ? 'es-ES' : 'en-US';
+      return date.toLocaleDateString(locale);
     };
     const boatDate = formatDateForPDF(boat.date);
     
     // Informações do passeio (sem box)
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Informações do Passeio', margin, 105);
+    pdf.text(t('voucher.tour', language), margin, 105);
 
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Barco: ${boat.name}`, margin, 115);
-    pdf.text(`Data: ${boatDate}`, margin, 123);
-    pdf.text(`Tipo: ${boat.boatType === 'escuna' ? 'Escuna' : 'Lancha'}`, margin, 131);
+    pdf.text(`${t('voucher.boat', language)}: ${boat.name}`, margin, 115);
+    pdf.text(`${t('voucher.date', language)}: ${boatDate}`, margin, 123);
+    const boatTypeText = boat.boatType === 'escuna' ? 'Escuna' : 'Lancha';
+    pdf.text(`${boatTypeText}`, margin, 131);
     
     // Tipo de serviço se disponível
     if (reservation.escunaType) {
-      const serviceType = reservation.escunaType === 'com-desembarque' 
-        ? 'Com Desembarque na Ilha' 
-        : 'Sem Desembarque (Panorâmico)';
+      const serviceTypeMap: Record<string, Record<string, string>> = {
+        'pt-BR': { 'com-desembarque': 'Com Desembarque na Ilha', 'sem-desembarque': 'Sem Desembarque (Panorâmico)' },
+        'en': { 'com-desembarque': 'With Island Landing', 'sem-desembarque': 'No Landing (Panoramic)' },
+        'es': { 'com-desembarque': 'Con Desembarque en la Isla', 'sem-desembarque': 'Sin Desembarque (Panorámico)' },
+        'de': { 'com-desembarque': 'Mit Insellandung', 'sem-desembarque': 'Ohne Landung (Panorama)' },
+        'fr': { 'com-desembarque': 'Avec Débarquement sur l\'Île', 'sem-desembarque': 'Sans Débarquement (Panoramique)' },
+      };
+      const serviceType = serviceTypeMap[language]?.[reservation.escunaType] || serviceTypeMap['pt-BR'][reservation.escunaType];
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(33, 150, 243);
-      pdf.text(`Serviço: ${serviceType}`, margin, 139);
+      pdf.text(serviceType, margin, 139);
       pdf.setTextColor(0, 0, 0);
     }
 
@@ -136,22 +164,29 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
     const valuesY = 150;
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Valores', margin, valuesY);
+    pdf.text('Total', margin, valuesY);
     
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Total: R$ ${reservation.totalAmount.toFixed(2)}`, margin, valuesY + 10);
+    pdf.text(`R$ ${reservation.totalAmount.toFixed(2)}`, margin, valuesY + 10);
     pdf.setTextColor(27, 94, 32);
-    pdf.text(`Pago: R$ ${reservation.amountPaid.toFixed(2)}`, margin, valuesY + 18);
+    pdf.text(`${t('voucher.paid', language)}: R$ ${reservation.amountPaid.toFixed(2)}`, margin, valuesY + 18);
     
     if (reservation.amountDue > 0) {
       pdf.setTextColor(191, 54, 12);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`Pendente: R$ ${reservation.amountDue.toFixed(2)}`, margin, valuesY + 26);
+      pdf.text(`${t('voucher.pending', language)}: R$ ${reservation.amountDue.toFixed(2)}`, margin, valuesY + 26);
     } else {
       pdf.setTextColor(27, 94, 32);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Pagamento Completo', margin, valuesY + 26);
+      const completeMap: Record<string, string> = {
+        'pt-BR': 'Pagamento Completo',
+        'en': 'Payment Complete',
+        'es': 'Pago Completo',
+        'de': 'Zahlung Abgeschlossen',
+        'fr': 'Paiement Complet',
+      };
+      pdf.text(completeMap[language] || completeMap['pt-BR'], margin, valuesY + 26);
     }
     pdf.setTextColor(0, 0, 0);
 
@@ -170,11 +205,25 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(33, 150, 243);
-      pdf.text('Escaneie no embarque', pageWidth / 2, qrY + qrSize + 8, { align: 'center' });
+      const scanTextMap: Record<string, string> = {
+        'pt-BR': 'Escaneie no embarque',
+        'en': 'Scan at check-in',
+        'es': 'Escanear en el embarque',
+        'de': 'Beim Check-in scannen',
+        'fr': 'Scanner à l\'embarquement',
+      };
+      pdf.text(scanTextMap[language] || scanTextMap['pt-BR'], pageWidth / 2, qrY + qrSize + 8, { align: 'center' });
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(100, 100, 100);
-      pdf.text('para processar pagamento', pageWidth / 2, qrY + qrSize + 13, { align: 'center' });
+      const paymentTextMap: Record<string, string> = {
+        'pt-BR': 'para processar pagamento',
+        'en': 'to process payment',
+        'es': 'para procesar el pago',
+        'de': 'zur Zahlungsabwicklung',
+        'fr': 'pour traiter le paiement',
+      };
+      pdf.text(paymentTextMap[language] || paymentTextMap['pt-BR'], pageWidth / 2, qrY + qrSize + 13, { align: 'center' });
     } catch (error) {
       console.error('Erro ao adicionar QR code ao PDF:', error);
     }
@@ -182,31 +231,43 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat) =
     // Rodapé
     pdf.setFontSize(8);
     pdf.setTextColor(150, 150, 150);
-    pdf.text('Este voucher deve ser apresentado no embarque', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    const footerTextMap: Record<string, string> = {
+      'pt-BR': 'Este voucher deve ser apresentado no embarque',
+      'en': 'This voucher must be presented at boarding',
+      'es': 'Este voucher debe presentarse en el embarque',
+      'de': 'Dieser Gutschein muss beim Einsteigen vorgezeigt werden',
+      'fr': 'Ce bon doit être présenté à l\'embarquement',
+    };
+    pdf.text(footerTextMap[language] || footerTextMap['pt-BR'], pageWidth / 2, pageHeight - 10, { align: 'center' });
     pdf.text(`ID: ${reservation.id}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
 
-    // Gerar nome do arquivo
-    const fileName = `voucher-${reservation.customerName.replace(/\s+/g, '-').toLowerCase()}-${reservation.seatNumber}.pdf`;
-    
-    // Método compatível com celular: criar blob e forçar download
+    // Gerar blob do PDF
     const pdfBlob = pdf.output('blob');
     const blobUrl = URL.createObjectURL(pdfBlob);
     
-    // Criar link invisível e simular clique para download
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName;
-    link.style.display = 'none';
-    document.body.appendChild(link);
+    // Abrir em nova aba
+    const newWindow = window.open(blobUrl, '_blank');
     
-    // Forçar clique para iniciar download
-    link.click();
-    
-    // Limpar após pequeno delay
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-    }, 100);
+    // Se não conseguiu abrir (pop-up bloqueado), fazer download
+    if (!newWindow) {
+      const fileName = `voucher-${reservation.customerName.replace(/\s+/g, '-').toLowerCase()}-${reservation.seatNumber}.pdf`;
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      }, 100);
+    } else {
+      // Limpar URL após um tempo quando abrir em nova aba
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+      }, 5000);
+    }
     
   } catch (error) {
     console.error('Erro ao gerar voucher PDF:', error);

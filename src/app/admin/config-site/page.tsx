@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { TourConfig, TourPricing, TourFeature, SiteConfig } from '@/types';
+import { TourConfig, TourPricing, TourFeature, SiteConfig, BankAccount } from '@/types';
 import { 
   ArrowLeft, 
   Plus, 
@@ -26,7 +26,8 @@ import {
   Mail,
   MapPin,
   ImagePlus,
-  Loader2
+  Loader2,
+  Building2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -107,6 +108,7 @@ export default function ConfigSitePage() {
         googleRating: siteConfig.googleRating,
         heroTitle: siteConfig.heroTitle,
         heroSubtitle: siteConfig.heroSubtitle,
+        banks: siteConfig.banks || [],
         updatedAt: Timestamp.now(),
       });
       alert('Configurações salvas com sucesso!');
@@ -511,6 +513,125 @@ export default function ConfigSitePage() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Bancos */}
+              <div className="border-t pt-6">
+                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <Building2 size={20} className="text-blue-600" />
+                  Bancos / Contas para Recebimento
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Configure os bancos/contas onde você recebe pagamentos. Isso permitirá selecionar o banco ao registrar pagamentos no check-in.
+                </p>
+                
+                {/* Lista de bancos */}
+                <div className="space-y-2 mb-4">
+                  {(siteConfig.banks || []).map((bank) => (
+                    <div
+                      key={bank.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        bank.isActive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Building2 size={18} className={bank.isActive ? 'text-green-600' : 'text-gray-400'} />
+                        <span className={`font-semibold ${bank.isActive ? 'text-green-800' : 'text-gray-600'}`}>
+                          {bank.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedBanks = (siteConfig.banks || []).map(b =>
+                              b.id === bank.id ? { ...b, isActive: !b.isActive } : b
+                            );
+                            setSiteConfig({ ...siteConfig, banks: updatedBanks });
+                          }}
+                          className={`p-1.5 rounded transition ${
+                            bank.isActive 
+                              ? 'text-green-600 hover:bg-green-100' 
+                              : 'text-gray-400 hover:bg-gray-200'
+                          }`}
+                          title={bank.isActive ? 'Desativar' : 'Ativar'}
+                        >
+                          {bank.isActive ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Remover o banco "${bank.name}"?`)) {
+                              const updatedBanks = (siteConfig.banks || []).filter(b => b.id !== bank.id);
+                              setSiteConfig({ ...siteConfig, banks: updatedBanks });
+                            }
+                          }}
+                          className="p-1.5 rounded text-red-500 hover:bg-red-100 transition"
+                          title="Remover"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {(siteConfig.banks || []).length === 0 && (
+                    <div className="text-center py-4 text-gray-500 text-sm">
+                      Nenhum banco configurado ainda
+                    </div>
+                  )}
+                </div>
+                
+                {/* Adicionar novo banco */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="newBankName"
+                    placeholder="Nome do banco ou conta..."
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const input = e.target as HTMLInputElement;
+                        const name = input.value.trim();
+                        if (name) {
+                          const newBank: BankAccount = {
+                            id: `bank_${Date.now()}`,
+                            name,
+                            isActive: true,
+                          };
+                          setSiteConfig({
+                            ...siteConfig,
+                            banks: [...(siteConfig.banks || []), newBank],
+                          });
+                          input.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('newBankName') as HTMLInputElement;
+                      const name = input.value.trim();
+                      if (name) {
+                        const newBank: BankAccount = {
+                          id: `bank_${Date.now()}`,
+                          name,
+                          isActive: true,
+                        };
+                        setSiteConfig({
+                          ...siteConfig,
+                          banks: [...(siteConfig.banks || []), newBank],
+                        });
+                        input.value = '';
+                      }
+                    }}
+                    className="px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Adicionar
+                  </button>
                 </div>
               </div>
 

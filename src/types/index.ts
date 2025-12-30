@@ -6,7 +6,12 @@ export interface Boat {
   seatsTaken: number;
   status: 'active' | 'inactive' | 'completed';
   boatType: 'escuna' | 'lancha';
-  escunaType?: 'sem-desembarque' | 'com-desembarque'; // apenas para escuna
+  escunaType?: 'sem-desembarque' | 'com-desembarque'; // apenas para escuna (legacy)
+  // Vagas por tipo de serviço (para escunas)
+  seatsWithLanding?: number; // Vagas com desembarque na ilha
+  seatsWithLandingTaken?: number; // Vagas com desembarque ocupadas
+  seatsWithoutLanding?: number; // Vagas sem desembarque (panorâmico)
+  seatsWithoutLandingTaken?: number; // Vagas sem desembarque ocupadas
   ticketPrice: number; // Preço do ingresso por pessoa (adulto)
   createdBy: string; // admin uid
   createdAt: Date;
@@ -26,6 +31,7 @@ export interface Reservation {
   birthDate?: string; // ISO date string
   email?: string;
   groupId?: string; // Para reservas em grupo (mesma família)
+  isGroupLeader?: boolean; // Se é o responsável/líder do grupo
   paymentMethod: 'pix' | 'cartao' | 'dinheiro';
   amountPaid: number;
   amountDue: number;
@@ -63,6 +69,8 @@ export interface Payment {
   reservationId: string;
   amount: number;
   method: PaymentMethod;
+  bankId?: string; // banco onde foi recebido o pagamento
+  bankName?: string; // nome do banco (para facilitar exibição)
   source: 'entrada' | 'checkin' | 'vendedor' | 'admin'; // origem do pagamento
   vendorId?: string; // se foi pago pelo vendedor
   createdAt: Date;
@@ -127,6 +135,12 @@ export interface TourConfig {
   updatedAt: Date;
 }
 
+export interface BankAccount {
+  id: string;
+  name: string; // Nome do banco ou descrição
+  isActive: boolean;
+}
+
 export interface SiteConfig {
   id: string;
   whatsappNumber: string; // número do WhatsApp principal
@@ -139,6 +153,7 @@ export interface SiteConfig {
   googleRating: number; // nota média
   heroTitle: string;
   heroSubtitle: string;
+  banks?: BankAccount[]; // Lista de bancos configurados
   updatedAt: Date;
 }
 

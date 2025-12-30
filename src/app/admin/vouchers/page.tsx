@@ -5,10 +5,20 @@ import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestor
 import { db } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, Users, QrCode, ArrowLeft, Search, Phone, MessageCircle, FileCheck, FileX, Send, CheckCircle, Camera, AlertCircle } from 'lucide-react';
+import { Calendar, Users, QrCode, ArrowLeft, Search, Phone, MessageCircle, FileCheck, FileX, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { generateVoucherPDF } from '@/lib/voucherGenerator';
+import { generateVoucherPDF, SupportedLanguage } from '@/lib/voucherGenerator';
 import { updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { Globe } from 'lucide-react';
+
+// Idiomas disponíveis
+const LANGUAGES: { code: SupportedLanguage; name: string; flag: string }[] = [
+  { code: 'pt-BR', name: 'Português', flag: '🇧🇷' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+];
 
 export default function VouchersPage() {
   const { user } = useAuth();
@@ -17,6 +27,8 @@ export default function VouchersPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('pt-BR');
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     // Buscar barcos
@@ -73,7 +85,7 @@ export default function VouchersPage() {
     return () => unsubscribe();
   }, [selectedBoat]);
 
-  const handleGenerateVoucher = async (reservation: Reservation) => {
+  const handleGenerateVoucher = async (reservation: Reservation, language: SupportedLanguage = 'pt-BR') => {
     // Verificar se aceitou os termos
     if (!reservation.acceptedTerms) {
       alert('O cliente ainda não aceitou os termos. Envie o link de aceite primeiro.');
@@ -81,7 +93,8 @@ export default function VouchersPage() {
     }
 
     try {
-      await generateVoucherPDF(reservation, selectedBoat!);
+      await generateVoucherPDF(reservation, selectedBoat!, language);
+      setShowLanguageDropdown(null);
     } catch (error) {
       console.error('Erro ao gerar voucher:', error);
       alert('Erro ao gerar voucher. Tente novamente.');
@@ -110,12 +123,21 @@ export default function VouchersPage() {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     const termsUrl = `${baseUrl}/aceite/${reservation.id}`;
     
+    // Contar membros do grupo se existir
+    let groupInfo = '';
+    if (reservation.groupId) {
+      const groupMembers = reservations.filter(r => r.groupId === reservation.groupId);
+      if (groupMembers.length > 1) {
+        groupInfo = `\n\n👥 Você é o responsável pelo grupo de ${groupMembers.length} pessoas. Ao aceitar os termos, você estará aceitando em nome de todo o grupo.`;
+      }
+    }
+    
     const message = `Olá ${reservation.customerName.split(' ')[0]}! 🌊
 
 Falta apenas um passo para completar sua reserva no passeio VIVA LA VIDA!
 
 📋 Por favor, acesse o link abaixo para aceitar os termos do passeio:
-${termsUrl}
+${termsUrl}${groupInfo}
 
 Após aceitar, você receberá seu voucher de embarque.
 
@@ -127,16 +149,35 @@ Obrigado e até breve! 🚢`;
     // Abrir WhatsApp
     window.open(whatsappUrl, '_blank');
 
-    // Marcar que o link foi enviado
+    // Marcar que o link foi enviado para o responsável
     try {
       await updateDoc(doc(db, 'reservations', reservation.id), {
         termsLinkSent: true,
         termsLinkSentAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+      
+      // Se faz parte de um grupo, marcar que o link foi enviado para todos
+      if (reservation.groupId) {
+        const groupMembers = reservations.filter(r => r.groupId === reservation.groupId && r.id !== reservation.id);
+        for (const member of groupMembers) {
+          await updateDoc(doc(db, 'reservations', member.id), {
+            termsLinkSent: true,
+            termsLinkSentAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+      }
     } catch (error) {
       console.error('Erro ao atualizar status do link:', error);
     }
+  };
+  
+  // Verificar se deve mostrar botão de enviar termos (apenas para responsável ou individual)
+  const shouldShowSendTerms = (reservation: Reservation) => {
+    if (!reservation.groupId) return true; // Individual - sempre mostrar
+    // Se é grupo, mostrar apenas se for o líder ou se não tiver líder definido
+    return reservation.isGroupLeader === true || reservation.isGroupLeader === undefined;
   };
 
   const getTermsStatus = (reservation: Reservation) => {
@@ -349,28 +390,58 @@ Obrigado e até breve! 🚢`;
 
                       {/* Botões de Ação */}
                       <div className="space-y-2">
-                        {!reservation.acceptedTerms && (
+                        {!reservation.acceptedTerms && shouldShowSendTerms(reservation) && (
                           <button
                             onClick={() => handleSendTermsLink(reservation)}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg transition"
                           >
                             <Send size={18} />
-                            Enviar Link de Termos
+                            {reservation.groupId ? 'Enviar Termos (Responsável)' : 'Enviar Link de Termos'}
                           </button>
                         )}
+                        {!reservation.acceptedTerms && reservation.groupId && !shouldShowSendTerms(reservation) && (
+                          <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-500 rounded-lg font-semibold text-sm">
+                            <Users size={16} />
+                            Aguardando aceite do responsável
+                          </div>
+                        )}
                         
-                        <button
-                          onClick={() => handleGenerateVoucher(reservation)}
-                          disabled={!reservation.acceptedTerms}
-                          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition ${
-                            reservation.acceptedTerms
-                              ? 'bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white hover:shadow-lg'
-                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                          }`}
-                        >
-                          <QrCode size={18} />
-                          {reservation.acceptedTerms ? 'Gerar Voucher' : 'Aguardando Aceite'}
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowLanguageDropdown(showLanguageDropdown === reservation.id ? null : reservation.id)}
+                            disabled={!reservation.acceptedTerms}
+                            className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition ${
+                              reservation.acceptedTerms
+                                ? 'bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white hover:shadow-lg'
+                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <QrCode size={18} />
+                            {reservation.acceptedTerms ? 'Gerar Voucher' : 'Aguardando Aceite'}
+                            {reservation.acceptedTerms && <Globe size={14} />}
+                          </button>
+                          
+                          {/* Dropdown de idiomas */}
+                          {showLanguageDropdown === reservation.id && (
+                            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                              <div className="p-2">
+                                <p className="text-xs text-gray-500 mb-2 text-center">Selecione o idioma</p>
+                                <div className="grid grid-cols-2 gap-1">
+                                  {LANGUAGES.map((lang) => (
+                                    <button
+                                      key={lang.code}
+                                      onClick={() => handleGenerateVoucher(reservation, lang.code)}
+                                      className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                    >
+                                      <span>{lang.flag}</span>
+                                      <span>{lang.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -469,29 +540,54 @@ Obrigado e até breve! 🚢`;
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              {!reservation.acceptedTerms && (
+                              {!reservation.acceptedTerms && shouldShowSendTerms(reservation) && (
                                 <button
                                   onClick={() => handleSendTermsLink(reservation)}
                                   className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition text-xs"
-                                  title="Enviar link de termos via WhatsApp"
+                                  title={reservation.groupId ? "Enviar link de termos (responsável do grupo)" : "Enviar link de termos via WhatsApp"}
                                 >
                                   <Send size={14} />
-                                  Termos
+                                  {reservation.groupId ? 'Resp.' : 'Termos'}
                                 </button>
                               )}
-                              <button
-                                onClick={() => handleGenerateVoucher(reservation)}
-                                disabled={!reservation.acceptedTerms}
-                                className={`flex items-center gap-1 px-3 py-2 rounded-lg font-semibold transition text-xs ${
-                                  reservation.acceptedTerms
-                                    ? 'bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white hover:shadow-lg'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                }`}
-                                title={reservation.acceptedTerms ? 'Gerar Voucher PDF' : 'Aguardando aceite dos termos'}
-                              >
-                                <QrCode size={14} />
-                                Voucher
-                              </button>
+                              {!reservation.acceptedTerms && reservation.groupId && !shouldShowSendTerms(reservation) && (
+                                <span className="text-xs text-gray-400">Aguard. resp.</span>
+                              )}
+                              <div className="relative">
+                                <button
+                                  onClick={() => setShowLanguageDropdown(showLanguageDropdown === `desktop-${reservation.id}` ? null : `desktop-${reservation.id}`)}
+                                  disabled={!reservation.acceptedTerms}
+                                  className={`flex items-center gap-1 px-3 py-2 rounded-lg font-semibold transition text-xs ${
+                                    reservation.acceptedTerms
+                                      ? 'bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white hover:shadow-lg'
+                                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                  }`}
+                                  title={reservation.acceptedTerms ? 'Gerar Voucher PDF' : 'Aguardando aceite dos termos'}
+                                >
+                                  <QrCode size={14} />
+                                  Voucher
+                                  {reservation.acceptedTerms && <Globe size={12} />}
+                                </button>
+                                
+                                {/* Dropdown de idiomas desktop */}
+                                {showLanguageDropdown === `desktop-${reservation.id}` && (
+                                  <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[180px]">
+                                    <div className="p-2">
+                                      <p className="text-xs text-gray-500 mb-2 text-center">Idioma do Voucher</p>
+                                      {LANGUAGES.map((lang) => (
+                                        <button
+                                          key={lang.code}
+                                          onClick={() => handleGenerateVoucher(reservation, lang.code)}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                        >
+                                          <span>{lang.flag}</span>
+                                          <span>{lang.name}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>

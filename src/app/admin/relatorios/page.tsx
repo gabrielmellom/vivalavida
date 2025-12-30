@@ -33,6 +33,13 @@ interface VendorSales {
   cancelRate: number;
 }
 
+interface BankPaymentSummary {
+  bankId: string;
+  bankName: string;
+  totalAmount: number;
+  paymentCount: number;
+}
+
 interface SalesReport {
   period: string;
   totalReservations: number;
@@ -48,6 +55,8 @@ interface SalesReport {
     cartao: number;
     dinheiro: number;
   };
+  paymentsByBank: BankPaymentSummary[];
+  totalReceived: number; // Total efetivamente recebido (soma de todos os pagamentos)
   expenses: number;
   netProfit: number;
   vendorSales: VendorSales[];
@@ -181,8 +190,11 @@ export default function RelatoriosPage() {
           return createdAt >= start && createdAt <= end;
         });
       } else {
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
+        // Criar datas com timezone correto
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+        const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0);
+        const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59);
         
         filteredReservations = reservations.filter(r => {
           const createdAt = r.createdAt || new Date(0);
@@ -267,12 +279,19 @@ export default function RelatoriosPage() {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       // Calcular pagamentos por método no período
-      const periodStart = filterType === 'month'
-        ? new Date(selectedMonth + '-01')
-        : new Date(startDate + 'T00:00:00');
-      const periodEnd = filterType === 'month'
-        ? new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]), 0, 23, 59, 59)
-        : new Date(endDate + 'T23:59:59');
+      let periodStart: Date;
+      let periodEnd: Date;
+      
+      if (filterType === 'month') {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        periodStart = new Date(year, month - 1, 1, 0, 0, 0);
+        periodEnd = new Date(year, month, 0, 23, 59, 59);
+      } else {
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+        periodStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0);
+        periodEnd = new Date(endYear, endMonth - 1, endDay, 23, 59, 59);
+      }
 
       const filteredPayments = payments.filter(p => {
         const paymentDate = p.createdAt || new Date(0);
@@ -284,6 +303,34 @@ export default function RelatoriosPage() {
         cartao: filteredPayments.filter(p => p.method === 'cartao').reduce((sum, p) => sum + p.amount, 0),
         dinheiro: filteredPayments.filter(p => p.method === 'dinheiro').reduce((sum, p) => sum + p.amount, 0),
       };
+
+      // Calcular pagamentos por banco
+      const bankPaymentsMap = new Map<string, { bankName: string; totalAmount: number; paymentCount: number }>();
+      
+      filteredPayments.forEach(payment => {
+        const bankId = payment.bankId || 'sem-banco';
+        const bankName = payment.bankName || 'Não especificado';
+        
+        if (!bankPaymentsMap.has(bankId)) {
+          bankPaymentsMap.set(bankId, { bankName, totalAmount: 0, paymentCount: 0 });
+        }
+        
+        const bankData = bankPaymentsMap.get(bankId)!;
+        bankData.totalAmount += payment.amount;
+        bankData.paymentCount += 1;
+      });
+
+      const paymentsByBank: BankPaymentSummary[] = Array.from(bankPaymentsMap.entries())
+        .map(([bankId, data]) => ({
+          bankId,
+          bankName: data.bankName,
+          totalAmount: data.totalAmount,
+          paymentCount: data.paymentCount,
+        }))
+        .sort((a, b) => b.totalAmount - a.totalAmount);
+
+      // Total efetivamente recebido (soma de todos os pagamentos no período)
+      const totalReceived = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
 
       // Calcular despesas no período
       const filteredExpenses = expenses.filter(e => {
@@ -334,6 +381,8 @@ export default function RelatoriosPage() {
         totalDue,
         cancelRate,
         paymentsByMethod,
+        paymentsByBank,
+        totalReceived,
         expenses: totalExpenses,
         netProfit,
         vendorSales: vendorSalesArray,
@@ -365,10 +414,23 @@ export default function RelatoriosPage() {
     csv += `Total Recebido,R$ ${report.totalPaid.toFixed(2)}\n`;
     csv += `Total a Receber,R$ ${report.totalDue.toFixed(2)}\n\n`;
     
+    csv += 'TOTAL RECEBIDO NO PERÍODO\n';
+    csv += `Total Recebido,R$ ${report.totalReceived.toFixed(2)}\n\n`;
+    
     csv += 'PAGAMENTOS POR MÉTODO\n';
     csv += `PIX,R$ ${report.paymentsByMethod.pix.toFixed(2)}\n`;
     csv += `Cartão,R$ ${report.paymentsByMethod.cartao.toFixed(2)}\n`;
     csv += `Dinheiro,R$ ${report.paymentsByMethod.dinheiro.toFixed(2)}\n\n`;
+    
+    if (report.paymentsByBank.length > 0) {
+      csv += 'RECEBIMENTOS POR BANCO\n';
+      csv += 'Banco,Valor Total,Quantidade de Pagamentos,Percentual\n';
+      report.paymentsByBank.forEach(bank => {
+        const percentual = ((bank.totalAmount / report.totalReceived) * 100).toFixed(1);
+        csv += `"${bank.bankName}",R$ ${bank.totalAmount.toFixed(2)},${bank.paymentCount},${percentual}%\n`;
+      });
+      csv += '\n';
+    }
     
     csv += 'FINANCEIRO\n';
     csv += `Contas a Pagar,R$ ${report.expenses.toFixed(2)}\n`;
@@ -495,18 +557,18 @@ export default function RelatoriosPage() {
         {report && (
           <div className="space-y-6">
             {/* Cabeçalho do Relatório */}
-            <div className="bg-white rounded-xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div>
-                  <h2 className="text-2xl font-black text-viva-blue-dark">Relatório de Vendas</h2>
-                  <p className="text-gray-600 mt-1">Período: {report.period}</p>
+                  <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark">Relatório de Vendas</h2>
+                  <p className="text-gray-600 mt-1 text-sm sm:text-base">Período: {report.period}</p>
                 </div>
                 <button
                   onClick={exportToCSV}
-                  className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 transition"
+                  className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold hover:bg-green-700 transition text-sm sm:text-base"
                 >
-                  <Download size={20} />
-                  Exportar CSV
+                  <Download size={18} />
+                  <span className="hidden sm:inline">Exportar</span> CSV
                 </button>
               </div>
 
@@ -584,6 +646,18 @@ export default function RelatoriosPage() {
                 </div>
               </div>
 
+              {/* Total Recebido */}
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl p-4 sm:p-6 mt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-emerald-100 font-semibold mb-1 text-sm sm:text-base">💰 Total Recebido no Período</p>
+                    <p className="text-2xl sm:text-4xl font-black text-white">R$ {report.totalReceived.toFixed(2)}</p>
+                    <p className="text-emerald-100 text-xs sm:text-sm mt-1">Soma de todos os pagamentos registrados</p>
+                  </div>
+                  <DollarSign className="text-white opacity-30 hidden sm:block" size={64} />
+                </div>
+              </div>
+
               {/* Pagamentos por Método */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
@@ -599,6 +673,40 @@ export default function RelatoriosPage() {
                   <p className="text-2xl font-black text-green-900">R$ {report.paymentsByMethod.dinheiro.toFixed(2)}</p>
                 </div>
               </div>
+
+              {/* Recebimentos por Banco */}
+              {report.paymentsByBank.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-bold text-viva-blue-dark mb-4 flex items-center gap-2">
+                    🏦 Recebimentos por Banco
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {report.paymentsByBank.map((bank) => (
+                      <div 
+                        key={bank.bankId} 
+                        className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200 hover:shadow-md transition"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-slate-600 font-semibold">{bank.bankName}</p>
+                          <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full">
+                            {bank.paymentCount} pagamento{bank.paymentCount > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-black text-slate-800">R$ {bank.totalAmount.toFixed(2)}</p>
+                        <div className="mt-2 bg-slate-200 rounded-full h-2 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${(bank.totalAmount / report.totalReceived) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 text-right">
+                          {((bank.totalAmount / report.totalReceived) * 100).toFixed(1)}% do total
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Financeiro: Despesas e Lucro Líquido */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">

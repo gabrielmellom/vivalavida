@@ -3,24 +3,24 @@
 import { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Reservation, Boat, Payment, PaymentMethod } from '@/types';
+import { Reservation, Boat, Payment, PaymentMethod, BankAccount, SiteConfig } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
-// Cores para identificar grupos (paleta profissional)
+// Cores para identificar grupos (paleta vibrante e colorida)
 const GROUP_COLORS = [
-  { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700', badge: 'bg-slate-600' },
-  { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', badge: 'bg-blue-600' },
-  { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', badge: 'bg-gray-600' },
-  { bg: 'bg-slate-100', border: 'border-slate-400', text: 'text-slate-800', badge: 'bg-slate-700' },
-  { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800', badge: 'bg-blue-700' },
-  { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', badge: 'bg-indigo-600' },
-  { bg: 'bg-slate-200', border: 'border-slate-500', text: 'text-slate-900', badge: 'bg-slate-800' },
-  { bg: 'bg-blue-200', border: 'border-blue-500', text: 'text-blue-900', badge: 'bg-blue-800' },
-  { bg: 'bg-gray-100', border: 'border-gray-400', text: 'text-gray-800', badge: 'bg-gray-700' },
-  { bg: 'bg-indigo-100', border: 'border-indigo-400', text: 'text-indigo-800', badge: 'bg-indigo-700' },
+  { bg: 'bg-rose-50', border: 'border-rose-400', text: 'text-rose-700', badge: 'bg-rose-500' },
+  { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', badge: 'bg-emerald-500' },
+  { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', badge: 'bg-violet-500' },
+  { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', badge: 'bg-amber-500' },
+  { bg: 'bg-cyan-50', border: 'border-cyan-400', text: 'text-cyan-700', badge: 'bg-cyan-500' },
+  { bg: 'bg-pink-50', border: 'border-pink-400', text: 'text-pink-700', badge: 'bg-pink-500' },
+  { bg: 'bg-teal-50', border: 'border-teal-400', text: 'text-teal-700', badge: 'bg-teal-500' },
+  { bg: 'bg-orange-50', border: 'border-orange-400', text: 'text-orange-700', badge: 'bg-orange-500' },
+  { bg: 'bg-fuchsia-50', border: 'border-fuchsia-400', text: 'text-fuchsia-700', badge: 'bg-fuchsia-500' },
+  { bg: 'bg-lime-50', border: 'border-lime-400', text: 'text-lime-700', badge: 'bg-lime-500' },
 ];
 
 // Função para obter cor do grupo baseado no groupId
@@ -52,6 +52,7 @@ function CheckInPageContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [reservationToCheckIn, setReservationToCheckIn] = useState<Reservation | null>(null);
+  const [groupReservationsToCheckIn, setGroupReservationsToCheckIn] = useState<Reservation[]>([]); // Para check-in em grupo
   const [remainingAmount, setRemainingAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   // Suporte para 2 formas de pagamento
@@ -60,8 +61,30 @@ function CheckInPageContent() {
   const [firstPaymentMethod, setFirstPaymentMethod] = useState<PaymentMethod>('pix');
   const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
   const [secondPaymentMethod, setSecondPaymentMethod] = useState<PaymentMethod>('dinheiro');
+  // Bancos
+  const [banks, setBanks] = useState<BankAccount[]>([]);
+  const [selectedBank, setSelectedBank] = useState<string>('');
+  const [firstPaymentBank, setFirstPaymentBank] = useState<string>('');
+  const [secondPaymentBank, setSecondPaymentBank] = useState<string>('');
   const pendingReservationIdRef = useRef<string | null>(null);
   const hasProcessedVoucherRef = useRef(false);
+
+  // Carregar bancos da configuração
+  useEffect(() => {
+    const loadBanks = async () => {
+      try {
+        const configSnapshot = await getDocs(collection(db, 'siteConfig'));
+        if (configSnapshot.docs.length > 0) {
+          const configData = configSnapshot.docs[0].data() as SiteConfig;
+          const activeBanks = (configData.banks || []).filter(b => b.isActive);
+          setBanks(activeBanks);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar bancos:', error);
+      }
+    };
+    loadBanks();
+  }, []);
 
   useEffect(() => {
     let reservationsUnsubscribe: (() => void) | null = null;
@@ -209,7 +232,10 @@ function CheckInPageContent() {
   }, [reservations, boat]);
 
   const handleCheckIn = async (reservationId: string, currentlyCheckedIn: boolean) => {
-    // Se já está marcado, pode desmarcar direto
+    const reservation = reservations.find(r => r.id === reservationId);
+    if (!reservation) return;
+
+    // Se já está marcado, pode desmarcar direto (apenas essa reserva individual)
     if (currentlyCheckedIn) {
       try {
         await updateDoc(doc(db, 'reservations', reservationId), {
@@ -223,21 +249,35 @@ function CheckInPageContent() {
       return;
     }
 
-    // Se não está marcado, verificar se tem pagamento pendente
-    const reservation = reservations.find(r => r.id === reservationId);
-    if (reservation && reservation.amountDue > 0) {
+    // Se faz parte de um grupo, buscar todos do grupo que ainda não fizeram check-in
+    let groupMembers: Reservation[] = [];
+    if (reservation.groupId) {
+      groupMembers = reservations.filter(r => 
+        r.groupId === reservation.groupId && !r.checkedIn
+      );
+    } else {
+      groupMembers = [reservation];
+    }
+
+    // Calcular valor total pendente do grupo
+    const totalGroupAmountDue = groupMembers.reduce((sum, r) => sum + r.amountDue, 0);
+
+    if (totalGroupAmountDue > 0) {
       // Mostrar modal de confirmação com opção de registrar pagamento
-      setReservationToCheckIn(reservation);
-      setRemainingAmount(reservation.amountDue.toString());
+      setReservationToCheckIn(reservation); // Reserva principal (responsável)
+      setGroupReservationsToCheckIn(groupMembers); // Todas do grupo
+      setRemainingAmount(totalGroupAmountDue.toString());
       setPaymentMethod('pix');
       setShowPaymentConfirm(true);
     } else {
-      // Se não tem pendência, marcar direto
+      // Se não tem pendência, marcar check-in de todos do grupo
       try {
-        await updateDoc(doc(db, 'reservations', reservationId), {
-          checkedIn: true,
-          updatedAt: Timestamp.now(),
-        });
+        for (const member of groupMembers) {
+          await updateDoc(doc(db, 'reservations', member.id), {
+            checkedIn: true,
+            updatedAt: Timestamp.now(),
+          });
+        }
       } catch (error) {
         console.error('Erro ao atualizar check-in:', error);
         alert('Erro ao atualizar check-in. Tente novamente.');
@@ -246,8 +286,10 @@ function CheckInPageContent() {
   };
 
   const confirmCheckInWithPayment = async () => {
-    if (!reservationToCheckIn || !user) return;
+    if (!reservationToCheckIn || !user || groupReservationsToCheckIn.length === 0) return;
 
+    // Calcular valor total pendente do grupo
+    const totalGroupAmountDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
     let totalPaidNow = 0;
 
     if (useTwoPaymentMethods) {
@@ -261,8 +303,8 @@ function CheckInPageContent() {
         return;
       }
 
-      if (totalPaidNow > reservationToCheckIn.amountDue) {
-        alert(`O total (R$ ${totalPaidNow.toFixed(2)}) não pode ser maior que o valor pendente (R$ ${reservationToCheckIn.amountDue.toFixed(2)})!`);
+      if (totalPaidNow > totalGroupAmountDue) {
+        alert(`O total (R$ ${totalPaidNow.toFixed(2)}) não pode ser maior que o valor pendente do grupo (R$ ${totalGroupAmountDue.toFixed(2)})!`);
         return;
       }
 
@@ -273,64 +315,96 @@ function CheckInPageContent() {
     } else {
       // Pagamento com 1 forma
       totalPaidNow = parseFloat(remainingAmount) || 0;
-      if (totalPaidNow < 0 || totalPaidNow > reservationToCheckIn.amountDue) {
+      if (totalPaidNow < 0 || totalPaidNow > totalGroupAmountDue) {
         alert('Valor inválido!');
         return;
       }
     }
 
     try {
-      const newAmountPaid = reservationToCheckIn.amountPaid + totalPaidNow;
-      const newAmountDue = reservationToCheckIn.totalAmount - newAmountPaid;
+      // Distribuir o pagamento proporcionalmente entre os membros do grupo
+      let remainingPayment = totalPaidNow;
+      
+      for (const member of groupReservationsToCheckIn) {
+        // Quanto esse membro deve
+        const memberDue = member.amountDue;
+        // Quanto será pago para esse membro (proporcional ou o que sobrar)
+        const memberPayment = Math.min(memberDue, remainingPayment);
+        remainingPayment -= memberPayment;
 
-      if (useTwoPaymentMethods) {
-        // Criar 2 registros de pagamento
-        const firstAmount = parseFloat(firstPaymentAmount) || 0;
-        const secondAmount = parseFloat(secondPaymentAmount) || 0;
+        if (memberPayment > 0) {
+          // Registrar pagamento para esse membro
+          if (useTwoPaymentMethods) {
+            // Dividir proporcionalmente entre as 2 formas
+            const firstAmount = parseFloat(firstPaymentAmount) || 0;
+            const secondAmount = parseFloat(secondPaymentAmount) || 0;
+            const ratio = memberPayment / totalPaidNow;
+            
+            const firstBank = banks.find(b => b.id === firstPaymentBank);
+            const secondBank = banks.find(b => b.id === secondPaymentBank);
 
-        await addDoc(collection(db, 'payments'), {
-          reservationId: reservationToCheckIn.id,
-          amount: firstAmount,
-          method: firstPaymentMethod,
-          source: 'checkin',
-          createdAt: Timestamp.now(),
-          createdBy: user.uid,
-        });
+            await addDoc(collection(db, 'payments'), {
+              reservationId: member.id,
+              amount: firstAmount * ratio,
+              method: firstPaymentMethod,
+              bankId: firstPaymentBank || undefined,
+              bankName: firstBank?.name || undefined,
+              source: 'checkin',
+              groupPayment: true,
+              createdAt: Timestamp.now(),
+              createdBy: user.uid,
+            });
 
-        await addDoc(collection(db, 'payments'), {
-          reservationId: reservationToCheckIn.id,
-          amount: secondAmount,
-          method: secondPaymentMethod,
-          source: 'checkin',
-          createdAt: Timestamp.now(),
-          createdBy: user.uid,
-        });
-      } else {
-        // Criar 1 registro de pagamento
-        await addDoc(collection(db, 'payments'), {
-          reservationId: reservationToCheckIn.id,
-          amount: totalPaidNow,
-          method: paymentMethod,
-          source: 'checkin',
-          createdAt: Timestamp.now(),
-          createdBy: user.uid,
+            await addDoc(collection(db, 'payments'), {
+              reservationId: member.id,
+              amount: secondAmount * ratio,
+              method: secondPaymentMethod,
+              bankId: secondPaymentBank || undefined,
+              bankName: secondBank?.name || undefined,
+              source: 'checkin',
+              groupPayment: true,
+              createdAt: Timestamp.now(),
+              createdBy: user.uid,
+            });
+          } else {
+            const bank = banks.find(b => b.id === selectedBank);
+            
+            await addDoc(collection(db, 'payments'), {
+              reservationId: member.id,
+              amount: memberPayment,
+              method: paymentMethod,
+              bankId: selectedBank || undefined,
+              bankName: bank?.name || undefined,
+              source: 'checkin',
+              groupPayment: groupReservationsToCheckIn.length > 1,
+              createdAt: Timestamp.now(),
+              createdBy: user.uid,
+            });
+          }
+        }
+
+        // Atualizar reserva do membro
+        const newAmountPaid = member.amountPaid + memberPayment;
+        const newAmountDue = member.totalAmount - newAmountPaid;
+        
+        await updateDoc(doc(db, 'reservations', member.id), {
+          checkedIn: true,
+          amountPaid: newAmountPaid,
+          amountDue: Math.max(0, newAmountDue),
+          updatedAt: Timestamp.now(),
         });
       }
-
-      // Atualizar reserva
-      await updateDoc(doc(db, 'reservations', reservationToCheckIn.id), {
-        checkedIn: true,
-        amountPaid: newAmountPaid,
-        amountDue: newAmountDue,
-        updatedAt: Timestamp.now(),
-      });
       
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
+      setGroupReservationsToCheckIn([]);
       setRemainingAmount('');
       setUseTwoPaymentMethods(false);
       setFirstPaymentAmount('');
       setSecondPaymentAmount('');
+      setSelectedBank('');
+      setFirstPaymentBank('');
+      setSecondPaymentBank('');
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -338,22 +412,30 @@ function CheckInPageContent() {
   };
 
   const confirmCheckInWithGratuity = async () => {
-    if (!reservationToCheckIn) return;
+    if (!reservationToCheckIn || groupReservationsToCheckIn.length === 0) return;
 
-    if (!confirm('Tem certeza que deseja dar gratuidade total? Isso irá zerar o valor devido e marcar como pago integralmente.')) {
+    const memberCount = groupReservationsToCheckIn.length;
+    const confirmMsg = memberCount > 1 
+      ? `Tem certeza que deseja dar gratuidade total para ${memberCount} pessoas do grupo? Isso irá zerar o valor devido de todos.`
+      : 'Tem certeza que deseja dar gratuidade total? Isso irá zerar o valor devido e marcar como pago integralmente.';
+
+    if (!confirm(confirmMsg)) {
       return;
     }
 
     try {
-      // Marcar check-in e zerar o valor devido (gratuidade)
-      await updateDoc(doc(db, 'reservations', reservationToCheckIn.id), {
-        checkedIn: true,
-        amountDue: 0,
-        amountPaid: reservationToCheckIn.totalAmount, // Marcar como pago integralmente
-        updatedAt: Timestamp.now(),
-      });
+      // Marcar check-in e zerar o valor devido (gratuidade) para todos do grupo
+      for (const member of groupReservationsToCheckIn) {
+        await updateDoc(doc(db, 'reservations', member.id), {
+          checkedIn: true,
+          amountDue: 0,
+          amountPaid: member.totalAmount, // Marcar como pago integralmente
+          updatedAt: Timestamp.now(),
+        });
+      }
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
+      setGroupReservationsToCheckIn([]);
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -361,16 +443,19 @@ function CheckInPageContent() {
   };
 
   const confirmCheckInWithoutCharge = async () => {
-    if (!reservationToCheckIn) return;
+    if (!reservationToCheckIn || groupReservationsToCheckIn.length === 0) return;
 
     try {
-      // Marcar check-in mas manter o valor devido (não vai cobrar, mas fica registrado)
-      await updateDoc(doc(db, 'reservations', reservationToCheckIn.id), {
-        checkedIn: true,
-        updatedAt: Timestamp.now(),
-      });
+      // Marcar check-in mas manter o valor devido (não vai cobrar, mas fica registrado) para todos do grupo
+      for (const member of groupReservationsToCheckIn) {
+        await updateDoc(doc(db, 'reservations', member.id), {
+          checkedIn: true,
+          updatedAt: Timestamp.now(),
+        });
+      }
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
+      setGroupReservationsToCheckIn([]);
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -593,29 +678,43 @@ function CheckInPageContent() {
                       </div>
 
                       {/* Botão de Check-in Grande */}
-                      <button
-                        onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
-                        disabled={!reservation.id}
-                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-base transition disabled:opacity-50 ${
-                          reservation.checkedIn
-                            ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
-                            : groupColor
-                              ? `${groupColor.badge} text-white hover:opacity-90`
-                              : 'bg-viva-blue text-white hover:bg-viva-blue-dark active:bg-viva-blue-navy'
-                        }`}
-                      >
-                        {reservation.checkedIn ? (
-                          <>
-                            <CheckCircle size={20} />
-                            Check-in Feito ✓
-                          </>
-                        ) : (
-                          <>
-                            <User size={20} />
-                            Fazer Check-in
-                          </>
-                        )}
-                      </button>
+                      {(() => {
+                        // Verificar quantos do grupo ainda não fizeram check-in
+                        const pendingInGroup = reservation.groupId 
+                          ? reservations.filter(r => r.groupId === reservation.groupId && !r.checkedIn).length
+                          : 0;
+                        
+                        return (
+                          <button
+                            onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
+                            disabled={!reservation.id}
+                            className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-base transition disabled:opacity-50 ${
+                              reservation.checkedIn
+                                ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
+                                : groupColor
+                                  ? `${groupColor.badge} text-white hover:opacity-90`
+                                  : 'bg-viva-blue text-white hover:bg-viva-blue-dark active:bg-viva-blue-navy'
+                            }`}
+                          >
+                            {reservation.checkedIn ? (
+                              <>
+                                <CheckCircle size={20} />
+                                Check-in Feito ✓
+                              </>
+                            ) : pendingInGroup > 1 ? (
+                              <>
+                                <Users size={20} />
+                                Check-in Grupo ({pendingInGroup})
+                              </>
+                            ) : (
+                              <>
+                                <User size={20} />
+                                Fazer Check-in
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </div>
                   );
                   })
@@ -710,29 +809,43 @@ function CheckInPageContent() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <button
-                              onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
-                              disabled={!reservation.id}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                                reservation.checkedIn
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : groupColor
-                                    ? `${groupColor.bg} ${groupColor.text} hover:opacity-80`
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              {reservation.checkedIn ? (
-                                <>
-                                  <CheckCircle size={18} />
-                                  Confirmado
-                                </>
-                              ) : (
-                                <>
-                                  <XCircle size={18} />
-                                  Marcar Check-in
-                                </>
-                              )}
-                            </button>
+                            {(() => {
+                              // Verificar quantos do grupo ainda não fizeram check-in
+                              const pendingInGroup = reservation.groupId 
+                                ? reservations.filter(r => r.groupId === reservation.groupId && !r.checkedIn).length
+                                : 0;
+                              
+                              return (
+                                <button
+                                  onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
+                                  disabled={!reservation.id}
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    reservation.checkedIn
+                                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                      : groupColor
+                                        ? `${groupColor.bg} ${groupColor.text} hover:opacity-80`
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {reservation.checkedIn ? (
+                                    <>
+                                      <CheckCircle size={18} />
+                                      Confirmado
+                                    </>
+                                  ) : pendingInGroup > 1 ? (
+                                    <>
+                                      <Users size={18} />
+                                      Grupo ({pendingInGroup})
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle size={18} />
+                                      Check-in
+                                    </>
+                                  )}
+                                </button>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -751,7 +864,7 @@ function CheckInPageContent() {
         )}
 
         {/* Modal Confirmação Pagamento - Responsivo */}
-        {showPaymentConfirm && reservationToCheckIn && (
+        {showPaymentConfirm && reservationToCheckIn && groupReservationsToCheckIn.length > 0 && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
             <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[95vh] overflow-y-auto shadow-xl border border-gray-200">
               {/* Header */}
@@ -760,55 +873,70 @@ function CheckInPageContent() {
                   <DollarSign className="text-orange-600" size={28} />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-                  Pagamento Pendente
+                  {groupReservationsToCheckIn.length > 1 ? 'Check-in do Grupo' : 'Pagamento Pendente'}
                 </h2>
+                {groupReservationsToCheckIn.length > 1 && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {groupReservationsToCheckIn.length} pessoas serão marcadas
+                  </p>
+                )}
               </div>
 
-              {/* Card do Cliente */}
-              <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white shadow-sm">
-                <p className="text-white/70 text-xs mb-1">Cliente</p>
-                <p className="font-bold text-lg">{reservationToCheckIn.customerName}</p>
-                <p className="text-white/80 text-sm">Assento #{reservationToCheckIn.seatNumber}</p>
-              </div>
+              {/* Lista de membros do grupo */}
+              {groupReservationsToCheckIn.length > 1 ? (
+                <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white shadow-sm">
+                  <p className="text-white/70 text-xs mb-2 flex items-center gap-1">
+                    <Users size={14} />
+                    Membros do Grupo
+                  </p>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {groupReservationsToCheckIn.map((member, index) => (
+                      <div key={member.id} className="flex items-center justify-between bg-white/10 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-white/20 rounded-full w-5 h-5 flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <span className="font-medium text-sm">{member.customerName}</span>
+                        </div>
+                        <span className="text-xs text-white/80">
+                          R$ {member.amountDue.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white shadow-sm">
+                  <p className="text-white/70 text-xs mb-1">Cliente</p>
+                  <p className="font-bold text-lg">{reservationToCheckIn.customerName}</p>
+                  <p className="text-white/80 text-sm">Assento #{reservationToCheckIn.seatNumber}</p>
+                </div>
+              )}
 
-              {/* Informações do Serviço */}
-              {reservationToCheckIn.groupId && (() => {
-                // Contar pessoas do grupo com cada tipo de serviço
-                const groupReservations = reservations.filter(r => r.groupId === reservationToCheckIn.groupId);
-                const comDesembarque = groupReservations.filter(r => r.escunaType === 'com-desembarque').length;
-                const semDesembarque = groupReservations.filter(r => r.escunaType === 'sem-desembarque' || !r.escunaType).length;
-                const totalGrupo = groupReservations.length;
+              {/* Informações do Serviço - para grupos */}
+              {groupReservationsToCheckIn.length > 1 && (() => {
+                const comDesembarque = groupReservationsToCheckIn.filter(r => r.escunaType === 'com-desembarque').length;
+                const semDesembarque = groupReservationsToCheckIn.filter(r => r.escunaType === 'sem-desembarque' || !r.escunaType).length;
 
                 return (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                      <Users size={16} />
-                      Informações do Grupo ({totalGrupo} {totalGrupo === 1 ? 'pessoa' : 'pessoas'})
-                    </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm font-semibold text-blue-900 mb-2">Tipos de Serviço</p>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="bg-white rounded-lg p-2 border border-blue-200">
-                        <p className="text-xs text-gray-600 mb-1">Com Desembarque</p>
-                        <p className="font-bold text-blue-700 text-base">{comDesembarque}</p>
+                      <div className="bg-white rounded-lg p-2 border border-blue-200 text-center">
+                        <p className="text-xs text-gray-600">Com Desembarque</p>
+                        <p className="font-bold text-blue-700">{comDesembarque}</p>
                       </div>
-                      <div className="bg-white rounded-lg p-2 border border-blue-200">
-                        <p className="text-xs text-gray-600 mb-1">Panorâmico</p>
-                        <p className="font-bold text-blue-700 text-base">{semDesembarque}</p>
+                      <div className="bg-white rounded-lg p-2 border border-blue-200 text-center">
+                        <p className="text-xs text-gray-600">Panorâmico</p>
+                        <p className="font-bold text-blue-700">{semDesembarque}</p>
                       </div>
                     </div>
-                    {reservationToCheckIn.escunaType && (
-                      <p className="text-xs text-blue-700 mt-2">
-                        <span className="font-semibold">Serviço desta reserva:</span>{' '}
-                        {reservationToCheckIn.escunaType === 'com-desembarque' 
-                          ? 'Com Desembarque na Ilha' 
-                          : 'Sem Desembarque (Panorâmico)'}
-                      </p>
-                    )}
                   </div>
                 );
               })()}
               
               {/* Informação de serviço individual (se não for grupo) */}
-              {!reservationToCheckIn.groupId && reservationToCheckIn.escunaType && (
+              {groupReservationsToCheckIn.length === 1 && reservationToCheckIn.escunaType && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                   <p className="text-sm font-semibold text-blue-900 mb-1">Tipo de Serviço</p>
                   <p className="text-sm text-blue-700">
@@ -819,31 +947,47 @@ function CheckInPageContent() {
                 </div>
               )}
 
-              {/* Valores */}
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white rounded-lg p-2">
-                    <p className="text-xs text-gray-500">Total</p>
-                    <p className="font-bold text-sm sm:text-base text-gray-800">
-                      R$ {reservationToCheckIn.totalAmount.toFixed(2)}
-                    </p>
+              {/* Valores - calculados do grupo */}
+              {(() => {
+                const totalGroupAmount = groupReservationsToCheckIn.reduce((sum, r) => sum + r.totalAmount, 0);
+                const totalGroupPaid = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountPaid, 0);
+                const totalGroupDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
+
+                return (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                    {groupReservationsToCheckIn.length > 1 && (
+                      <p className="text-xs text-orange-700 font-semibold mb-2 text-center">
+                        💰 Valores totais do grupo
+                      </p>
+                    )}
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-xs text-gray-500">Total</p>
+                        <p className="font-bold text-sm sm:text-base text-gray-800">
+                          R$ {totalGroupAmount.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="bg-green-100 rounded-lg p-2">
+                        <p className="text-xs text-green-700">Pago</p>
+                        <p className="font-bold text-sm sm:text-base text-green-600">
+                          R$ {totalGroupPaid.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="bg-red-100 rounded-lg p-2">
+                        <p className="text-xs text-red-700">Falta</p>
+                        <p className="font-black text-base sm:text-lg text-red-600">
+                          R$ {totalGroupDue.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-green-100 rounded-lg p-2">
-                    <p className="text-xs text-green-700">Pago</p>
-                    <p className="font-bold text-sm sm:text-base text-green-600">
-                      R$ {reservationToCheckIn.amountPaid.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="bg-red-100 rounded-lg p-2">
-                    <p className="text-xs text-red-700">Falta</p>
-                    <p className="font-black text-base sm:text-lg text-red-600">
-                      R$ {reservationToCheckIn.amountDue.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Toggle para 2 formas de pagamento */}
+              {(() => {
+                const totalGroupDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
+                return (
               <div className="mb-4">
                 <button
                   type="button"
@@ -851,7 +995,7 @@ function CheckInPageContent() {
                     setUseTwoPaymentMethods(!useTwoPaymentMethods);
                     if (!useTwoPaymentMethods) {
                       // Ao ativar, dividir o valor pendente em 2
-                      const halfAmount = (reservationToCheckIn.amountDue / 2).toFixed(2);
+                      const halfAmount = (totalGroupDue / 2).toFixed(2);
                       setFirstPaymentAmount(halfAmount);
                       setSecondPaymentAmount(halfAmount);
                     }
@@ -866,15 +1010,21 @@ function CheckInPageContent() {
                   {useTwoPaymentMethods ? '✓ Pagando com 2 Formas' : 'Pagar com 2 Formas de Pagamento'}
                 </button>
               </div>
+                );
+              })()}
 
               {/* Campos de Pagamento */}
+              {(() => {
+                const totalGroupDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
+                
+                return (
               <div className="space-y-3 mb-4">
                 {!useTwoPaymentMethods ? (
                   <>
                     {/* Pagamento simples - 1 forma */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Valor a Pagar (R$)
+                        Valor a Pagar (R$) {groupReservationsToCheckIn.length > 1 && '- Total do Grupo'}
                       </label>
                       <input
                         type="number"
@@ -882,18 +1032,18 @@ function CheckInPageContent() {
                         onChange={(e) => {
                           const value = e.target.value;
                           const numValue = parseFloat(value);
-                          if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= reservationToCheckIn.amountDue)) {
+                          if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= totalGroupDue)) {
                             setRemainingAmount(value);
                           }
                         }}
                         step="0.01"
                         min="0"
-                        max={reservationToCheckIn.amountDue}
+                        max={totalGroupDue}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-semibold bg-white"
                         placeholder="0.00"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Máximo: R$ {reservationToCheckIn.amountDue.toFixed(2)}
+                        Máximo: R$ {totalGroupDue.toFixed(2)}
                       </p>
                     </div>
                     
@@ -911,13 +1061,35 @@ function CheckInPageContent() {
                         <option value="dinheiro">Dinheiro</option>
                       </select>
                     </div>
+                    
+                    {/* Seleção de Banco */}
+                    {banks.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Banco / Conta
+                        </label>
+                        <select
+                          value={selectedBank}
+                          onChange={(e) => setSelectedBank(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
+                        >
+                          <option value="">Selecione o banco...</option>
+                          {banks.map((bank) => (
+                            <option key={bank.id} value={bank.id}>
+                              {bank.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
                     {/* Pagamento dividido - 2 formas */}
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
                       <p className="text-sm font-semibold text-purple-800 text-center">
-                        Dividir R$ {reservationToCheckIn.amountDue.toFixed(2)} em 2 pagamentos
+                        Dividir R$ {totalGroupDue.toFixed(2)} em 2 pagamentos
+                        {groupReservationsToCheckIn.length > 1 && ' (grupo)'}
                       </p>
                       
                       {/* Primeira forma */}
@@ -934,7 +1106,7 @@ function CheckInPageContent() {
                                 setFirstPaymentAmount(value);
                                 // Calcular o restante automaticamente
                                 const firstVal = parseFloat(value) || 0;
-                                const remaining = reservationToCheckIn.amountDue - firstVal;
+                                const remaining = totalGroupDue - firstVal;
                                 if (remaining >= 0) {
                                   setSecondPaymentAmount(remaining.toFixed(2));
                                 }
@@ -958,6 +1130,21 @@ function CheckInPageContent() {
                             </select>
                           </div>
                         </div>
+                        {banks.length > 0 && (
+                          <div className="mt-2">
+                            <label className="block text-xs text-gray-600 mb-1">Banco</label>
+                            <select
+                              value={firstPaymentBank}
+                              onChange={(e) => setFirstPaymentBank(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white text-sm"
+                            >
+                              <option value="">Selecione...</option>
+                              {banks.map((bank) => (
+                                <option key={bank.id} value={bank.id}>{bank.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       {/* Segunda forma */}
@@ -974,7 +1161,7 @@ function CheckInPageContent() {
                                 setSecondPaymentAmount(value);
                                 // Calcular o restante automaticamente
                                 const secondVal = parseFloat(value) || 0;
-                                const remaining = reservationToCheckIn.amountDue - secondVal;
+                                const remaining = totalGroupDue - secondVal;
                                 if (remaining >= 0) {
                                   setFirstPaymentAmount(remaining.toFixed(2));
                                 }
@@ -998,6 +1185,21 @@ function CheckInPageContent() {
                             </select>
                           </div>
                         </div>
+                        {banks.length > 0 && (
+                          <div className="mt-2">
+                            <label className="block text-xs text-gray-600 mb-1">Banco</label>
+                            <select
+                              value={secondPaymentBank}
+                              onChange={(e) => setSecondPaymentBank(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white text-sm"
+                            >
+                              <option value="">Selecione...</option>
+                              {banks.map((bank) => (
+                                <option key={bank.id} value={bank.id}>{bank.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       {/* Resumo */}
@@ -1005,9 +1207,9 @@ function CheckInPageContent() {
                         <p className="text-sm text-purple-800">
                           <span className="font-bold">Total:</span>{' '}
                           R$ {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)).toFixed(2)}
-                          {' '}de R$ {reservationToCheckIn.amountDue.toFixed(2)}
+                          {' '}de R$ {totalGroupDue.toFixed(2)}
                         </p>
-                        {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) !== reservationToCheckIn.amountDue && (
+                        {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) !== totalGroupDue && (
                           <p className="text-xs text-orange-600 mt-1">
                             ⚠️ O total não corresponde ao valor pendente
                           </p>
@@ -1017,6 +1219,8 @@ function CheckInPageContent() {
                   </>
                 )}
               </div>
+                );
+              })()}
 
               {/* Botões de Ação */}
               <div className="space-y-2">
@@ -1025,7 +1229,10 @@ function CheckInPageContent() {
                   className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-green-700 hover:to-green-800"
                 >
                   <CheckCircle size={20} />
-                  Registrar Pagamento e Fazer Check-in
+                  {groupReservationsToCheckIn.length > 1 
+                    ? `Pagar e Check-in (${groupReservationsToCheckIn.length} pessoas)`
+                    : 'Registrar Pagamento e Fazer Check-in'
+                  }
                 </button>
 
                 <button
@@ -1033,7 +1240,10 @@ function CheckInPageContent() {
                   className="w-full px-4 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-slate-700 hover:to-slate-800"
                 >
                   <User size={20} />
-                  Gratuidade (Cortesia)
+                  {groupReservationsToCheckIn.length > 1 
+                    ? `Gratuidade (${groupReservationsToCheckIn.length} pessoas)`
+                    : 'Gratuidade (Cortesia)'
+                  }
                 </button>
 
                 <button
@@ -1041,17 +1251,24 @@ function CheckInPageContent() {
                   className="w-full px-4 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 text-sm sm:text-base hover:from-orange-700 hover:to-orange-800"
                 >
                   <CheckCircle size={20} />
-                  Não Cobrar - Fazer Check-in
+                  {groupReservationsToCheckIn.length > 1 
+                    ? `Não Cobrar (${groupReservationsToCheckIn.length} pessoas)`
+                    : 'Não Cobrar - Fazer Check-in'
+                  }
                 </button>
 
                 <button
                   onClick={() => {
                     setShowPaymentConfirm(false);
                     setReservationToCheckIn(null);
+                    setGroupReservationsToCheckIn([]);
                     setRemainingAmount('');
                     setUseTwoPaymentMethods(false);
                     setFirstPaymentAmount('');
                     setSecondPaymentAmount('');
+                    setSelectedBank('');
+                    setFirstPaymentBank('');
+                    setSecondPaymentBank('');
                   }}
                   className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold active:bg-gray-50 transition hover:bg-gray-50"
                 >
