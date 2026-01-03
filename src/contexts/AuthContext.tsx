@@ -6,6 +6,14 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { UserRole } from '@/types';
 
+// Lista de emails que têm permissões de administrador (mesmo sendo vendedores)
+// Adicione aqui os emails das pessoas-chave que precisam de acesso total
+const SUPER_USERS_EMAILS = [
+  'bruna@vivalavida.com.br',
+  'bruna.vivalavida@gmail.com',
+  // Adicione outros emails conforme necessário
+];
+
 interface AuthContextType {
   user: User | null;
   userRole: UserRole | null;
@@ -54,9 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserRole(null);
   };
 
-  const isAdmin = userRole?.role === 'admin';
-  const isVendor = userRole?.role === 'vendor' || userRole?.role === 'admin';
-  const isPostSale = userRole?.role === 'post_sale' || userRole?.role === 'admin';
+  // Verificar se é super user (email na lista de permissões especiais)
+  const isSuperUser = user?.email ? SUPER_USERS_EMAILS.some(email => 
+    email.toLowerCase() === user.email?.toLowerCase()
+  ) : false;
+  
+  // Super users têm mesmas permissões de admin
+  const isAdmin = userRole?.role === 'admin' || isSuperUser;
+  const isVendor = userRole?.role === 'vendor' || userRole?.role === 'admin' || isSuperUser;
+  const isPostSale = userRole?.role === 'post_sale' || userRole?.role === 'admin' || isSuperUser;
 
   return (
     <AuthContext.Provider

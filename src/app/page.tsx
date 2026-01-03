@@ -64,44 +64,8 @@ function Header({ siteConfig, getWhatsAppLink, t }: SharedProps) {
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
       scrolled 
         ? 'bg-white/95 backdrop-blur-md shadow-lg py-2' 
-        : 'bg-transparent py-4'
+        : 'bg-black/30 backdrop-blur-md py-4'
     }`}>
-      {/* Top bar */}
-      <div className={`transition-all duration-500 ${scrolled ? 'h-0 overflow-hidden' : 'h-auto'}`}>
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between py-2 text-sm border-b border-white/20">
-            {/* Redes Sociais */}
-            <div className="flex items-center gap-3">
-              <a href={getWhatsAppLink()} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-green-500 transition-colors">
-                <MessageCircle size={16} />
-              </a>
-              <a href={siteConfig?.instagramUrl || DEFAULT_SITE_CONFIG.instagramUrl} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-pink-500 transition-colors">
-                <Instagram size={16} />
-              </a>
-              <a href={siteConfig?.facebookUrl || DEFAULT_SITE_CONFIG.facebookUrl} className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-blue-600 transition-colors">
-                <Facebook size={16} />
-              </a>
-            </div>
-            
-            {/* Language Selector + Texto central */}
-            <div className="flex items-center gap-4 flex-1 justify-center">
-              <p className="text-white/90 hidden md:block text-center">{t('hero.badge')}</p>
-            </div>
-            
-            {/* Botão Reservar */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <a 
-                href={getWhatsAppLink()} 
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-lg"
-              >
-                <MessageCircle size={16} />
-                <span className="hidden sm:inline">{t('nav.book')}</span>
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Main nav */}
       <div className="container mx-auto px-4">
         {/* Mobile Nav - Logo centralizada */}
@@ -238,14 +202,14 @@ function Header({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   );
 }
 
-// Hero Section
+// Hero Section with Fixed Video Background
 function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   return (
-    <section id="inicio" className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Video Background */}
-      <div className="absolute inset-0">
+    <>
+      {/* Fixed Video Background - Fica fixo enquanto o conteúdo rola */}
+      <div className="fixed inset-0 w-full h-screen z-0">
         {/* Fallback gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-viva-blue-navy via-viva-blue-dark to-viva-teal z-0" />
+        <div className="absolute inset-0 bg-gradient-to-br from-viva-blue-navy via-viva-blue-dark to-viva-teal" />
         
         {/* Video */}
         <video 
@@ -253,113 +217,103 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
           muted 
           loop 
           playsInline
-          className="absolute inset-0 w-full h-full object-cover z-10"
+          className="absolute inset-0 w-full h-full object-cover"
         >
           <source src="/videoback.mp4" type="video/mp4" />
         </video>
-        
-        {/* Overlay gradients para melhorar legibilidade do texto */}
-        <div className="absolute inset-0 bg-viva-blue-navy/40 z-20" />
-        <div className="absolute inset-0 bg-gradient-to-t from-viva-blue-navy/90 via-viva-blue-navy/30 to-transparent z-20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-viva-blue-navy/50 via-transparent to-viva-blue-navy/50 z-20" />
       </div>
 
-      {/* Animated floating elements */}
-      <div className="absolute top-20 left-10 w-20 h-20 bg-viva-yellow/30 rounded-full blur-xl floating z-30" style={{ animationDelay: '0s' }} />
-      <div className="absolute top-40 right-20 w-32 h-32 bg-viva-orange/30 rounded-full blur-xl floating z-30" style={{ animationDelay: '2s' }} />
-      <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-viva-green/30 rounded-full blur-xl floating z-30" style={{ animationDelay: '4s' }} />
+      {/* Hero Content Section - Rola sobre o vídeo */}
+      <section id="inicio" className="relative min-h-screen flex items-center justify-center z-10">
+        {/* Animated floating elements */}
+        <div className="absolute top-20 left-10 w-20 h-20 bg-viva-yellow/30 rounded-full blur-xl floating" style={{ animationDelay: '0s' }} />
+        <div className="absolute top-40 right-20 w-32 h-32 bg-viva-orange/30 rounded-full blur-xl floating" style={{ animationDelay: '2s' }} />
+        <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-viva-green/30 rounded-full blur-xl floating" style={{ animationDelay: '4s' }} />
 
-      {/* Content */}
-      <div className="relative z-40 container mx-auto px-4 text-center pt-40 sm:pt-44 pb-16 sm:pb-20">
-        <div className="max-w-5xl mx-auto">
-          {/* Badge - menor no mobile */}
-          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 sm:px-6 py-2 mb-6 sm:mb-8 animate-fade-in-up mt-6 sm:mt-0">
-            <Sparkles className="text-viva-yellow" size={16} />
-            <span className="text-white font-medium text-xs sm:text-sm">{t('hero.badge')}</span>
-          </div>
+        {/* Content */}
+        <div className="relative z-10 container mx-auto px-4 text-center pt-40 sm:pt-44 pb-16 sm:pb-20">
+          <div className="max-w-5xl mx-auto">
+            {/* Badge - menor no mobile */}
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 sm:px-6 py-2 mb-6 sm:mb-8 animate-fade-in-up mt-6 sm:mt-0">
+              <Sparkles className="text-viva-yellow" size={16} />
+              <span className="text-white font-medium text-xs sm:text-sm">{t('hero.badge')}</span>
+            </div>
 
-          {/* Main heading - responsivo com animação */}
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white mb-4 sm:mb-6 leading-tight" style={{ fontFamily: 'Sora, sans-serif' }}>
-            <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-              {t('hero.title1')}
-            </span>{' '}
-            <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.5s', animationFillMode: 'forwards' }}>
-              {t('hero.title2')}
-            </span>
-            <span className="block gradient-text opacity-0 animate-word-appear" style={{ animationDelay: '0.8s', animationFillMode: 'forwards' }}>
-              {t('hero.title3')}
-            </span>
-            <span className="block text-viva-yellow opacity-0 animate-word-appear" style={{ animationDelay: '1.1s', animationFillMode: 'forwards' }}>
-              {t('hero.title4')}
-            </span>
-          </h1>
+            {/* Main heading - responsivo com animação */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white mb-4 sm:mb-6 leading-tight drop-shadow-lg" style={{ fontFamily: 'Sora, sans-serif' }}>
+              <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
+                {t('hero.title1')}
+              </span>{' '}
+              <span className="inline-block opacity-0 animate-word-appear" style={{ animationDelay: '0.5s', animationFillMode: 'forwards' }}>
+                {t('hero.title2')}
+              </span>
+              <span className="block gradient-text opacity-0 animate-word-appear" style={{ animationDelay: '0.8s', animationFillMode: 'forwards' }}>
+                {t('hero.title3')}
+              </span>
+              <span className="block text-viva-yellow opacity-0 animate-word-appear drop-shadow-lg" style={{ animationDelay: '1.1s', animationFillMode: 'forwards' }}>
+                {t('hero.title4')}
+              </span>
+            </h1>
 
-          {/* Subheading - texto menor no mobile */}
-          <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto mb-6 sm:mb-8 px-2 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            {t('hero.subtitle')} <strong className="text-viva-yellow">{t('hero.boatName')}</strong> {t('hero.and')} 
-            <strong className="text-viva-yellow"> {t('hero.island')}</strong>!
-            <br className="hidden sm:block" />
-            <span className="text-viva-green"> {t('hero.activities')}</span> {t('hero.andMore')}
-          </p>
+            {/* Subheading - texto menor no mobile */}
+            <p className="text-base sm:text-lg md:text-xl text-white max-w-3xl mx-auto mb-6 sm:mb-8 px-2 animate-fade-in-up drop-shadow-md" style={{ animationDelay: '0.4s' }}>
+              {t('hero.subtitle')} <strong className="text-viva-yellow">{t('hero.boatName')}</strong> {t('hero.and')} 
+              <strong className="text-viva-yellow"> {t('hero.island')}</strong>!
+              <br className="hidden sm:block" />
+              <span className="text-viva-green"> {t('hero.activities')}</span> {t('hero.andMore')}
+            </p>
 
 
-          {/* CTAs - GRANDE e fácil de tocar no mobile */}
-          <div className="flex flex-col gap-3 sm:gap-4 px-2 sm:px-0 mb-8 sm:mb-10 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
-            <a 
-              href={getWhatsAppLink(t('whatsapp.moreInfo'))}
-              className="group relative bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-3 shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
-            >
-              <MessageCircle size={24} />
-              {t('hero.ctaWhatsapp')}
-            </a>
-            <a 
-              href="#passeios"
-              className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
-            >
-              {t('hero.ctaTours')}
-              <ChevronDown size={20} />
-            </a>
-          </div>
+            {/* CTAs - GRANDE e fácil de tocar no mobile */}
+            <div className="flex flex-col gap-3 sm:gap-4 px-2 sm:px-0 mb-8 sm:mb-10 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
+              <a 
+                href={getWhatsAppLink(t('whatsapp.moreInfo'))}
+                className="group relative bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-3 shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
+              >
+                <MessageCircle size={24} />
+                {t('hero.ctaWhatsapp')}
+              </a>
+              <a 
+                href="#passeios"
+                className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
+              >
+                {t('hero.ctaTours')}
+                <ChevronDown size={20} />
+              </a>
+            </div>
 
-          {/* Trust badges - grid no mobile */}
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-8 mt-10 sm:mt-16 animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
-            <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white/80">
-              <div className="flex">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={12} className="text-viva-yellow fill-viva-yellow sm:w-[18px] sm:h-[18px]" />
-                ))}
+            {/* Trust badges - grid no mobile */}
+            <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-8 mt-10 sm:mt-16 animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
+              <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white drop-shadow-md">
+                <div className="flex">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} size={12} className="text-viva-yellow fill-viva-yellow sm:w-[18px] sm:h-[18px]" />
+                  ))}
+                </div>
+                <span className="font-semibold text-xs sm:text-base">5.0 {t('hero.google')}</span>
               </div>
-              <span className="font-semibold text-xs sm:text-base">5.0 {t('hero.google')}</span>
-            </div>
-            <div className="hidden sm:block h-6 w-px bg-white/30" />
-            <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white/80">
-              <Shield size={18} className="text-viva-green sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-base">{t('hero.safe')}</span>
-            </div>
-            <div className="hidden sm:block h-6 w-px bg-white/30" />
-            <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white/80">
-              <Users size={18} className="text-viva-yellow sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-base">{t('hero.clients')}</span>
+              <div className="hidden sm:block h-6 w-px bg-white/30" />
+              <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white drop-shadow-md">
+                <Shield size={18} className="text-viva-green sm:w-5 sm:h-5" />
+                <span className="font-semibold text-xs sm:text-base">{t('hero.safe')}</span>
+              </div>
+              <div className="hidden sm:block h-6 w-px bg-white/30" />
+              <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-white drop-shadow-md">
+                <Users size={18} className="text-viva-yellow sm:w-5 sm:h-5" />
+                <span className="font-semibold text-xs sm:text-base">{t('hero.clients')}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce z-40">
-        <ChevronDown size={32} className="text-white/60" />
-      </div>
+        {/* Scroll indicator */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce z-10">
+          <ChevronDown size={32} className="text-white/60 drop-shadow-lg" />
+        </div>
 
-      {/* Wave decoration - transição para seção azul escuro */}
-      <div className="absolute bottom-0 left-0 right-0 z-40">
-        <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full">
-          <path 
-            d="M0,64L60,69.3C120,75,240,85,360,80C480,75,600,53,720,48C840,43,960,53,1080,58.7C1200,64,1320,64,1380,64L1440,64L1440,120L1380,120C1320,120,1200,120,1080,120C960,120,840,120,720,120C600,120,480,120,360,120C240,120,120,120,60,120L0,120Z" 
-            fill="#1e3a5f"
-          />
-        </svg>
-      </div>
-    </section>
+        {/* Scroll indicator arrow - sem wave para continuar o vídeo */}
+      </section>
+    </>
   );
 }
 
@@ -374,7 +328,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
   const precoDesembarque = tourDesembarque?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.currentPrice;
 
   return (
-    <section className="pt-10 sm:pt-20 pb-24 sm:pb-32 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden">
+    <section className="pt-10 sm:pt-20 pb-24 sm:pb-32 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
       {/* Background decorativo */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute top-10 left-10 text-8xl">⭐</div>
@@ -383,7 +337,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
         <div className="absolute bottom-32 right-10 text-5xl">☀️</div>
       </div>
       
-      <div className="container mx-auto px-3 sm:px-4 relative z-10">
+      <div className="container mx-auto px-3 sm:px-4 relative z-20">
         {/* Título grandioso */}
         <div className="text-center">
           {/* Badge da ilha */}
@@ -460,8 +414,8 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
         </div>
       </div>
       
-      {/* Wave transition */}
-      <div className="absolute bottom-0 left-0 right-0">
+      {/* Wave transition para próxima seção */}
+      <div className="absolute bottom-0 left-0 right-0 z-20">
         <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
           <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,90 1440,80 L1440,120 L0,120 Z" fill="white"/>
         </svg>
@@ -536,7 +490,7 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Share
   const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
 
   return (
-    <section id="passeios" className="py-12 sm:py-20 bg-white relative">
+    <section id="passeios" className="py-12 sm:py-20 bg-white relative z-10">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12">
@@ -831,9 +785,12 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Shar
   const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
 
   return (
-    <section id="roteiros" className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-teal relative overflow-hidden">
+    <section id="roteiros" className="py-12 sm:py-20 relative overflow-hidden z-10">
+      {/* Overlay semi-transparente - vídeo aparece por trás */}
+      <div className="absolute inset-0 bg-gradient-to-b from-viva-blue-navy/60 via-viva-blue-dark/50 to-viva-blue-navy/70 backdrop-blur-[2px]" />
+      
       {/* Animated background - esconde no mobile */}
-      <div className="absolute inset-0 opacity-10 hidden sm:block">
+      <div className="absolute inset-0 opacity-10 hidden sm:block z-10">
         <div className="absolute top-0 left-0 w-full h-full">
           {[...Array(5)].map((_, i) => (
             <div
@@ -851,7 +808,7 @@ function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Shar
         </div>
       </div>
 
-      <div className="container mx-auto px-4 relative z-10">
+      <div className="container mx-auto px-4 relative z-20">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4">
             {t('routes.title')} <span className="text-viva-yellow">{t('routes.titleHighlight')}</span>
@@ -966,7 +923,7 @@ function Testimonials({ siteConfig, t }: SharedProps) {
   ];
 
   return (
-    <section className="py-12 sm:py-20 bg-gradient-to-br from-gray-50 to-orange-50 relative">
+    <section className="py-12 sm:py-20 bg-gradient-to-br from-gray-50 to-orange-50 relative z-10">
       <div className="container mx-auto px-4">
         <div className="text-center mb-6 sm:mb-12">
           <span className="inline-block bg-viva-yellow/20 text-viva-orange font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4">
@@ -1034,7 +991,7 @@ function Testimonials({ siteConfig, t }: SharedProps) {
 // About Section
 function About({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   return (
-    <section id="sobre" className="py-12 sm:py-20 bg-white">
+    <section id="sobre" className="py-12 sm:py-20 bg-white relative z-10">
       <div className="container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 items-center">
           {/* Imagem primeiro no mobile */}
@@ -1122,7 +1079,7 @@ function About({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 // Final CTA Section
 function FinalCTA({ getWhatsAppLink, t }: SharedProps) {
   return (
-    <section className="py-12 sm:py-20 bg-gradient-to-r from-viva-orange via-viva-yellow to-viva-green relative overflow-hidden">
+    <section className="py-12 sm:py-20 bg-gradient-to-r from-viva-orange via-viva-yellow to-viva-green relative overflow-hidden z-10">
       {/* Background pattern - esconde no mobile */}
       <div className="absolute inset-0 opacity-20 hidden sm:block">
         <div className="absolute top-10 left-10 floating">
@@ -1168,7 +1125,7 @@ function Footer({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   const facebookUrl = siteConfig?.facebookUrl || DEFAULT_SITE_CONFIG.facebookUrl;
 
   return (
-    <footer id="contato" className="bg-viva-blue-navy text-white relative">
+    <footer id="contato" className="bg-viva-blue-navy text-white relative z-10">
       {/* Wave top - esconde no mobile */}
       <div className="absolute top-0 left-0 right-0 -translate-y-full hidden sm:block">
         <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -830,9 +830,9 @@ function TourEditModal({
 
     try {
       for (const file of Array.from(files)) {
-        // Validar tamanho (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          alert(`Arquivo ${file.name} é muito grande. Máximo 5MB.`);
+        // Validar tamanho (max 40MB)
+        if (file.size > 40 * 1024 * 1024) {
+          alert(`Arquivo ${file.name} é muito grande. Máximo 40MB.`);
           continue;
         }
 
@@ -1112,7 +1112,7 @@ function TourEditModal({
               📷 Fotos do Passeio
             </label>
             <p className="text-xs text-gray-500 mb-3">
-              Adicione fotos para exibir no carrossel do passeio. Máximo 5MB por imagem.
+              Adicione fotos para exibir no carrossel do passeio. Máximo 40MB por imagem.
             </p>
             
             {/* Grid de imagens */}

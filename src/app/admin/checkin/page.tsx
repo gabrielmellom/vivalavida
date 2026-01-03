@@ -55,17 +55,31 @@ function CheckInPageContent() {
   const [groupReservationsToCheckIn, setGroupReservationsToCheckIn] = useState<Reservation[]>([]); // Para check-in em grupo
   const [remainingAmount, setRemainingAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  // Suporte para 2 formas de pagamento
-  const [useTwoPaymentMethods, setUseTwoPaymentMethods] = useState(false);
-  const [firstPaymentAmount, setFirstPaymentAmount] = useState('');
-  const [firstPaymentMethod, setFirstPaymentMethod] = useState<PaymentMethod>('pix');
-  const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
-  const [secondPaymentMethod, setSecondPaymentMethod] = useState<PaymentMethod>('dinheiro');
+  // Suporte para múltiplas formas de pagamento
+  interface PaymentEntry {
+    id: string;
+    amount: string;
+    method: PaymentMethod;
+    bankId: string;
+  }
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([
+    { id: '1', amount: '', method: 'pix', bankId: '' }
+  ]);
+  // Desconto
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
   // Bancos
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const [selectedBank, setSelectedBank] = useState<string>('');
-  const [firstPaymentBank, setFirstPaymentBank] = useState<string>('');
-  const [secondPaymentBank, setSecondPaymentBank] = useState<string>('');
+  // QR Code Error - para mostrar data do passeio
+  const [qrCodeError, setQrCodeError] = useState<{ message: string; rideDate?: string } | null>(null);
+  // Confirmação de reserva
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [reservationToConfirm, setReservationToConfirm] = useState<Reservation | null>(null);
+  // Cancelamento individual
+  const [showNoShowModal, setShowNoShowModal] = useState(false);
+  const [reservationToNoShow, setReservationToNoShow] = useState<Reservation | null>(null);
+  const [noShowReason, setNoShowReason] = useState('');
   const pendingReservationIdRef = useRef<string | null>(null);
   const hasProcessedVoucherRef = useRef(false);
 
@@ -209,23 +223,81 @@ function CheckInPageContent() {
   useEffect(() => {
     const reservationId = pendingReservationIdRef.current;
     
-    if (reservationId && reservations.length > 0 && boat) {
+    if (reservationId && boat) {
       const reservation = reservations.find(r => r.id === reservationId);
       
       if (reservation) {
         // Limpar referência
         pendingReservationIdRef.current = null;
         
+        // Verificar se a reserva é para o barco do dia selecionado
+        const reservationDate = new Date(reservation.rideDate).toISOString().split('T')[0];
+        const boatDate = new Date(boat.date).toISOString().split('T')[0];
+        
+        if (reservationDate !== boatDate) {
+          // Reserva é de outro dia - mostrar erro com a data correta
+          setQrCodeError({
+            message: `Esta reserva é para outro dia! O passeio está agendado para ${formatDateForDisplay(reservation.rideDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`,
+            rideDate: reservation.rideDate
+          });
+          return;
+        }
+        
         // Se tem pagamento pendente, abrir modal
         if (reservation.amountDue > 0) {
           setReservationToCheckIn(reservation);
           setRemainingAmount(reservation.amountDue.toString());
-          setPaymentMethod('pix');
+          setPaymentEntries([{ id: '1', amount: reservation.amountDue.toString(), method: 'pix', bankId: '' }]);
           setShowPaymentConfirm(true);
         } else {
           // Se não tem pendência, fazer check-in direto
           handleCheckIn(reservation.id, false);
         }
+      } else if (reservations.length > 0) {
+        // Reserva não encontrada nas aprovadas do dia
+        // Buscar a reserva para mostrar a data do passeio
+        const fetchReservationInfo = async () => {
+          try {
+            const reservationDoc = await getDoc(doc(db, 'reservations', reservationId));
+            if (reservationDoc.exists()) {
+              const reservationData = reservationDoc.data() as Reservation;
+              
+              if (reservationData.status === 'cancelled') {
+                setQrCodeError({
+                  message: `Esta reserva foi CANCELADA. Cliente: ${reservationData.customerName}.`,
+                  rideDate: reservationData.rideDate
+                });
+              } else if (reservationData.status === 'no_show') {
+                setQrCodeError({
+                  message: `Esta reserva está marcada como NÃO COMPARECEU. Cliente: ${reservationData.customerName}.`,
+                  rideDate: reservationData.rideDate
+                });
+              } else if (reservationData.status === 'pending') {
+                setQrCodeError({
+                  message: `Esta reserva está PENDENTE de aprovação. Cliente: ${reservationData.customerName}. Data do passeio: ${formatDateForDisplay(reservationData.rideDate, { weekday: 'long', day: 'numeric', month: 'long' })}.`,
+                  rideDate: reservationData.rideDate
+                });
+              } else {
+                setQrCodeError({
+                  message: `Reserva não encontrada para hoje. Cliente: ${reservationData.customerName}. Data do passeio: ${formatDateForDisplay(reservationData.rideDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`,
+                  rideDate: reservationData.rideDate
+                });
+              }
+            } else {
+              setQrCodeError({
+                message: 'Reserva não encontrada no sistema.',
+              });
+            }
+          } catch (error) {
+            console.error('Erro ao buscar reserva:', error);
+            setQrCodeError({
+              message: 'Erro ao verificar reserva. Tente novamente.',
+            });
+          }
+        };
+        
+        fetchReservationInfo();
+        pendingReservationIdRef.current = null;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,107 +362,90 @@ function CheckInPageContent() {
 
     // Calcular valor total pendente do grupo
     const totalGroupAmountDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
-    let totalPaidNow = 0;
+    const discount = parseFloat(discountAmount) || 0;
+    const effectiveAmountDue = totalGroupAmountDue - discount;
+    
+    // Calcular total pago em todas as formas
+    const totalPaidNow = paymentEntries.reduce((sum, entry) => sum + (parseFloat(entry.amount) || 0), 0);
 
-    if (useTwoPaymentMethods) {
-      // Pagamento com 2 formas
-      const firstAmount = parseFloat(firstPaymentAmount) || 0;
-      const secondAmount = parseFloat(secondPaymentAmount) || 0;
-      totalPaidNow = firstAmount + secondAmount;
+    // Validar desconto
+    if (discount > 0 && !discountReason.trim()) {
+      alert('Por favor, informe o motivo do desconto!');
+      return;
+    }
 
-      if (firstAmount <= 0 || secondAmount <= 0) {
-        alert('Ambos os valores devem ser maiores que zero quando usar 2 formas de pagamento!');
-        return;
-      }
+    if (discount > totalGroupAmountDue) {
+      alert('O desconto não pode ser maior que o valor pendente!');
+      return;
+    }
 
-      if (totalPaidNow > totalGroupAmountDue) {
-        alert(`O total (R$ ${totalPaidNow.toFixed(2)}) não pode ser maior que o valor pendente do grupo (R$ ${totalGroupAmountDue.toFixed(2)})!`);
-        return;
-      }
+    // Validar que o valor pago é suficiente (exceto se tem desconto)
+    if (discount === 0 && totalPaidNow < effectiveAmountDue && totalPaidNow > 0) {
+      const falta = effectiveAmountDue - totalPaidNow;
+      alert(`Valor insuficiente! Faltam R$ ${falta.toFixed(2)}.\n\nSe deseja dar um desconto, preencha o campo "Desconto" com o valor e o motivo.`);
+      return;
+    }
 
-      if (firstPaymentMethod === secondPaymentMethod) {
-        alert('Selecione formas de pagamento diferentes!');
-        return;
-      }
-    } else {
-      // Pagamento com 1 forma
-      totalPaidNow = parseFloat(remainingAmount) || 0;
-      if (totalPaidNow < 0 || totalPaidNow > totalGroupAmountDue) {
-        alert('Valor inválido!');
-        return;
-      }
+    if (totalPaidNow > effectiveAmountDue) {
+      alert(`O total pago (R$ ${totalPaidNow.toFixed(2)}) não pode ser maior que o valor devido (R$ ${effectiveAmountDue.toFixed(2)})!`);
+      return;
+    }
+
+    // Validar que as formas de pagamento têm valores
+    const validPayments = paymentEntries.filter(e => parseFloat(e.amount) > 0);
+    if (validPayments.length === 0 && effectiveAmountDue > 0 && discount === 0) {
+      alert('Informe pelo menos uma forma de pagamento!');
+      return;
     }
 
     try {
       // Distribuir o pagamento proporcionalmente entre os membros do grupo
       let remainingPayment = totalPaidNow;
+      let remainingDiscount = discount;
       
       for (const member of groupReservationsToCheckIn) {
         // Quanto esse membro deve
         const memberDue = member.amountDue;
-        // Quanto será pago para esse membro (proporcional ou o que sobrar)
-        const memberPayment = Math.min(memberDue, remainingPayment);
+        // Quanto de desconto para esse membro (proporcional)
+        const memberDiscount = memberDue > 0 ? Math.min(memberDue, remainingDiscount) : 0;
+        remainingDiscount -= memberDiscount;
+        // Quanto será pago para esse membro
+        const memberPayment = Math.min(memberDue - memberDiscount, remainingPayment);
         remainingPayment -= memberPayment;
 
+        // Registrar pagamentos para esse membro
         if (memberPayment > 0) {
-          // Registrar pagamento para esse membro
-          if (useTwoPaymentMethods) {
-            // Dividir proporcionalmente entre as 2 formas
-            const firstAmount = parseFloat(firstPaymentAmount) || 0;
-            const secondAmount = parseFloat(secondPaymentAmount) || 0;
-            const ratio = memberPayment / totalPaidNow;
-            
-            const firstBank = banks.find(b => b.id === firstPaymentBank);
-            const secondBank = banks.find(b => b.id === secondPaymentBank);
-
-            await addDoc(collection(db, 'payments'), {
-              reservationId: member.id,
-              amount: firstAmount * ratio,
-              method: firstPaymentMethod,
-              bankId: firstPaymentBank || undefined,
-              bankName: firstBank?.name || undefined,
-              source: 'checkin',
-              groupPayment: true,
-              createdAt: Timestamp.now(),
-              createdBy: user.uid,
-            });
-
-            await addDoc(collection(db, 'payments'), {
-              reservationId: member.id,
-              amount: secondAmount * ratio,
-              method: secondPaymentMethod,
-              bankId: secondPaymentBank || undefined,
-              bankName: secondBank?.name || undefined,
-              source: 'checkin',
-              groupPayment: true,
-              createdAt: Timestamp.now(),
-              createdBy: user.uid,
-            });
-          } else {
-            const bank = banks.find(b => b.id === selectedBank);
-            
-            await addDoc(collection(db, 'payments'), {
-              reservationId: member.id,
-              amount: memberPayment,
-              method: paymentMethod,
-              bankId: selectedBank || undefined,
-              bankName: bank?.name || undefined,
-              source: 'checkin',
-              groupPayment: groupReservationsToCheckIn.length > 1,
-              createdAt: Timestamp.now(),
-              createdBy: user.uid,
-            });
+          for (const entry of validPayments) {
+            const entryAmount = parseFloat(entry.amount) || 0;
+            if (entryAmount > 0) {
+              const ratio = memberPayment / totalPaidNow;
+              const bank = banks.find(b => b.id === entry.bankId);
+              
+              await addDoc(collection(db, 'payments'), {
+                reservationId: member.id,
+                amount: entryAmount * ratio,
+                method: entry.method,
+                bankId: entry.bankId || undefined,
+                bankName: bank?.name || undefined,
+                source: 'checkin',
+                groupPayment: groupReservationsToCheckIn.length > 1,
+                createdAt: Timestamp.now(),
+                createdBy: user.uid,
+              });
+            }
           }
         }
 
         // Atualizar reserva do membro
-        const newAmountPaid = member.amountPaid + memberPayment;
+        const newAmountPaid = member.amountPaid + memberPayment + memberDiscount;
         const newAmountDue = member.totalAmount - newAmountPaid;
         
         await updateDoc(doc(db, 'reservations', member.id), {
           checkedIn: true,
           amountPaid: newAmountPaid,
           amountDue: Math.max(0, newAmountDue),
+          discountAmount: memberDiscount > 0 ? memberDiscount : undefined,
+          discountReason: memberDiscount > 0 ? discountReason : undefined,
           updatedAt: Timestamp.now(),
         });
       }
@@ -399,12 +454,10 @@ function CheckInPageContent() {
       setReservationToCheckIn(null);
       setGroupReservationsToCheckIn([]);
       setRemainingAmount('');
-      setUseTwoPaymentMethods(false);
-      setFirstPaymentAmount('');
-      setSecondPaymentAmount('');
+      setPaymentEntries([{ id: '1', amount: '', method: 'pix', bankId: '' }]);
+      setDiscountAmount('');
+      setDiscountReason('');
       setSelectedBank('');
-      setFirstPaymentBank('');
-      setSecondPaymentBank('');
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
@@ -456,9 +509,98 @@ function CheckInPageContent() {
       setShowPaymentConfirm(false);
       setReservationToCheckIn(null);
       setGroupReservationsToCheckIn([]);
+      setPaymentEntries([{ id: '1', amount: '', method: 'pix', bankId: '' }]);
+      setDiscountAmount('');
+      setDiscountReason('');
     } catch (error) {
       console.error('Erro ao atualizar check-in:', error);
       alert('Erro ao atualizar check-in. Tente novamente.');
+    }
+  };
+
+  // Marcar pessoa como não compareceu
+  const handleMarkNoShow = async () => {
+    if (!reservationToNoShow) return;
+
+    try {
+      await updateDoc(doc(db, 'reservations', reservationToNoShow.id), {
+        status: 'no_show',
+        noShowReason: noShowReason || 'Não compareceu',
+        checkedIn: false,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Decrementar vaga do barco
+      if (boat) {
+        const boatRef = doc(db, 'boats', boat.id);
+        const boatDoc = await getDoc(boatRef);
+        if (boatDoc.exists()) {
+          const boatData = boatDoc.data() as Boat;
+          const updateData: Record<string, unknown> = {
+            seatsTaken: Math.max(0, (boatData.seatsTaken || 0) - 1),
+            updatedAt: Timestamp.now(),
+          };
+          
+          // Atualizar contadores por tipo
+          if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
+            if (reservationToNoShow.escunaType === 'com-desembarque') {
+              updateData.seatsWithLandingTaken = Math.max(0, (boatData.seatsWithLandingTaken || 0) - 1);
+            } else {
+              updateData.seatsWithoutLandingTaken = Math.max(0, (boatData.seatsWithoutLandingTaken || 0) - 1);
+            }
+          }
+          
+          await updateDoc(boatRef, updateData);
+        }
+      }
+
+      alert(`${reservationToNoShow.customerName} foi marcado como "Não Compareceu"`);
+      setShowNoShowModal(false);
+      setReservationToNoShow(null);
+      setNoShowReason('');
+    } catch (error) {
+      console.error('Erro ao marcar não comparecimento:', error);
+      alert('Erro ao atualizar. Tente novamente.');
+    }
+  };
+
+  // Enviar confirmação de reserva
+  const handleSendConfirmation = async () => {
+    if (!reservationToConfirm || !boat) return;
+
+    try {
+      // Marcar que a confirmação foi enviada
+      await updateDoc(doc(db, 'reservations', reservationToConfirm.id), {
+        confirmationSent: true,
+        confirmationSentAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      // Gerar link do voucher e abrir WhatsApp
+      const voucherUrl = `${window.location.origin}/admin/voucher/${reservationToConfirm.id}`;
+      const message = encodeURIComponent(
+        `✅ *CONFIRMAÇÃO DE RESERVA*\n\n` +
+        `Olá ${reservationToConfirm.customerName}!\n\n` +
+        `Sua reserva está confirmada! 🎉\n\n` +
+        `📅 *Data:* ${formatDateForDisplay(reservationToConfirm.rideDate, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
+        `🚤 *Passeio:* ${boat.name}\n` +
+        `💰 *Valor:* R$ ${reservationToConfirm.totalAmount.toFixed(2)}\n` +
+        (reservationToConfirm.amountDue > 0 
+          ? `⚠️ *Valor pendente:* R$ ${reservationToConfirm.amountDue.toFixed(2)}\n` 
+          : `✅ *Status:* Pagamento completo\n`) +
+        `\n` +
+        `📍 *Voucher:* ${voucherUrl}\n\n` +
+        `Qualquer dúvida, estamos à disposição!`
+      );
+      
+      const phone = (reservationToConfirm.whatsapp || reservationToConfirm.phone).replace(/\D/g, '');
+      window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+
+      setShowConfirmationModal(false);
+      setReservationToConfirm(null);
+    } catch (error) {
+      console.error('Erro ao enviar confirmação:', error);
+      alert('Erro ao enviar confirmação. Tente novamente.');
     }
   };
 
@@ -677,44 +819,76 @@ function CheckInPageContent() {
                         )}
                       </div>
 
-                      {/* Botão de Check-in Grande */}
-                      {(() => {
-                        // Verificar quantos do grupo ainda não fizeram check-in
-                        const pendingInGroup = reservation.groupId 
-                          ? reservations.filter(r => r.groupId === reservation.groupId && !r.checkedIn).length
-                          : 0;
+                      {/* Botões de Ações */}
+                      <div className="space-y-2">
+                        {/* Botão de Check-in Grande */}
+                        {(() => {
+                          // Verificar quantos do grupo ainda não fizeram check-in
+                          const pendingInGroup = reservation.groupId 
+                            ? reservations.filter(r => r.groupId === reservation.groupId && !r.checkedIn).length
+                            : 0;
+                          
+                          return (
+                            <button
+                              onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
+                              disabled={!reservation.id}
+                              className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-base transition disabled:opacity-50 ${
+                                reservation.checkedIn
+                                  ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
+                                  : groupColor
+                                    ? `${groupColor.badge} text-white hover:opacity-90`
+                                    : 'bg-viva-blue text-white hover:bg-viva-blue-dark active:bg-viva-blue-navy'
+                              }`}
+                            >
+                              {reservation.checkedIn ? (
+                                <>
+                                  <CheckCircle size={20} />
+                                  Check-in Feito ✓
+                                </>
+                              ) : pendingInGroup > 1 ? (
+                                <>
+                                  <Users size={20} />
+                                  Check-in Grupo ({pendingInGroup})
+                                </>
+                              ) : (
+                                <>
+                                  <User size={20} />
+                                  Fazer Check-in
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
                         
-                        return (
+                        {/* Botões secundários */}
+                        <div className="flex gap-2">
+                          {/* Enviar Confirmação */}
                           <button
-                            onClick={() => handleCheckIn(reservation.id, Boolean(reservation.checkedIn))}
-                            disabled={!reservation.id}
-                            className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-base transition disabled:opacity-50 ${
-                              reservation.checkedIn
-                                ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
-                                : groupColor
-                                  ? `${groupColor.badge} text-white hover:opacity-90`
-                                  : 'bg-viva-blue text-white hover:bg-viva-blue-dark active:bg-viva-blue-navy'
-                            }`}
+                            onClick={() => {
+                              setReservationToConfirm(reservation);
+                              setShowConfirmationModal(true);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-200 transition"
                           >
-                            {reservation.checkedIn ? (
-                              <>
-                                <CheckCircle size={20} />
-                                Check-in Feito ✓
-                              </>
-                            ) : pendingInGroup > 1 ? (
-                              <>
-                                <Users size={20} />
-                                Check-in Grupo ({pendingInGroup})
-                              </>
-                            ) : (
-                              <>
-                                <User size={20} />
-                                Fazer Check-in
-                              </>
-                            )}
+                            <Phone size={14} />
+                            Confirmar
                           </button>
-                        );
-                      })()}
+                          
+                          {/* Não Compareceu */}
+                          {!reservation.checkedIn && (
+                            <button
+                              onClick={() => {
+                                setReservationToNoShow(reservation);
+                                setShowNoShowModal(true);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1 py-2 bg-orange-100 text-orange-700 rounded-lg text-xs font-semibold hover:bg-orange-200 transition"
+                            >
+                              <XCircle size={14} />
+                              Não Veio
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                   })
@@ -984,241 +1158,176 @@ function CheckInPageContent() {
                 );
               })()}
 
-              {/* Toggle para 2 formas de pagamento */}
+              {/* Campo de Desconto */}
               {(() => {
                 const totalGroupDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
-                return (
-              <div className="mb-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUseTwoPaymentMethods(!useTwoPaymentMethods);
-                    if (!useTwoPaymentMethods) {
-                      // Ao ativar, dividir o valor pendente em 2
-                      const halfAmount = (totalGroupDue / 2).toFixed(2);
-                      setFirstPaymentAmount(halfAmount);
-                      setSecondPaymentAmount(halfAmount);
-                    }
-                  }}
-                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition border-2 ${
-                    useTwoPaymentMethods
-                      ? 'bg-purple-100 border-purple-400 text-purple-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <DollarSign size={18} />
-                  {useTwoPaymentMethods ? '✓ Pagando com 2 Formas' : 'Pagar com 2 Formas de Pagamento'}
-                </button>
-              </div>
-                );
-              })()}
-
-              {/* Campos de Pagamento */}
-              {(() => {
-                const totalGroupDue = groupReservationsToCheckIn.reduce((sum, r) => sum + r.amountDue, 0);
+                const discount = parseFloat(discountAmount) || 0;
+                const effectiveAmountDue = Math.max(0, totalGroupDue - discount);
                 
                 return (
-              <div className="space-y-3 mb-4">
-                {!useTwoPaymentMethods ? (
                   <>
-                    {/* Pagamento simples - 1 forma */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Valor a Pagar (R$) {groupReservationsToCheckIn.length > 1 && '- Total do Grupo'}
-                      </label>
-                      <input
-                        type="number"
-                        value={remainingAmount}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const numValue = parseFloat(value);
-                          if (value === '' || (!isNaN(numValue) && numValue >= 0 && numValue <= totalGroupDue)) {
-                            setRemainingAmount(value);
-                          }
-                        }}
-                        step="0.01"
-                        min="0"
-                        max={totalGroupDue}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-lg font-semibold bg-white"
-                        placeholder="0.00"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Máximo: R$ {totalGroupDue.toFixed(2)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Método de Pagamento
-                      </label>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
-                      >
-                        <option value="pix">PIX</option>
-                        <option value="cartao">Cartão</option>
-                        <option value="dinheiro">Dinheiro</option>
-                      </select>
-                    </div>
-                    
-                    {/* Seleção de Banco */}
-                    {banks.length > 0 && (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Banco / Conta
-                        </label>
-                        <select
-                          value={selectedBank}
-                          onChange={(e) => setSelectedBank(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none bg-white"
-                        >
-                          <option value="">Selecione o banco...</option>
-                          {banks.map((bank) => (
-                            <option key={bank.id} value={bank.id}>
-                              {bank.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* Pagamento dividido - 2 formas */}
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
-                      <p className="text-sm font-semibold text-purple-800 text-center">
-                        Dividir R$ {totalGroupDue.toFixed(2)} em 2 pagamentos
-                        {groupReservationsToCheckIn.length > 1 && ' (grupo)'}
-                      </p>
-                      
-                      {/* Primeira forma */}
-                      <div className="bg-white rounded-lg p-3 border border-purple-200">
-                        <p className="text-xs font-bold text-purple-600 mb-2">1ª Forma de Pagamento</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
-                            <input
-                              type="number"
-                              value={firstPaymentAmount}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFirstPaymentAmount(value);
-                                // Calcular o restante automaticamente
-                                const firstVal = parseFloat(value) || 0;
-                                const remaining = totalGroupDue - firstVal;
-                                if (remaining >= 0) {
-                                  setSecondPaymentAmount(remaining.toFixed(2));
-                                }
-                              }}
-                              step="0.01"
-                              min="0"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none font-semibold bg-white"
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Método</label>
-                            <select
-                              value={firstPaymentMethod}
-                              onChange={(e) => setFirstPaymentMethod(e.target.value as PaymentMethod)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white"
-                            >
-                              <option value="pix">PIX</option>
-                              <option value="cartao">Cartão</option>
-                              <option value="dinheiro">Dinheiro</option>
-                            </select>
-                          </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                      <p className="text-sm font-semibold text-yellow-800 mb-2">🏷️ Desconto (opcional)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
+                          <input
+                            type="number"
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(e.target.value)}
+                            step="0.01"
+                            min="0"
+                            max={totalGroupDue}
+                            className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none font-semibold bg-white"
+                            placeholder="0.00"
+                          />
                         </div>
-                        {banks.length > 0 && (
-                          <div className="mt-2">
-                            <label className="block text-xs text-gray-600 mb-1">Banco</label>
-                            <select
-                              value={firstPaymentBank}
-                              onChange={(e) => setFirstPaymentBank(e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white text-sm"
-                            >
-                              <option value="">Selecione...</option>
-                              {banks.map((bank) => (
-                                <option key={bank.id} value={bank.id}>{bank.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Segunda forma */}
-                      <div className="bg-white rounded-lg p-3 border border-purple-200">
-                        <p className="text-xs font-bold text-purple-600 mb-2">2ª Forma de Pagamento</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
-                            <input
-                              type="number"
-                              value={secondPaymentAmount}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setSecondPaymentAmount(value);
-                                // Calcular o restante automaticamente
-                                const secondVal = parseFloat(value) || 0;
-                                const remaining = totalGroupDue - secondVal;
-                                if (remaining >= 0) {
-                                  setFirstPaymentAmount(remaining.toFixed(2));
-                                }
-                              }}
-                              step="0.01"
-                              min="0"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none font-semibold bg-white"
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Método</label>
-                            <select
-                              value={secondPaymentMethod}
-                              onChange={(e) => setSecondPaymentMethod(e.target.value as PaymentMethod)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white"
-                            >
-                              <option value="pix">PIX</option>
-                              <option value="cartao">Cartão</option>
-                              <option value="dinheiro">Dinheiro</option>
-                            </select>
-                          </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Motivo *</label>
+                          <input
+                            type="text"
+                            value={discountReason}
+                            onChange={(e) => setDiscountReason(e.target.value)}
+                            className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none bg-white text-sm"
+                            placeholder="Ex: Promoção, cortesia..."
+                          />
                         </div>
-                        {banks.length > 0 && (
-                          <div className="mt-2">
-                            <label className="block text-xs text-gray-600 mb-1">Banco</label>
-                            <select
-                              value={secondPaymentBank}
-                              onChange={(e) => setSecondPaymentBank(e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none bg-white text-sm"
-                            >
-                              <option value="">Selecione...</option>
-                              {banks.map((bank) => (
-                                <option key={bank.id} value={bank.id}>{bank.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
                       </div>
-
-                      {/* Resumo */}
-                      <div className="bg-purple-100 rounded-lg p-3 text-center">
-                        <p className="text-sm text-purple-800">
-                          <span className="font-bold">Total:</span>{' '}
-                          R$ {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)).toFixed(2)}
-                          {' '}de R$ {totalGroupDue.toFixed(2)}
+                      {discount > 0 && (
+                        <p className="text-sm text-yellow-800 mt-2 text-center">
+                          💰 Novo valor a pagar: <strong>R$ {effectiveAmountDue.toFixed(2)}</strong>
                         </p>
-                        {((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) !== totalGroupDue && (
-                          <p className="text-xs text-orange-600 mt-1">
-                            ⚠️ O total não corresponde ao valor pendente
-                          </p>
-                        )}
+                      )}
+                    </div>
+
+                    {/* Formas de Pagamento - Múltiplas */}
+                    <div className="space-y-3 mb-4">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          Formas de Pagamento
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentEntries([
+                              ...paymentEntries,
+                              { id: Date.now().toString(), amount: '', method: 'pix', bankId: '' }
+                            ]);
+                          }}
+                          className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold hover:bg-green-200 transition"
+                        >
+                          + Adicionar Forma
+                        </button>
                       </div>
+                      
+                      {paymentEntries.map((entry, index) => (
+                        <div key={entry.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-bold text-gray-600">
+                              {index + 1}ª Forma de Pagamento
+                            </p>
+                            {paymentEntries.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentEntries(paymentEntries.filter(e => e.id !== entry.id));
+                                }}
+                                className="text-xs text-red-500 hover:text-red-700"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
+                              <input
+                                type="number"
+                                value={entry.amount}
+                                onChange={(e) => {
+                                  const newEntries = paymentEntries.map(pe => 
+                                    pe.id === entry.id ? { ...pe, amount: e.target.value } : pe
+                                  );
+                                  setPaymentEntries(newEntries);
+                                }}
+                                step="0.01"
+                                min="0"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none font-semibold bg-white text-sm"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Método</label>
+                              <select
+                                value={entry.method}
+                                onChange={(e) => {
+                                  const newEntries = paymentEntries.map(pe => 
+                                    pe.id === entry.id ? { ...pe, method: e.target.value as PaymentMethod } : pe
+                                  );
+                                  setPaymentEntries(newEntries);
+                                }}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none bg-white text-sm"
+                              >
+                                <option value="pix">💠 PIX</option>
+                                <option value="cartao">💳 Cartão</option>
+                                <option value="dinheiro">💵 Dinheiro</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Banco</label>
+                              <select
+                                value={entry.bankId}
+                                onChange={(e) => {
+                                  const newEntries = paymentEntries.map(pe => 
+                                    pe.id === entry.id ? { ...pe, bankId: e.target.value } : pe
+                                  );
+                                  setPaymentEntries(newEntries);
+                                }}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none bg-white text-sm"
+                              >
+                                <option value="">Selecione...</option>
+                                {banks.map((bank) => (
+                                  <option key={bank.id} value={bank.id}>{bank.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Resumo de Pagamentos */}
+                      {(() => {
+                        const totalPaid = paymentEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+                        const remaining = effectiveAmountDue - totalPaid;
+                        
+                        return (
+                          <div className={`rounded-lg p-3 text-center ${
+                            remaining === 0 ? 'bg-green-100' : remaining > 0 ? 'bg-orange-100' : 'bg-red-100'
+                          }`}>
+                            <p className="text-sm">
+                              <span className="font-bold">Total informado:</span>{' '}
+                              R$ {totalPaid.toFixed(2)} de R$ {effectiveAmountDue.toFixed(2)}
+                            </p>
+                            {remaining > 0 && (
+                              <p className="text-xs text-orange-600 mt-1 font-semibold">
+                                ⚠️ Faltam R$ {remaining.toFixed(2)}
+                              </p>
+                            )}
+                            {remaining < 0 && (
+                              <p className="text-xs text-red-600 mt-1 font-semibold">
+                                ❌ Valor excede o pendente em R$ {Math.abs(remaining).toFixed(2)}
+                              </p>
+                            )}
+                            {remaining === 0 && (
+                              <p className="text-xs text-green-700 mt-1 font-semibold">
+                                ✅ Valor correto!
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </>
-                )}
-              </div>
                 );
               })()}
 
@@ -1263,14 +1372,144 @@ function CheckInPageContent() {
                     setReservationToCheckIn(null);
                     setGroupReservationsToCheckIn([]);
                     setRemainingAmount('');
-                    setUseTwoPaymentMethods(false);
-                    setFirstPaymentAmount('');
-                    setSecondPaymentAmount('');
+                    setPaymentEntries([{ id: '1', amount: '', method: 'pix', bankId: '' }]);
+                    setDiscountAmount('');
+                    setDiscountReason('');
                     setSelectedBank('');
-                    setFirstPaymentBank('');
-                    setSecondPaymentBank('');
                   }}
                   className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold active:bg-gray-50 transition hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Erro de QR Code */}
+        {qrCodeError && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl border border-gray-200">
+              <div className="text-center mb-4">
+                <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4 border border-red-200">
+                  <XCircle className="text-red-600" size={32} />
+                </div>
+                <h2 className="text-xl font-bold text-red-600 mb-2">Problema com QR Code</h2>
+                <p className="text-gray-700">{qrCodeError.message}</p>
+                {qrCodeError.rideDate && (
+                  <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      📅 <strong>Data do Passeio:</strong>
+                    </p>
+                    <p className="text-lg font-bold text-blue-700">
+                      {formatDateForDisplay(qrCodeError.rideDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setQrCodeError(null)}
+                className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Confirmar envio de confirmação */}
+        {showConfirmationModal && reservationToConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl border border-gray-200">
+              <div className="text-center mb-4">
+                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 border border-green-200">
+                  <CheckCircle className="text-green-600" size={32} />
+                </div>
+                <h2 className="text-xl font-bold text-green-700 mb-2">Enviar Confirmação</h2>
+                <p className="text-gray-700">
+                  Enviar confirmação de reserva para <strong>{reservationToConfirm.customerName}</strong>?
+                </p>
+              </div>
+              
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-600 mb-2">📋 Será enviado:</p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <li>✅ Confirmação da reserva</li>
+                  <li>📅 Data do passeio</li>
+                  <li>💰 Valores e status de pagamento</li>
+                  <li>🔗 Link do voucher</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={handleSendConfirmation}
+                  className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
+                >
+                  <Phone size={18} />
+                  Enviar via WhatsApp
+                </button>
+                <button
+                  onClick={() => {
+                    setShowConfirmationModal(false);
+                    setReservationToConfirm(null);
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Não Compareceu */}
+        {showNoShowModal && reservationToNoShow && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl border border-gray-200">
+              <div className="text-center mb-4">
+                <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4 border border-orange-200">
+                  <XCircle className="text-orange-600" size={32} />
+                </div>
+                <h2 className="text-xl font-bold text-orange-700 mb-2">Não Compareceu</h2>
+                <p className="text-gray-700">
+                  Marcar <strong>{reservationToNoShow.customerName}</strong> como não compareceu?
+                </p>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Motivo (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={noShowReason}
+                  onChange={(e) => setNoShowReason(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                  placeholder="Ex: Não atendeu ligações, desistiu..."
+                />
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-orange-700">
+                  ⚠️ A vaga será liberada e a reserva ficará como "Não Compareceu" no histórico.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={handleMarkNoShow}
+                  className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition"
+                >
+                  Confirmar Não Comparecimento
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNoShowModal(false);
+                    setReservationToNoShow(null);
+                    setNoShowReason('');
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
                 >
                   Cancelar
                 </button>

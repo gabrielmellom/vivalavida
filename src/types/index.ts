@@ -22,7 +22,7 @@ export interface Reservation {
   id: string;
   boatId: string;
   seatNumber: number;
-  status: 'pending' | 'approved' | 'cancelled' | 'pre_reserved';
+  status: 'pending' | 'approved' | 'cancelled' | 'pre_reserved' | 'no_show';
   customerName: string;
   phone: string;
   whatsapp?: string;
@@ -36,13 +36,24 @@ export interface Reservation {
   amountPaid: number;
   amountDue: number;
   totalAmount: number;
+  discountAmount?: number; // valor de desconto aplicado
+  discountReason?: string; // motivo do desconto
   vendorId: string; // vendedor uid
   rideDate: string; // ISO date string
   escunaType?: 'sem-desembarque' | 'com-desembarque'; // apenas para escunas
+  bankId?: string; // banco de recebimento
+  bankName?: string; // nome do banco
+  isChild?: boolean; // se é criança (menor de 7 anos)
+  isHalfPrice?: boolean; // se paga meia entrada
   createdAt: Date;
   updatedAt: Date;
   checkedIn?: boolean; // para check-in no dia do passeio
   voucherSent?: boolean; // se o voucher foi enviado para o cliente
+  confirmationSent?: boolean; // se a confirmação de reserva foi enviada
+  confirmationSentAt?: Date; // quando a confirmação foi enviada
+  noShowReason?: string; // motivo de não comparecimento
+  cancelledAt?: Date; // quando foi cancelado
+  cancelledReason?: string; // motivo do cancelamento
   // Campos de aceite de termos
   acceptedTerms?: boolean; // aceitou os termos de uso do barco
   acceptedTermsAt?: Date; // data/hora do aceite dos termos
@@ -73,8 +84,18 @@ export interface Payment {
   bankName?: string; // nome do banco (para facilitar exibição)
   source: 'entrada' | 'checkin' | 'vendedor' | 'admin'; // origem do pagamento
   vendorId?: string; // se foi pago pelo vendedor
+  groupPayment?: boolean; // se é parte de um pagamento de grupo
   createdAt: Date;
   createdBy: string; // uid de quem registrou
+}
+
+// Interface para múltiplas formas de pagamento
+export interface PaymentEntry {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  bankId?: string;
+  bankName?: string;
 }
 
 export interface Expense {

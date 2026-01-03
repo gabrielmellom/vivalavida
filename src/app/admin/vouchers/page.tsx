@@ -5,7 +5,8 @@ import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestor
 import { db } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, Users, QrCode, ArrowLeft, Search, Phone, MessageCircle, FileCheck, FileX, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { Calendar, Users, QrCode, ArrowLeft, Search, Phone, MessageCircle, FileCheck, FileX, Send, CheckCircle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { generateVoucherPDF, SupportedLanguage } from '@/lib/voucherGenerator';
 import { updateDoc, doc, Timestamp } from 'firebase/firestore';
@@ -25,10 +26,12 @@ export default function VouchersPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [boats, setBoats] = useState<Boat[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [allReservations, setAllReservations] = useState<Reservation[]>([]);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('pt-BR');
   const [showLanguageDropdown, setShowLanguageDropdown] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   useEffect(() => {
     // Buscar barcos
@@ -52,7 +55,20 @@ export default function VouchersPage() {
       setSelectedBoat(todayBoat || null);
     });
 
-    return () => unsubscribeBoats();
+    // Buscar todas as reservas para o calendário
+    const allReservationsQuery = query(collection(db, 'reservations'), where('status', '==', 'approved'));
+    const unsubscribeAllReservations = onSnapshot(allReservationsQuery, (snapshot) => {
+      const reservationsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Reservation[];
+      setAllReservations(reservationsData);
+    });
+
+    return () => {
+      unsubscribeBoats();
+      unsubscribeAllReservations();
+    };
   }, [selectedDate]);
 
   useEffect(() => {
@@ -211,6 +227,73 @@ Obrigado e até breve! 🚢`;
     return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
   };
 
+  // Dados do calendário - quais dias têm barco e quais têm reservas
+  const calendarData = useMemo(() => {
+    const boatDates = new Map<string, { hasBoat: boolean; hasReservations: boolean; reservationCount: number }>();
+    
+    // Marcar dias com barco ativo
+    boats.forEach(boat => {
+      if (boat.status !== 'active') return;
+      const dateKey = new Date(boat.date).toISOString().split('T')[0];
+      if (!boatDates.has(dateKey)) {
+        boatDates.set(dateKey, { hasBoat: true, hasReservations: false, reservationCount: 0 });
+      }
+    });
+    
+    // Marcar dias com reservas
+    allReservations.forEach(r => {
+      const dateKey = new Date(r.rideDate).toISOString().split('T')[0];
+      const existing = boatDates.get(dateKey);
+      if (existing) {
+        existing.hasReservations = true;
+        existing.reservationCount++;
+      }
+    });
+    
+    return boatDates;
+  }, [boats, allReservations]);
+
+  // Funções do calendário
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay(); // 0 = domingo
+    
+    const days: (Date | null)[] = [];
+    
+    // Adicionar espaços vazios para os dias antes do primeiro dia do mês
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+    
+    // Adicionar os dias do mês
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const getCalendarDayStatus = (date: Date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    const data = calendarData.get(dateKey);
+    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isSelected = dateKey === selectedDate;
+    
+    return {
+      hasBoat: data?.hasBoat || false,
+      hasReservations: data?.hasReservations || false,
+      reservationCount: data?.reservationCount || 0,
+      isToday,
+      isSelected,
+    };
+  };
+
+  const calendarMonthName = calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -232,18 +315,114 @@ Obrigado e até breve! 🚢`;
       </header>
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Filtro de Data */}
-        <div className="bg-white rounded-lg p-4 sm:p-6 shadow-sm mb-4 sm:mb-6 border border-gray-200">
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-            <Calendar size={18} className="text-gray-500" />
-            Data do Passeio
-          </label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full sm:w-auto px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
-          />
+        {/* Calendário Visual */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6 max-w-sm">
+          {/* Header do Calendário */}
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => {
+                const newMonth = new Date(calendarMonth);
+                newMonth.setMonth(newMonth.getMonth() - 1);
+                setCalendarMonth(newMonth);
+              }}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ChevronLeft size={18} className="text-gray-600" />
+            </button>
+            <h3 className="text-sm sm:text-base font-bold text-gray-800 capitalize">{calendarMonthName}</h3>
+            <button
+              onClick={() => {
+                const newMonth = new Date(calendarMonth);
+                newMonth.setMonth(newMonth.getMonth() + 1);
+                setCalendarMonth(newMonth);
+              }}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ChevronRight size={18} className="text-gray-600" />
+            </button>
+          </div>
+
+          {/* Dias da Semana */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="text-center text-[10px] font-semibold text-gray-500 py-1">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Dias do Mês */}
+          <div className="grid grid-cols-7 gap-1">
+            {getDaysInMonth(calendarMonth).map((date, index) => {
+              if (!date) {
+                return <div key={`empty-${index}`} className="w-9 h-9 sm:w-10 sm:h-10" />;
+              }
+
+              const status = getCalendarDayStatus(date);
+              const dateStr = date.toISOString().split('T')[0];
+
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-md flex flex-col items-center justify-center text-xs font-medium transition relative ${
+                    status.isSelected
+                      ? 'bg-viva-blue text-white ring-2 ring-viva-blue ring-offset-1'
+                      : status.hasReservations
+                      ? 'bg-green-500 text-white hover:bg-green-600'
+                      : status.hasBoat
+                      ? 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                      : status.isToday
+                      ? 'bg-blue-50 text-viva-blue border-2 border-viva-blue hover:bg-blue-100'
+                      : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <span>{date.getDate()}</span>
+                  {status.hasReservations && !status.isSelected && (
+                    <span className="text-[8px] font-bold">{status.reservationCount}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legenda */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-200">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-green-500"></div>
+              <span className="text-[10px] text-gray-600">Com reservas</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-gray-300"></div>
+              <span className="text-[10px] text-gray-600">Barco ativo</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded border-2 border-viva-blue bg-blue-50"></div>
+              <span className="text-[10px] text-gray-600">Hoje</span>
+            </div>
+          </div>
+
+          {/* Botão Voltar para Hoje */}
+          {selectedDate !== new Date().toISOString().split('T')[0] && (
+            <div className="flex justify-center mt-2">
+              <button
+                onClick={() => {
+                  const todayDate = new Date();
+                  setSelectedDate(todayDate.toISOString().split('T')[0]);
+                  setCalendarMonth(todayDate);
+                }}
+                className="text-xs text-viva-blue hover:text-viva-blue-dark font-semibold"
+              >
+                ← Voltar para Hoje
+              </button>
+            </div>
+          )}
+
+          {/* Data selecionada */}
+          <div className="mt-3 pt-3 border-t border-gray-200 text-center">
+            <p className="text-xs text-gray-500">Data selecionada:</p>
+            <p className="text-sm font-bold text-viva-blue-dark">{formatDate(selectedDate)}</p>
+          </div>
         </div>
 
         {selectedBoat ? (

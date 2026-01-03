@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
-import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode } from 'lucide-react';
+import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -59,10 +59,60 @@ export default function AdminDashboard() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [showReservationWizard, setShowReservationWizard] = useState(false);
+  const [showSideMenu, setShowSideMenu] = useState(false);
+  const [weather, setWeather] = useState<{temp: number; condition: string; humidity: number; wind: number} | null>(null);
   const previousPendingCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const { user, signOut } = useAuth();
+  const { user, userRole, signOut } = useAuth();
   const router = useRouter();
+
+  // Buscar previsão do tempo de Florianópolis
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        // Usando API gratuita Open-Meteo para Florianópolis
+        const response = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=-27.5954&longitude=-48.5480&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=America/Sao_Paulo'
+        );
+        const data = await response.json();
+        if (data.current) {
+          setWeather({
+            temp: Math.round(data.current.temperature_2m),
+            condition: getWeatherCondition(data.current.weather_code),
+            humidity: data.current.relative_humidity_2m,
+            wind: Math.round(data.current.wind_speed_10m),
+          });
+        }
+      } catch (error) {
+        console.log('Erro ao buscar previsão:', error);
+      }
+    };
+    fetchWeather();
+    // Atualizar a cada 30 minutos
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Converter código do tempo para texto
+  const getWeatherCondition = (code: number): string => {
+    if (code === 0) return 'Ensolarado';
+    if (code <= 3) return 'Parcialmente nublado';
+    if (code <= 48) return 'Nublado';
+    if (code <= 67) return 'Chuva';
+    if (code <= 77) return 'Neve';
+    if (code <= 82) return 'Pancadas';
+    return 'Tempestade';
+  };
+
+  // Ícone do tempo baseado na condição
+  const getWeatherIcon = () => {
+    if (!weather) return <Cloud className="text-gray-400" size={32} />;
+    const condition = weather.condition.toLowerCase();
+    if (condition.includes('ensolarado')) return <Sun className="text-amber-500" size={32} />;
+    if (condition.includes('parcialmente')) return <CloudSun className="text-amber-400" size={32} />;
+    if (condition.includes('chuva') || condition.includes('pancadas')) return <CloudRain className="text-blue-500" size={32} />;
+    return <Cloud className="text-gray-500" size={32} />;
+  };
 
   // Inicializar contexto de áudio (precisa de interação do usuário)
   const initAudio = useCallback(() => {
@@ -699,232 +749,339 @@ export default function AdminDashboard() {
     return GROUP_COLORS[colorIndex % GROUP_COLORS.length];
   };
 
+  // Nome do dia da semana
+  const getDayName = () => {
+    const days = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+    return days[new Date().getDay()];
+  };
+
+  // Data formatada
+  const getFormattedDate = () => {
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const d = new Date();
+    return `${d.getDate()} de ${months[d.getMonth()]}`;
+  };
+
+  // Calcular variação de reservas vs ontem
+  const getReservationTrend = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const todayCount = reservations.filter(r => r.rideDate === today).length;
+    const yesterdayCount = reservations.filter(r => r.rideDate === yesterday).length;
+    if (yesterdayCount === 0) return { percent: 0, isUp: true };
+    const percent = Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100);
+    return { percent: Math.abs(percent), isUp: percent >= 0 };
+  };
+
+  const trend = getReservationTrend();
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-100">
       {/* Alerta de Novo Pedido */}
       {newOrderAlert && (
         <div className="fixed top-0 left-0 right-0 z-50 animate-pulse">
-          <div className="bg-gradient-to-r from-green-500 via-emerald-500 to-green-500 text-white py-4 px-4 shadow-lg">
-            <div className="container mx-auto flex items-center justify-center gap-4">
-              <Bell className="animate-bounce" size={28} />
-              <div className="text-center">
-                <p className="font-black text-xl">🎉 NOVO PEDIDO!</p>
-                <p className="text-sm opacity-90">
-                  {newOrderCount === 1 
-                    ? 'Chegou 1 nova reserva!' 
-                    : `Chegaram ${newOrderCount} novas reservas!`}
-                </p>
-              </div>
-              <Bell className="animate-bounce" size={28} />
+          <div className="bg-emerald-600 text-white py-3 px-4 shadow-lg">
+            <div className="container mx-auto flex items-center justify-center gap-3">
+              <Bell className="animate-bounce" size={24} />
+              <p className="font-semibold">
+                {newOrderCount === 1 
+                  ? '🎉 Nova reserva recebida!' 
+                  : `🎉 ${newOrderCount} novas reservas!`}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Header - Responsivo */}
-      <header className={`bg-white shadow-sm border-b ${newOrderAlert ? 'mt-20' : ''} transition-all duration-300`}>
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-viva-blue-dark">Painel Admin</h1>
-              <p className="text-gray-600 text-xs sm:text-sm">Gerenciamento de Reservas</p>
+      {/* Menu Lateral (Sidebar) */}
+      <div className={`fixed inset-0 z-50 transition-all duration-300 ${showSideMenu ? 'visible' : 'invisible'}`}>
+        {/* Overlay */}
+        <div 
+          className={`absolute inset-0 bg-black/50 transition-opacity ${showSideMenu ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setShowSideMenu(false)}
+        />
+        
+        {/* Sidebar */}
+        <div className={`absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-2xl transform transition-transform duration-300 ${showSideMenu ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-6">
+            {/* Header do Menu */}
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-slate-800">Menu</h2>
+              <button 
+                onClick={() => setShowSideMenu(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition"
+              >
+                <X size={24} className="text-slate-600" />
+              </button>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              {/* Botão de Som */}
+
+            {/* Links de Navegação */}
+            <nav className="space-y-2">
+              <Link
+                href="/admin/vendedores"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <Users size={20} />
+                <span className="font-medium">Gerenciar Equipe</span>
+              </Link>
+              <Link
+                href="/admin/checkin"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <CheckCircle size={20} />
+                <span className="font-medium">Check-in</span>
+              </Link>
+              <Link
+                href="/admin/vouchers"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <QrCode size={20} />
+                <span className="font-medium">Gerar Vouchers</span>
+              </Link>
+              <Link
+                href="/admin/relatorios"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <BarChart3 size={20} />
+                <span className="font-medium">Relatórios</span>
+              </Link>
+              <Link
+                href="/admin/financeiro"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <DollarSign size={20} />
+                <span className="font-medium">Financeiro</span>
+              </Link>
+              <Link
+                href="/admin/config-site"
+                onClick={() => setShowSideMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
+              >
+                <Settings size={20} />
+                <span className="font-medium">Configurações do Site</span>
+              </Link>
+            </nav>
+
+            {/* Configurações de Som */}
+            <div className="mt-8 pt-6 border-t border-slate-200">
               <button
                 onClick={() => {
                   toggleSound();
-                  // Tocar som de teste quando ativar
                   if (!soundEnabled) {
-                    setTimeout(() => {
-                      playNotificationSound();
-                    }, 100);
+                    setTimeout(() => playNotificationSound(), 100);
                   }
                 }}
-                className={`p-2 rounded-lg transition relative ${
-                  soundEnabled && audioUnlocked
-                    ? 'text-green-600 bg-green-50 hover:bg-green-100' 
-                    : soundEnabled && !audioUnlocked
-                    ? 'text-yellow-600 bg-yellow-50 hover:bg-yellow-100'
-                    : 'text-gray-400 bg-gray-50 hover:bg-gray-100'
+                className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl transition ${
+                  soundEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                 }`}
-                title={
-                  !audioUnlocked 
-                    ? 'Clique para ativar o som' 
-                    : soundEnabled 
-                    ? 'Som ativado (clique para desativar)' 
-                    : 'Som desativado (clique para ativar)'
-                }
               >
                 <Volume2 size={20} />
-                {!audioUnlocked && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full animate-pulse" />
-                )}
+                <span className="font-medium">
+                  {soundEnabled ? 'Notificações Ativadas' : 'Notificações Desativadas'}
+                </span>
               </button>
-              <span className="text-gray-600 text-xs sm:text-sm hidden sm:block max-w-[150px] truncate">{user?.email}</span>
+            </div>
+
+            {/* Logout */}
+            <div className="mt-6">
               <button
                 onClick={() => {
                   signOut();
                   router.push('/login');
                 }}
-                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition text-sm"
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition"
               >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">Sair</span>
+                <LogOut size={20} />
+                <span className="font-medium">Sair</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Header - Clean & Professional */}
+      <header className={`bg-white ${newOrderAlert ? 'mt-12' : ''} transition-all duration-300`}>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            {/* Left: Avatar + Greeting */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                {userRole?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'A'}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">DASHBOARD</p>
+                <h1 className="text-lg font-bold text-slate-800">
+                  Olá, {userRole?.name?.split(' ')[0] || 'Capitão'}
+                </h1>
+              </div>
+            </div>
+
+            {/* Right: Notification + Menu */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  toggleSound();
+                  if (!soundEnabled) setTimeout(() => playNotificationSound(), 100);
+                }}
+                className={`relative p-2.5 rounded-xl transition ${
+                  soundEnabled && audioUnlocked ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                <Bell size={20} />
+                {pendingReservations.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {pendingReservations.length > 9 ? '9+' : pendingReservations.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowSideMenu(true)}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                <Menu size={20} className="text-slate-700" />
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Stats - Grid responsivo 2x2 no mobile */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-8">
-          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm mb-1">Barcos Ativos</p>
-                <p className="text-2xl sm:text-3xl font-black text-viva-blue">{filteredBoats.filter(b => b.status === 'active').length}</p>
+      <div className="container mx-auto px-4 py-6">
+        {/* Data atual */}
+        <p className="text-slate-500 text-sm mb-6">{getDayName()}, {getFormattedDate()}</p>
+
+        {/* Stats Cards - 2 columns */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {/* Reservas Hoje */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
+            <div className="flex items-start justify-between mb-3">
+              <div className="p-2.5 bg-slate-100 rounded-xl">
+                <FileText size={20} className="text-slate-600" />
               </div>
-              <Calendar className="text-viva-blue hidden sm:block" size={32} />
+              <span className="text-xs text-slate-500">Reservas<br/>Hoje</span>
+            </div>
+            <p className="text-3xl font-bold text-slate-800 mb-1">
+              {reservations.filter(r => r.rideDate === new Date().toISOString().split('T')[0]).length}
+            </p>
+            <div className={`flex items-center gap-1 text-xs ${trend.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+              <TrendingUp size={14} className={!trend.isUp ? 'rotate-180' : ''} />
+              <span>{trend.isUp ? '+' : '-'}{trend.percent}% vs ontem</span>
             </div>
           </div>
-          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm mb-1">Pendentes</p>
-                <p className="text-2xl sm:text-3xl font-black text-orange-500">{pendingReservations.length}</p>
+
+          {/* Previsão do Tempo */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
+            <div className="flex items-start justify-between mb-3">
+              <div className="p-2.5 bg-sky-50 rounded-xl">
+                {getWeatherIcon()}
               </div>
-              <Clock className="text-orange-500 hidden sm:block" size={32} />
+              <span className="text-xs text-slate-500">Floripa<br/>Agora</span>
             </div>
-          </div>
-          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm mb-1">Aprovadas</p>
-                <p className="text-2xl sm:text-3xl font-black text-green-500">{approvedReservations.length}</p>
-              </div>
-              <CheckCircle className="text-green-500 hidden sm:block" size={32} />
-            </div>
-          </div>
-          <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm mb-1">Total Reservas</p>
-                <p className="text-2xl sm:text-3xl font-black text-viva-blue-dark">{filteredReservations.length}</p>
-              </div>
-              <FileText className="text-viva-blue-dark hidden sm:block" size={32} />
-            </div>
+            {weather ? (
+              <>
+                <p className="text-3xl font-bold text-slate-800 mb-1">{weather.temp}°C</p>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Droplets size={12} />
+                    {weather.humidity}%
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Wind size={12} />
+                    {weather.wind}km/h
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Carregando...</p>
+            )}
           </div>
         </div>
 
-        {/* Actions - Grid responsivo para mobile */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-8">
+        {/* Ações Rápidas */}
+        <div className="mb-6">
+          <h2 className="text-sm font-medium text-slate-500 mb-3">Ações Rápidas</h2>
+          
+          {/* Botão Principal - Novo Passeio */}
           <button
             onClick={() => setShowReservationWizard(true)}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white px-3 sm:px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition text-sm sm:text-base col-span-2 sm:col-span-1 hover:from-green-700 hover:to-emerald-800"
+            className="w-full bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-2xl p-5 shadow-lg hover:shadow-xl transition mb-3 flex items-center justify-between group"
           >
-            <Sparkles size={18} />
-            Criar Reserva
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                <Plus size={24} />
+              </div>
+              <div className="text-left">
+                <p className="font-bold text-lg">Novo Passeio</p>
+                <p className="text-white/80 text-sm">Agendar uma nova saída</p>
+              </div>
+            </div>
+            <ChevronRight size={24} className="opacity-60 group-hover:translate-x-1 transition" />
           </button>
+
+          {/* Botão Secundário - Criar Barco */}
           <button
             onClick={() => setShowBoatModal(true)}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white px-3 sm:px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition text-sm sm:text-base"
+            className="w-full bg-white border border-slate-200 text-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition flex items-center justify-between"
           >
-            <Plus size={18} />
-            <span className="hidden xs:inline">Criar</span> Barco
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
+                <Ship size={20} className="text-slate-600" />
+              </div>
+              <span className="font-medium">Criar Novo Barco</span>
+            </div>
+            <ChevronRight size={20} className="text-slate-400" />
           </button>
-          <Link
-            href="/admin/vendedores"
-            className="flex items-center justify-center gap-2 bg-white border border-viva-blue text-viva-blue-dark px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-viva-blue/5 transition text-sm sm:text-base"
-          >
-            <Users size={18} />
-            <span className="hidden sm:inline">Gerenciar</span> Vendedores
-          </Link>
-          <Link
-            href="/admin/checkin"
-            className="flex items-center justify-center gap-2 bg-white border border-viva-orange text-viva-orange px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-viva-orange/5 transition text-sm sm:text-base"
-          >
-            <CheckCircle size={18} />
-            Check-in
-          </Link>
-          <Link
-            href="/admin/vouchers"
-            className="flex items-center justify-center gap-2 bg-white border border-indigo-600 text-indigo-600 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-indigo-50 transition text-sm sm:text-base"
-          >
-            <QrCode size={18} />
-            <span className="hidden xs:inline">Gerar</span> Vouchers
-          </Link>
-          <Link
-            href="/admin/relatorios"
-            className="flex items-center justify-center gap-2 bg-white border border-slate-600 text-slate-700 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-slate-50 transition text-sm sm:text-base"
-          >
-            <BarChart3 size={18} />
-            Relatórios
-          </Link>
-          <Link
-            href="/admin/financeiro"
-            className="flex items-center justify-center gap-2 bg-white border border-red-600 text-red-600 px-3 sm:px-6 py-3 rounded-lg font-semibold hover:bg-red-50 transition text-sm sm:text-base"
-          >
-            <DollarSign size={18} />
-            Financeiro
-          </Link>
-          <Link
-            href="/admin/config-site"
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-teal-600 text-white px-3 sm:px-6 py-3 rounded-lg font-bold hover:shadow-lg transition text-sm sm:text-base"
-          >
-            <Settings size={18} />
-            Config Site
-          </Link>
         </div>
 
-        {/* Barcos */}
-        <div className="mb-4 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg sm:text-xl font-bold text-viva-blue-dark">Barcos Programados</h2>
-          </div>
+        {/* Barcos Programados */}
+        <div className="mb-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-4">Barcos Programados</h2>
 
-          {/* Calendário Visual */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-4 max-w-xs">
+          {/* Calendário Visual - Clean Design - Responsivo */}
+          <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 mb-4 sm:max-w-md lg:max-w-lg">
             {/* Header do Calendário */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <button
                 onClick={() => {
                   const newMonth = new Date(calendarMonth);
                   newMonth.setMonth(newMonth.getMonth() - 1);
                   setCalendarMonth(newMonth);
                 }}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+                className="p-2 sm:p-3 hover:bg-slate-100 rounded-lg transition"
               >
-                <ChevronLeft size={16} className="text-gray-600" />
+                <ChevronLeft size={18} className="sm:w-5 sm:h-5 text-slate-600" />
               </button>
-              <h3 className="text-sm font-bold text-gray-800 capitalize">{calendarMonthName}</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800 capitalize">{calendarMonthName}</h3>
               <button
                 onClick={() => {
                   const newMonth = new Date(calendarMonth);
                   newMonth.setMonth(newMonth.getMonth() + 1);
                   setCalendarMonth(newMonth);
                 }}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+                className="p-2 sm:p-3 hover:bg-slate-100 rounded-lg transition"
               >
-                <ChevronRight size={16} className="text-gray-600" />
+                <ChevronRight size={18} className="sm:w-5 sm:h-5 text-slate-600" />
               </button>
             </div>
 
             {/* Dias da Semana */}
-            <div className="grid grid-cols-7 gap-1 mb-1">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 sm:mb-3">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                <div key={day} className="text-center text-[10px] font-semibold text-gray-500 py-1">
+                <div key={day} className="text-center text-xs sm:text-sm font-medium text-slate-400 py-1 sm:py-2">
                   {day}
                 </div>
               ))}
             </div>
 
             {/* Dias do Mês */}
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {getDaysInMonth(calendarMonth).map((date, index) => {
                 if (!date) {
-                  return <div key={`empty-${index}`} className="w-9 h-9" />;
+                  return <div key={`empty-${index}`} className="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14" />;
                 }
 
                 const status = getCalendarDayStatus(date);
@@ -934,21 +1091,21 @@ export default function AdminDashboard() {
                   <button
                     key={dateStr}
                     onClick={() => setFilterDate(dateStr)}
-                    className={`w-9 h-9 rounded-md flex flex-col items-center justify-center text-xs font-medium transition relative ${
+                    className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-xl flex flex-col items-center justify-center text-sm sm:text-base font-medium transition relative ${
                       status.isSelected
-                        ? 'bg-viva-blue text-white ring-2 ring-viva-blue ring-offset-1'
+                        ? 'bg-slate-800 text-white shadow-md'
                         : status.hasReservations
-                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        ? 'bg-emerald-500 text-white hover:bg-emerald-600'
                         : status.hasBoat
-                        ? 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                         : status.isToday
-                        ? 'bg-blue-50 text-viva-blue border-2 border-viva-blue hover:bg-blue-100'
-                        : 'hover:bg-gray-100 text-gray-700'
+                        ? 'bg-sky-100 text-sky-700 ring-2 ring-sky-400 ring-offset-1'
+                        : 'hover:bg-slate-100 text-slate-600'
                     }`}
                   >
                     <span>{date.getDate()}</span>
                     {status.hasReservations && !status.isSelected && (
-                      <span className="text-[8px] font-bold">{status.reservationCount}</span>
+                      <span className="text-[8px] sm:text-[10px] font-bold">{status.reservationCount}</span>
                     )}
                   </button>
                 );
@@ -956,31 +1113,31 @@ export default function AdminDashboard() {
             </div>
 
             {/* Legenda */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-200">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-green-500"></div>
-                <span className="text-[10px] text-gray-600">Com reservas</span>
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500"></div>
+                <span className="text-xs sm:text-sm text-slate-500">Com reservas</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-gray-300"></div>
-                <span className="text-[10px] text-gray-600">Barco</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-200"></div>
+                <span className="text-xs sm:text-sm text-slate-500">Barco</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded border-2 border-viva-blue bg-blue-50"></div>
-                <span className="text-[10px] text-gray-600">Hoje</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full ring-2 ring-sky-400 bg-sky-100"></div>
+                <span className="text-xs sm:text-sm text-slate-500">Hoje</span>
               </div>
             </div>
 
             {/* Botão Voltar para Hoje */}
             {filterDate !== new Date().toISOString().split('T')[0] && (
-              <div className="flex justify-center mt-2">
+              <div className="flex justify-center mt-4">
                 <button
                   onClick={() => {
                     const todayDate = new Date();
                     setFilterDate(todayDate.toISOString().split('T')[0]);
                     setCalendarMonth(todayDate);
                   }}
-                  className="text-xs text-viva-blue hover:text-viva-blue-dark font-semibold"
+                  className="text-sm sm:text-base text-sky-600 hover:text-sky-700 font-medium"
                 >
                   ← Voltar para Hoje
                 </button>
@@ -993,15 +1150,17 @@ export default function AdminDashboard() {
 
             if (filteredBoats.length === 0) {
               return (
-                <div className="bg-white rounded-lg p-12 text-center">
-                  <Calendar className="mx-auto text-gray-400 mb-4" size={48} />
-                  <p className="text-gray-600 font-semibold mb-2">
+                <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+                  <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="text-slate-400" size={32} />
+                  </div>
+                  <p className="text-slate-700 font-semibold mb-1">
                     {filterDate 
-                      ? `Nenhum barco encontrado para ${formatDate(filterDate)}`
+                      ? `Nenhum barco para ${formatDate(filterDate)}`
                       : 'Nenhum barco encontrado'
                     }
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-slate-500">
                     Selecione outra data ou crie um novo barco
                   </p>
                 </div>
@@ -1009,9 +1168,9 @@ export default function AdminDashboard() {
             }
 
             return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredBoats.filter(b => b.status === 'active').map((boat) => (
-              <div key={boat.id} className="bg-white rounded-lg p-4 sm:p-5 shadow-sm border border-gray-100">
+              <div key={boat.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition">
                 {/* Header do Card */}
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex-1 min-w-0">
@@ -1576,9 +1735,11 @@ export default function AdminDashboard() {
       {selectedBoat && !selectedReservation && (
         <BoatSeatsModal
           boat={selectedBoat}
-          reservations={reservations.filter(r => r.boatId === selectedBoat.id && r.status === 'approved')}
+          reservations={reservations.filter(r => r.boatId === selectedBoat.id && (r.status === 'approved' || r.status === 'cancelled' || r.status === 'no_show'))}
+          allBoats={boats}
           onClose={() => setSelectedBoat(null)}
           onCancelReservation={handleRejectReservation}
+          onSelectReservation={setSelectedReservation}
         />
       )}
 
@@ -1728,14 +1889,25 @@ const getGroupColor = (groupId: string | undefined, groupColorMap: Map<string, n
 function BoatSeatsModal({
   boat,
   reservations,
+  allBoats,
   onClose,
   onCancelReservation,
+  onSelectReservation,
 }: {
   boat: Boat;
   reservations: Reservation[];
+  allBoats: Boat[];
   onClose: () => void;
   onCancelReservation: (reservationId: string) => void;
+  onSelectReservation: (reservation: Reservation) => void;
 }) {
+  const [showInactive, setShowInactive] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [reservationToMove, setReservationToMove] = useState<Reservation | null>(null);
+  
+  const activeReservations = reservations.filter(r => r.status === 'approved');
+  const inactiveReservations = reservations.filter(r => r.status === 'cancelled' || r.status === 'no_show');
+  
   const availableSeats = boat.seatsTotal - boat.seatsTaken;
   const occupancyPercent = Math.round((boat.seatsTaken / boat.seatsTotal) * 100);
 
@@ -1744,7 +1916,7 @@ function BoatSeatsModal({
     const map = new Map<string, number>();
     let colorIndex = 0;
     
-    reservations.forEach(r => {
+    activeReservations.forEach(r => {
       if (r.groupId && !map.has(r.groupId)) {
         map.set(r.groupId, colorIndex);
         colorIndex++;
@@ -1752,21 +1924,62 @@ function BoatSeatsModal({
     });
     
     return map;
-  }, [reservations]);
+  }, [activeReservations]);
 
   // Contar membros de cada grupo
   const groupCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    reservations.forEach(r => {
+    activeReservations.forEach(r => {
       if (r.groupId) {
         counts.set(r.groupId, (counts.get(r.groupId) || 0) + 1);
       }
     });
     return counts;
-  }, [reservations]);
+  }, [activeReservations]);
 
   // Contar quantos grupos existem
   const totalGroups = groupColorMap.size;
+
+  // Função para marcar como não compareceu
+  const handleMarkNoShow = async (reservation: Reservation) => {
+    const reason = prompt(`${reservation.customerName} não compareceu?\n\nDigite o motivo (opcional):`);
+    if (reason === null) return; // Cancelou
+    
+    try {
+      await updateDoc(doc(db, 'reservations', reservation.id), {
+        status: 'no_show',
+        noShowReason: reason || 'Não compareceu',
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Decrementar vagas do barco
+      const boatRef = doc(db, 'boats', reservation.boatId);
+      const boatDoc = await getDoc(boatRef);
+      if (boatDoc.exists()) {
+        const boatData = boatDoc.data() as Boat;
+        const updateData: Record<string, unknown> = {
+          seatsTaken: Math.max(0, (boatData.seatsTaken || 0) - 1),
+          updatedAt: Timestamp.now(),
+        };
+        
+        // Atualizar contadores por tipo
+        if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
+          if (reservation.escunaType === 'com-desembarque') {
+            updateData.seatsWithLandingTaken = Math.max(0, (boatData.seatsWithLandingTaken || 0) - 1);
+          } else {
+            updateData.seatsWithoutLandingTaken = Math.max(0, (boatData.seatsWithoutLandingTaken || 0) - 1);
+          }
+        }
+        
+        await updateDoc(boatRef, updateData);
+      }
+      
+      alert(`${reservation.customerName} foi marcado como "Não Compareceu"`);
+    } catch (error) {
+      console.error('Erro ao marcar não comparecimento:', error);
+      alert('Erro ao atualizar. Tente novamente.');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
@@ -1794,18 +2007,22 @@ function BoatSeatsModal({
         </div>
 
         {/* Stats rápidos */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
-          <div className="bg-red-50 rounded-lg p-4 text-center">
-            <p className="text-2xl sm:text-3xl font-black text-red-600">{boat.seatsTaken}</p>
-            <p className="text-xs sm:text-sm text-red-600 font-medium">Ocupadas</p>
+        <div className="grid grid-cols-4 gap-2 sm:gap-4 mb-6">
+          <div className="bg-red-50 rounded-lg p-3 text-center">
+            <p className="text-xl sm:text-2xl font-black text-red-600">{boat.seatsTaken}</p>
+            <p className="text-xs text-red-600 font-medium">Ocupadas</p>
           </div>
-          <div className="bg-green-50 rounded-lg p-4 text-center">
-            <p className="text-2xl sm:text-3xl font-black text-green-600">{availableSeats}</p>
-            <p className="text-xs sm:text-sm text-green-600 font-medium">Disponíveis</p>
+          <div className="bg-green-50 rounded-lg p-3 text-center">
+            <p className="text-xl sm:text-2xl font-black text-green-600">{availableSeats}</p>
+            <p className="text-xs text-green-600 font-medium">Disponíveis</p>
           </div>
-          <div className="bg-purple-50 rounded-lg p-4 text-center">
-            <p className="text-2xl sm:text-3xl font-black text-purple-600">{totalGroups}</p>
-            <p className="text-xs sm:text-sm text-purple-600 font-medium">Grupos</p>
+          <div className="bg-purple-50 rounded-lg p-3 text-center">
+            <p className="text-xl sm:text-2xl font-black text-purple-600">{totalGroups}</p>
+            <p className="text-xs text-purple-600 font-medium">Grupos</p>
+          </div>
+          <div className="bg-gray-100 rounded-lg p-3 text-center">
+            <p className="text-xl sm:text-2xl font-black text-gray-600">{inactiveReservations.length}</p>
+            <p className="text-xs text-gray-600 font-medium">Inativos</p>
           </div>
         </div>
 
@@ -1830,17 +2047,17 @@ function BoatSeatsModal({
         </div>
         
         <div className="space-y-4 sm:space-y-6">
-          {/* Lista de Reservas */}
-          {reservations.length > 0 ? (
+          {/* Lista de Reservas Ativas */}
+          {activeReservations.length > 0 ? (
             <div>
               <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark mb-3 sm:mb-4 flex items-center gap-2">
-                ✅ Reservas Aprovadas
+                ✅ Reservas Ativas
                 <span className="bg-viva-blue text-white text-xs px-2 py-0.5 rounded-full">
-                  {reservations.length}
+                  {activeReservations.length}
                 </span>
               </h3>
-              <div className="space-y-2 max-h-[350px] overflow-y-auto">
-                {reservations.map((reservation, index) => {
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {activeReservations.map((reservation, index) => {
                   const groupColor = getGroupColor(reservation.groupId, groupColorMap);
                   const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
                   
@@ -1892,17 +2109,36 @@ function BoatSeatsModal({
                           )}
                         </div>
                       </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          onClick={() => {
+                            setReservationToMove(reservation);
+                            setShowMoveModal(true);
+                          }}
+                          className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition"
+                          title="Mover para outro barco"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleMarkNoShow(reservation)}
+                          className="p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 transition"
+                          title="Marcar como Não Compareceu"
+                        >
+                          <XCircle size={16} />
+                        </button>
                       <button
                         onClick={() => {
                           if (confirm(`Cancelar reserva de ${reservation.customerName}?\nA vaga ficará disponível.`)) {
                             onCancelReservation(reservation.id);
                           }
                         }}
-                        className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition shrink-0"
+                          className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
                         title="Cancelar Reserva"
                       >
-                        <XCircle size={18} />
+                          <Trash2 size={16} />
                       </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1912,8 +2148,64 @@ function BoatSeatsModal({
           ) : (
             <div className="text-center py-8">
               <Users className="mx-auto text-gray-300 mb-3" size={48} />
-              <p className="text-gray-500 font-medium">Nenhuma reserva aprovada ainda</p>
+              <p className="text-gray-500 font-medium">Nenhuma reserva ativa ainda</p>
               <p className="text-gray-400 text-sm">As reservas aprovadas aparecerão aqui</p>
+            </div>
+          )}
+
+          {/* Reservas Inativas (Canceladas/Não Compareceu) */}
+          {inactiveReservations.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowInactive(!showInactive)}
+                className="w-full flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              >
+                <span className="flex items-center gap-2 text-gray-600 font-semibold">
+                  <XCircle size={16} />
+                  Reservas Inativas ({inactiveReservations.length})
+                </span>
+                <span className="text-gray-400">{showInactive ? '▲' : '▼'}</span>
+              </button>
+              
+              {showInactive && (
+                <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto">
+                  {inactiveReservations.map((reservation) => (
+                    <div
+                      key={reservation.id}
+                      className={`rounded-lg p-3 border-2 ${
+                        reservation.status === 'no_show' 
+                          ? 'bg-orange-50 border-orange-200' 
+                          : 'bg-gray-100 border-gray-300'
+                      } opacity-75`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                              reservation.status === 'no_show' 
+                                ? 'bg-orange-200 text-orange-700' 
+                                : 'bg-gray-300 text-gray-700'
+                            }`}>
+                              {reservation.status === 'no_show' ? '❌ NÃO COMPARECEU' : '🚫 CANCELADO'}
+                            </span>
+                          </div>
+                          <p className="font-bold text-gray-700 text-sm mt-1 truncate">{reservation.customerName}</p>
+                          <p className="text-xs text-gray-500">{reservation.phone}</p>
+                          {reservation.noShowReason && (
+                            <p className="text-xs text-orange-600 italic mt-1">Motivo: {reservation.noShowReason}</p>
+                          )}
+                          {reservation.cancelledReason && (
+                            <p className="text-xs text-gray-500 italic mt-1">Motivo: {reservation.cancelledReason}</p>
+                          )}
+                        </div>
+                        <span className="text-sm font-bold text-gray-500 line-through">
+                          R$ {reservation.totalAmount.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1922,6 +2214,185 @@ function BoatSeatsModal({
             className="w-full px-6 py-3 bg-viva-blue text-white rounded-lg font-bold hover:bg-viva-blue-dark transition"
           >
             Fechar
+          </button>
+        </div>
+      </div>
+      
+      {/* Modal para Mover Reserva */}
+      {showMoveModal && reservationToMove && (
+        <MoveReservationModal
+          reservation={reservationToMove}
+          currentBoat={boat}
+          boats={allBoats.filter(b => b.status === 'active')}
+          onClose={() => {
+            setShowMoveModal(false);
+            setReservationToMove(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal para mover reserva para outro barco
+function MoveReservationModal({
+  reservation,
+  currentBoat,
+  boats,
+  onClose,
+}: {
+  reservation: Reservation;
+  currentBoat: Boat;
+  boats: Boat[];
+  onClose: () => void;
+}) {
+  const [selectedBoatId, setSelectedBoatId] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const selectedBoat = boats.find(b => b.id === selectedBoatId);
+  
+  // Filtrar barcos disponíveis (excluir o atual e barcos lotados)
+  const availableBoats = boats.filter(b => {
+    if (b.id === currentBoat.id) return false;
+    const hasSpace = b.seatsTaken < b.seatsTotal;
+    // Se for escuna, verificar vagas por tipo
+    if (b.boatType === 'escuna' && b.seatsWithLanding !== undefined) {
+      if (reservation.escunaType === 'com-desembarque') {
+        return (b.seatsWithLandingTaken || 0) < (b.seatsWithLanding || 0);
+      } else {
+        return (b.seatsWithoutLandingTaken || 0) < (b.seatsWithoutLanding || 0);
+      }
+    }
+    return hasSpace;
+  });
+  
+  const handleMove = async () => {
+    if (!selectedBoatId || !selectedBoat) {
+      alert('Selecione um barco');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // Atualizar reserva para o novo barco
+      await updateDoc(doc(db, 'reservations', reservation.id), {
+        boatId: selectedBoatId,
+        rideDate: selectedBoat.date,
+        updatedAt: Timestamp.now(),
+      });
+      
+      // Decrementar vagas do barco antigo
+      const oldBoatRef = doc(db, 'boats', currentBoat.id);
+      const oldBoatUpdateData: Record<string, unknown> = {
+        seatsTaken: Math.max(0, currentBoat.seatsTaken - 1),
+        updatedAt: Timestamp.now(),
+      };
+      
+      if (currentBoat.boatType === 'escuna' && currentBoat.seatsWithLanding !== undefined) {
+        if (reservation.escunaType === 'com-desembarque') {
+          oldBoatUpdateData.seatsWithLandingTaken = Math.max(0, (currentBoat.seatsWithLandingTaken || 0) - 1);
+        } else {
+          oldBoatUpdateData.seatsWithoutLandingTaken = Math.max(0, (currentBoat.seatsWithoutLandingTaken || 0) - 1);
+        }
+      }
+      
+      await updateDoc(oldBoatRef, oldBoatUpdateData);
+      
+      // Incrementar vagas do novo barco
+      const newBoatRef = doc(db, 'boats', selectedBoatId);
+      const newBoatDoc = await getDoc(newBoatRef);
+      if (newBoatDoc.exists()) {
+        const newBoatData = newBoatDoc.data() as Boat;
+        const newBoatUpdateData: Record<string, unknown> = {
+          seatsTaken: (newBoatData.seatsTaken || 0) + 1,
+          updatedAt: Timestamp.now(),
+        };
+        
+        if (newBoatData.boatType === 'escuna' && newBoatData.seatsWithLanding !== undefined) {
+          if (reservation.escunaType === 'com-desembarque') {
+            newBoatUpdateData.seatsWithLandingTaken = (newBoatData.seatsWithLandingTaken || 0) + 1;
+          } else {
+            newBoatUpdateData.seatsWithoutLandingTaken = (newBoatData.seatsWithoutLandingTaken || 0) + 1;
+          }
+        }
+        
+        await updateDoc(newBoatRef, newBoatUpdateData);
+      }
+      
+      alert(`${reservation.customerName} foi movido para ${selectedBoat.name}!`);
+      onClose();
+    } catch (error) {
+      console.error('Erro ao mover reserva:', error);
+      alert('Erro ao mover reserva. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-lg p-6 max-w-lg w-full">
+        <h3 className="text-xl font-black text-viva-blue-dark mb-4">Mover Pessoa para Outro Barco</h3>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-blue-800 font-medium">Cliente: <strong>{reservation.customerName}</strong></p>
+          <p className="text-xs text-blue-600 mt-1">Barco atual: {currentBoat.name} ({formatDate(currentBoat.date)})</p>
+          {reservation.escunaType && (
+            <p className="text-xs text-blue-600 mt-1">
+              Tipo: {reservation.escunaType === 'com-desembarque' ? '🏝️ Com Desembarque' : '🚤 Panorâmico'}
+            </p>
+          )}
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Selecionar Novo Barco
+          </label>
+          {availableBoats.length === 0 ? (
+            <p className="text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-3">
+              ⚠️ Não há barcos com vagas disponíveis para o tipo de passeio selecionado.
+            </p>
+          ) : (
+            <select
+              value={selectedBoatId}
+              onChange={(e) => setSelectedBoatId(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
+            >
+              <option value="">Selecione um barco...</option>
+              {availableBoats.map(boat => {
+                const vagasDisponiveis = boat.seatsTotal - boat.seatsTaken;
+                return (
+                  <option key={boat.id} value={boat.id}>
+                    {boat.name} - {formatDate(boat.date)} ({vagasDisponiveis} vagas)
+                  </option>
+                );
+              })}
+            </select>
+          )}
+        </div>
+        
+        {selectedBoat && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-green-800 font-medium">Novo destino:</p>
+            <p className="text-green-700 font-bold">{selectedBoat.name}</p>
+            <p className="text-xs text-green-600 mt-1">{formatDate(selectedBoat.date)}</p>
+          </div>
+        )}
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleMove}
+            disabled={loading || !selectedBoatId}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Movendo...' : 'Confirmar Mudança'}
           </button>
         </div>
       </div>
@@ -2468,8 +2939,11 @@ interface PersonData {
   isChild: boolean;
   isHalfPrice: boolean;
   amount: number;
+  originalAmount: number; // valor original antes de desconto
   paymentMethod: PaymentMethod;
   amountPaid: number;
+  bankId?: string;
+  bankName?: string;
 }
 
 function AdminReservationWizard({
@@ -2485,6 +2959,7 @@ function AdminReservationWizard({
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [vendors, setVendors] = useState<UserRole[]>([]);
+  const [banks, setBanks] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
   const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
   const [people, setPeople] = useState<PersonData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2492,11 +2967,12 @@ function AdminReservationWizard({
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
+  const [baseTicketPrice, setBaseTicketPrice] = useState(200); // Preço base do ingresso
 
   // Calcular total de passos: 1 (data/vendedor) + 1 (qtd pessoas) + numberOfPeople (dados) + 1 (pagamento)
   const totalSteps = 3 + numberOfPeople;
   
-  // Carregar vendedores
+  // Carregar vendedores e bancos
   useEffect(() => {
     const loadVendors = async () => {
       try {
@@ -2511,7 +2987,22 @@ function AdminReservationWizard({
         console.error('Erro ao carregar vendedores:', error);
       }
     };
+    
+    const loadBanks = async () => {
+      try {
+        const configSnapshot = await getDocs(collection(db, 'siteConfig'));
+        if (configSnapshot.docs.length > 0) {
+          const configData = configSnapshot.docs[0].data();
+          const activeBanks = (configData.banks || []).filter((b: { isActive: boolean }) => b.isActive);
+          setBanks(activeBanks);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar bancos:', error);
+      }
+    };
+    
     loadVendors();
+    loadBanks();
   }, []);
 
   // Barcos disponíveis para a data selecionada
@@ -2549,8 +3040,16 @@ function AdminReservationWizard({
     return unsubscribe;
   }, [selectedBoat]);
 
+  // Atualizar preço base quando barco é selecionado
+  useEffect(() => {
+    if (selectedBoat?.ticketPrice) {
+      setBaseTicketPrice(selectedBoat.ticketPrice);
+    }
+  }, [selectedBoat]);
+
   // Inicializar array de pessoas quando mudar a quantidade
   useEffect(() => {
+    const price = selectedBoat?.ticketPrice || baseTicketPrice;
     const newPeople: PersonData[] = [];
     for (let i = 0; i < numberOfPeople; i++) {
       newPeople.push(people[i] || {
@@ -2562,13 +3061,16 @@ function AdminReservationWizard({
         address: '',
         isChild: false,
         isHalfPrice: false,
-        amount: 200,
+        amount: price,
+        originalAmount: price,
         paymentMethod: 'pix',
         amountPaid: 0,
+        bankId: '',
+        bankName: '',
       });
     }
     setPeople(newPeople);
-  }, [numberOfPeople]);
+  }, [numberOfPeople, baseTicketPrice]);
 
   // Selecionar automaticamente os assentos quando a quantidade muda
   useEffect(() => {
@@ -2687,6 +3189,12 @@ function AdminReservationWizard({
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         };
+
+        // Adicionar banco se selecionado
+        if (person.bankId) {
+          reservationData.bankId = person.bankId;
+          reservationData.bankName = person.bankName;
+        }
 
         if (groupId) {
           reservationData.groupId = groupId;
@@ -3197,13 +3705,22 @@ function AdminReservationWizard({
                           checked={person.isChild}
                           onChange={(e) => {
                             const newPeople = [...people];
-                            newPeople[personIndex] = { ...person, isChild: e.target.checked };
+                            const isChild = e.target.checked;
+                            const price = selectedBoat?.ticketPrice || baseTicketPrice;
+                            // Criança (menor de 7) paga metade
+                            const newAmount = isChild ? price / 2 : (person.isHalfPrice ? price / 2 : price);
+                            newPeople[personIndex] = { 
+                              ...person, 
+                              isChild,
+                              amount: newAmount,
+                              originalAmount: price
+                            };
                             setPeople(newPeople);
                           }}
                           className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
                         />
                         <label htmlFor={`child-${personIndex}`} className="font-semibold text-yellow-800 cursor-pointer">
-                          👶 É criança (menor de 7 anos)?
+                          👶 É criança (menor de 7 anos)? {person.isChild && <span className="text-green-600 ml-2">(Paga metade: R$ {(person.amount).toFixed(2)})</span>}
                         </label>
                       </div>
                       <div className="flex items-center gap-3">
@@ -3213,15 +3730,32 @@ function AdminReservationWizard({
                           checked={person.isHalfPrice}
                           onChange={(e) => {
                             const newPeople = [...people];
-                            newPeople[personIndex] = { ...person, isHalfPrice: e.target.checked };
+                            const isHalfPrice = e.target.checked;
+                            const price = selectedBoat?.ticketPrice || baseTicketPrice;
+                            // Meia entrada = metade do valor (exceto se já é criança que já paga metade)
+                            const newAmount = (isHalfPrice || person.isChild) ? price / 2 : price;
+                            newPeople[personIndex] = { 
+                              ...person, 
+                              isHalfPrice,
+                              amount: newAmount,
+                              originalAmount: price
+                            };
                             setPeople(newPeople);
                           }}
                           className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
                         />
                         <label htmlFor={`half-${personIndex}`} className="font-semibold text-orange-700 cursor-pointer">
-                          🎫 Paga meia entrada?
+                          🎫 Paga meia entrada? {person.isHalfPrice && !person.isChild && <span className="text-green-600 ml-2">(Paga metade: R$ {(person.amount).toFixed(2)})</span>}
                         </label>
                       </div>
+                      {(person.isChild || person.isHalfPrice) && (
+                        <div className="mt-3 pt-3 border-t border-yellow-300 text-sm">
+                          <p className="text-yellow-800">
+                            💰 Valor original: <span className="line-through">R$ {(selectedBoat?.ticketPrice || baseTicketPrice).toFixed(2)}</span>
+                            <span className="text-green-700 font-bold ml-2">→ R$ {person.amount.toFixed(2)}</span>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </>
                 );
@@ -3267,10 +3801,15 @@ function AdminReservationWizard({
                         <span className="font-bold text-gray-800">Pessoa {index + 1}: {person.name}</span>
                         <span className="text-sm text-gray-500 ml-2">(Vaga #{selectedSeats[index]})</span>
                       </div>
+                      <div className="text-right">
                       <span className="font-bold text-green-700">R$ {person.amount.toFixed(2)}</span>
+                        {(person.isChild || person.isHalfPrice) && (
+                          <p className="text-xs text-orange-600">{person.isChild ? '👶 Criança' : '🎫 Meia'}</p>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4 mb-3">
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Valor Recebido</label>
                         <input
@@ -3306,6 +3845,32 @@ function AdminReservationWizard({
                         </select>
                       </div>
                     </div>
+                    
+                    {/* Banco de Recebimento */}
+                    {banks.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">🏦 Banco de Recebimento</label>
+                        <select
+                          value={person.bankId || ''}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            const bank = banks.find(b => b.id === e.target.value);
+                            newPeople[index] = { 
+                              ...person, 
+                              bankId: e.target.value,
+                              bankName: bank?.name || ''
+                            };
+                            setPeople(newPeople);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+                        >
+                          <option value="">Selecione o banco...</option>
+                          {banks.map((bank) => (
+                            <option key={bank.id} value={bank.id}>{bank.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
