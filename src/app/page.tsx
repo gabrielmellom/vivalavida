@@ -426,16 +426,21 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
 
 
 // Carousel Component para Tour Panorâmico
-function ImageCarousel() {
+function ImageCarousel({ images: propImages, altText = 'Tour Panorâmico Viva La Vida' }: { images?: string[]; altText?: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const images = [
+  
+  // Usar imagens da prop ou fallback para imagens estáticas padrão
+  const defaultImages = [
     '/panoramico1.jpeg',
     '/panoramico2.jpeg',
     '/panoramico3.jpeg',
     '/panoramico4.jpeg',
   ];
+  const images = propImages && propImages.length > 0 ? propImages : defaultImages;
 
   useEffect(() => {
+    if (images.length <= 1) return;
+    
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % images.length);
     }, 4000); // Troca a cada 4 segundos
@@ -449,7 +454,7 @@ function ImageCarousel() {
         <img
           key={src}
           src={src}
-          alt={`Tour Panorâmico Viva La Vida ${index + 1}`}
+          alt={`${altText} ${index + 1}`}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${
             index === currentIndex ? 'opacity-100' : 'opacity-0'
           }`}
@@ -458,21 +463,23 @@ function ImageCarousel() {
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
       
       {/* Indicadores - pequenos */}
-      <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
-        <div className="flex gap-[3px]">
-          {images.map((_, index) => (
-            <span
-              key={index}
-              onClick={() => setCurrentIndex(index)}
-              className={`block rounded-full cursor-pointer ${
-                index === currentIndex 
-                  ? 'bg-white w-3 sm:w-4 h-1 sm:h-1.5' 
-                  : 'bg-white/50 w-1 sm:w-1.5 h-1 sm:h-1.5'
-              }`}
-            />
-          ))}
+      {images.length > 1 && (
+        <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
+          <div className="flex gap-[3px]">
+            {images.map((_, index) => (
+              <span
+                key={index}
+                onClick={() => setCurrentIndex(index)}
+                className={`block rounded-full cursor-pointer ${
+                  index === currentIndex 
+                    ? 'bg-white w-3 sm:w-4 h-1 sm:h-1.5' 
+                    : 'bg-white/50 w-1 sm:w-1.5 h-1 sm:h-1.5'
+                }`}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -515,8 +522,11 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Share
             
             <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden mt-8 sm:mt-10">
               <div className="grid lg:grid-cols-2 gap-0">
-                {/* Carrossel de Imagens */}
-                <ImageCarousel />
+                {/* Carrossel de Imagens - usando imagens dinâmicas do Firebase */}
+                <ImageCarousel 
+                  images={tourPanoramico?.images} 
+                  altText={tourPanoramico?.name || 'Tour Panorâmico Viva La Vida'} 
+                />
 
                 {/* Conteúdo */}
                 <div className="p-5 sm:p-8">
@@ -736,11 +746,11 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Share
               </a>
             </div>
 
-            {/* Imagem */}
+            {/* Imagem - usando imagens dinâmicas do Firebase */}
             <div className="relative h-64 sm:h-80 lg:h-full min-h-[280px] order-1 lg:order-2">
               <img 
-                src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073"
-                alt="Ilha do Campeche - Com Desembarque"
+                src={tourDesembarque?.images?.[0] || "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073"}
+                alt={tourDesembarque?.name || "Ilha do Campeche - Com Desembarque"}
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent lg:bg-gradient-to-l" />
@@ -1243,7 +1253,7 @@ function SplashScreen({ onComplete, t }: { onComplete: () => void; t: (key: stri
         />
         {/* Tagline */}
         <p 
-          className="mt-6 text-white/90 text-sm sm:text-base md:text-lg font-medium text-center px-4 opacity-0"
+          className="mt-6 text-white/90 text-[11px] sm:text-base md:text-lg font-medium text-center px-4 opacity-0 whitespace-nowrap"
           style={{ 
             animation: 'fadeIn 1s ease-out 0.5s forwards'
           }}
