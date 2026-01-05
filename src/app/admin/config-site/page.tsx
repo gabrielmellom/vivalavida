@@ -661,6 +661,7 @@ export default function ConfigSitePage() {
             setTourToEdit(null);
             loadData();
           }}
+          existingTours={tours}
         />
       )}
     </div>
@@ -777,12 +778,21 @@ function TourEditModal({
   tour,
   onClose,
   onSave,
+  existingTours = [],
 }: {
   tour: TourConfig | null;
   onClose: () => void;
   onSave: () => void;
+  existingTours?: TourConfig[];
 }) {
   const isEditing = !!tour;
+  
+  // Calcular a próxima ordem disponível para novos passeios
+  const getNextOrder = () => {
+    if (existingTours.length === 0) return 1;
+    const maxOrder = Math.max(...existingTours.map(t => t.order || 0));
+    return maxOrder + 1;
+  };
   
   const [formData, setFormData] = useState<Partial<TourConfig>>({
     name: tour?.name || '',
@@ -810,7 +820,7 @@ function TourEditModal({
     ],
     isHighlighted: tour?.isHighlighted || false,
     highlightLabel: tour?.highlightLabel || '',
-    order: tour?.order || 1,
+    order: tour?.order || getNextOrder(),
     isActive: tour?.isActive ?? true,
     images: tour?.images || [],
     whatsappMessage: tour?.whatsappMessage || '',
