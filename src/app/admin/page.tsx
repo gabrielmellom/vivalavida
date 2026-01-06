@@ -61,20 +61,32 @@ export default function AdminDashboard() {
   const [showReservationWizard, setShowReservationWizard] = useState(false);
   const [showSideMenu, setShowSideMenu] = useState(false);
   const [weather, setWeather] = useState<{temp: number; condition: string; humidity: number; wind: number} | null>(null);
+  const [showWeatherForecast, setShowWeatherForecast] = useState(false);
+  const [weekForecast, setWeekForecast] = useState<{
+    date: string;
+    tempMax: number;
+    tempMin: number;
+    condition: string;
+    weatherCode: number;
+    precipitation: number;
+    windMax: number;
+  }[]>([]);
   const previousPendingCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const { user, userRole, signOut } = useAuth();
   const router = useRouter();
 
-  // Buscar previsão do tempo de Florianópolis
+  // Buscar previsão do tempo de Florianópolis (atual + 7 dias)
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // Usando API gratuita Open-Meteo para Florianópolis
+        // Usando API gratuita Open-Meteo para Florianópolis - incluindo previsão de 7 dias
         const response = await fetch(
-          'https://api.open-meteo.com/v1/forecast?latitude=-27.5954&longitude=-48.5480&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=America/Sao_Paulo'
+          'https://api.open-meteo.com/v1/forecast?latitude=-27.5954&longitude=-48.5480&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=America/Sao_Paulo&forecast_days=7'
         );
         const data = await response.json();
+        
+        // Previsão atual
         if (data.current) {
           setWeather({
             temp: Math.round(data.current.temperature_2m),
@@ -82,6 +94,20 @@ export default function AdminDashboard() {
             humidity: data.current.relative_humidity_2m,
             wind: Math.round(data.current.wind_speed_10m),
           });
+        }
+        
+        // Previsão de 7 dias
+        if (data.daily) {
+          const forecast = data.daily.time.map((date: string, index: number) => ({
+            date,
+            tempMax: Math.round(data.daily.temperature_2m_max[index]),
+            tempMin: Math.round(data.daily.temperature_2m_min[index]),
+            condition: getWeatherCondition(data.daily.weather_code[index]),
+            weatherCode: data.daily.weather_code[index],
+            precipitation: Math.round(data.daily.precipitation_sum[index]),
+            windMax: Math.round(data.daily.wind_speed_10m_max[index]),
+          }));
+          setWeekForecast(forecast);
         }
       } catch (error) {
         console.log('Erro ao buscar previsão:', error);
@@ -865,6 +891,25 @@ export default function AdminDashboard() {
                 <Settings size={20} />
                 <span className="font-medium">Configurações do Site</span>
               </Link>
+              
+              {/* Previsão do Tempo */}
+              <button
+                onClick={() => {
+                  setShowSideMenu(false);
+                  setShowWeatherForecast(true);
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-sky-50 transition text-sky-700 w-full relative"
+              >
+                <Cloud size={20} />
+                <span className="font-medium">Previsão 7 Dias</span>
+                {weekForecast.some(day => {
+                  const boatOnDay = boats.find(b => b.date.split('T')[0] === day.date && b.status === 'active');
+                  const isBadWeather = day.weatherCode > 50;
+                  return boatOnDay && isBadWeather;
+                }) && (
+                  <span className="absolute right-4 w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+                )}
+              </button>
             </nav>
 
             {/* Configurações de Som */}
@@ -903,6 +948,190 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modal Previsão do Tempo 7 Dias */}
+      {showWeatherForecast && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Overlay */}
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowWeatherForecast(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden">
+            {/* Header com gradiente */}
+            <div className="bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Cloud size={24} />
+                    Previsão do Tempo
+                  </h2>
+                  <p className="text-sky-100 text-sm">Florianópolis - Próximos 7 dias</p>
+                </div>
+                <button
+                  onClick={() => setShowWeatherForecast(false)}
+                  className="p-2 hover:bg-white/20 rounded-full transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              {/* Tempo atual */}
+              {weather && (
+                <div className="mt-4 flex items-center gap-4">
+                  <div className="p-3 bg-white/20 rounded-2xl">
+                    {getWeatherIcon()}
+                  </div>
+                  <div>
+                    <p className="text-4xl font-black">{weather.temp}°C</p>
+                    <p className="text-sky-100">{weather.condition}</p>
+                  </div>
+                  <div className="ml-auto text-right text-sm text-sky-100">
+                    <p className="flex items-center gap-1 justify-end">
+                      <Droplets size={14} /> {weather.humidity}%
+                    </p>
+                    <p className="flex items-center gap-1 justify-end">
+                      <Wind size={14} /> {weather.wind} km/h
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Lista de 7 dias */}
+            <div className="p-4 max-h-[50vh] overflow-y-auto">
+              {/* Legenda de alertas */}
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-sm text-amber-800 font-medium flex items-center gap-2">
+                  <Bell size={16} />
+                  Dias com alerta são barcos ativos com previsão de chuva
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                {weekForecast.map((day, index) => {
+                  const dateObj = new Date(day.date + 'T12:00:00');
+                  const isToday = index === 0;
+                  const dayName = isToday ? 'Hoje' : dateObj.toLocaleDateString('pt-BR', { weekday: 'short' });
+                  const dateFormatted = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                  
+                  // Verificar se há barco ativo neste dia
+                  const boatOnDay = boats.find(b => b.date.split('T')[0] === day.date && b.status === 'active');
+                  const reservationsOnDay = boatOnDay 
+                    ? reservations.filter(r => r.boatId === boatOnDay.id && r.status === 'approved').length 
+                    : 0;
+                  
+                  // Verificar se o tempo é ruim (código > 50 = chuva ou pior)
+                  const isBadWeather = day.weatherCode > 50;
+                  const hasAlert = boatOnDay && isBadWeather;
+                  
+                  // Ícone baseado no código
+                  const getWeatherIconSmall = (code: number) => {
+                    if (code === 0) return <Sun size={24} className="text-amber-500" />;
+                    if (code <= 3) return <CloudSun size={24} className="text-amber-400" />;
+                    if (code <= 48) return <Cloud size={24} className="text-slate-400" />;
+                    if (code <= 67) return <CloudRain size={24} className="text-blue-500" />;
+                    if (code <= 82) return <CloudRain size={24} className="text-blue-600" />;
+                    return <CloudRain size={24} className="text-purple-600" />;
+                  };
+                  
+                  return (
+                    <div 
+                      key={day.date}
+                      className={`p-4 rounded-xl transition ${
+                        hasAlert 
+                          ? 'bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300' 
+                          : boatOnDay 
+                            ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200'
+                            : 'bg-slate-50 border border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Data */}
+                        <div className="w-16 text-center">
+                          <p className={`text-sm font-bold ${isToday ? 'text-sky-600' : 'text-slate-700'}`}>
+                            {dayName}
+                          </p>
+                          <p className="text-xs text-slate-500">{dateFormatted}</p>
+                        </div>
+                        
+                        {/* Ícone do tempo */}
+                        <div className="p-2 bg-white rounded-xl shadow-sm">
+                          {getWeatherIconSmall(day.weatherCode)}
+                        </div>
+                        
+                        {/* Temperaturas */}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold text-slate-800">{day.tempMax}°</span>
+                            <span className="text-sm text-slate-400">{day.tempMin}°</span>
+                          </div>
+                          <p className="text-xs text-slate-500">{day.condition}</p>
+                        </div>
+                        
+                        {/* Info do barco */}
+                        <div className="text-right">
+                          {boatOnDay ? (
+                            <div className={`text-xs ${hasAlert ? 'text-orange-700' : 'text-emerald-700'}`}>
+                              <p className="font-bold flex items-center gap-1 justify-end">
+                                <Ship size={12} />
+                                Barco ativo
+                              </p>
+                              <p>{reservationsOnDay} reservas</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400">Sem barco</p>
+                          )}
+                        </div>
+                        
+                        {/* Alerta */}
+                        {hasAlert && (
+                          <div className="ml-2">
+                            <span className="flex items-center justify-center w-8 h-8 bg-orange-500 text-white rounded-full animate-pulse">
+                              <Bell size={16} />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Detalhes extras se tiver alerta */}
+                      {hasAlert && (
+                        <div className="mt-3 pt-3 border-t border-orange-200">
+                          <div className="flex items-center gap-4 text-sm">
+                            <span className="text-orange-700 font-semibold flex items-center gap-1">
+                              <CloudRain size={16} />
+                              Precipitação: {day.precipitation}mm
+                            </span>
+                            <span className="text-orange-700 font-semibold flex items-center gap-1">
+                              <Wind size={16} />
+                              Vento: até {day.windMax}km/h
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-orange-600 font-medium">
+                            ⚠️ Atenção: Previsão de chuva com {reservationsOnDay} reservas confirmadas!
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setShowWeatherForecast(false)}
+                className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header - Clean & Professional */}
       <header className={`bg-white ${newOrderAlert ? 'mt-12' : ''} transition-all duration-300`}>
@@ -973,13 +1202,27 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Previsão do Tempo */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
+          {/* Previsão do Tempo - Clicável para ver 7 dias */}
+          <button
+            onClick={() => setShowWeatherForecast(true)}
+            className="bg-white rounded-2xl p-5 shadow-sm text-left hover:shadow-md transition-shadow relative overflow-hidden group"
+          >
+            {/* Indicador de alerta se houver dias ruins com barcos */}
+            {weekForecast.some(day => {
+              const boatOnDay = boats.find(b => b.date.split('T')[0] === day.date && b.status === 'active');
+              const isBadWeather = day.weatherCode > 50; // Chuva ou pior
+              return boatOnDay && isBadWeather;
+            }) && (
+              <span className="absolute top-2 right-2 w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+            )}
             <div className="flex items-start justify-between mb-3">
-              <div className="p-2.5 bg-sky-50 rounded-xl">
+              <div className="p-2.5 bg-sky-50 rounded-xl group-hover:bg-sky-100 transition-colors">
                 {getWeatherIcon()}
               </div>
-              <span className="text-xs text-slate-500">Floripa<br/>Agora</span>
+              <div className="text-right">
+                <span className="text-xs text-slate-500">Floripa</span>
+                <p className="text-[10px] text-sky-600 font-medium">Ver 7 dias →</p>
+              </div>
             </div>
             {weather ? (
               <>
@@ -998,7 +1241,7 @@ export default function AdminDashboard() {
             ) : (
               <p className="text-sm text-slate-400">Carregando...</p>
             )}
-          </div>
+          </button>
         </div>
 
         {/* Ações Rápidas */}
@@ -2110,6 +2353,31 @@ function BoatSeatsModal({
                         </div>
                       </div>
                       <div className="flex flex-col gap-1 shrink-0">
+                        {/* Links para enviar ao cliente */}
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              const link = `${window.location.origin}/confirmacao/${reservation.id}`;
+                              navigator.clipboard.writeText(link);
+                              alert('✅ Link de CONFIRMAÇÃO copiado!');
+                            }}
+                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
+                            title="Copiar link de Confirmação (instruções)"
+                          >
+                            📋
+                          </button>
+                          <button
+                            onClick={() => {
+                              const link = `${window.location.origin}/aceite/${reservation.id}`;
+                              navigator.clipboard.writeText(link);
+                              alert('✅ Link de ACEITE copiado!');
+                            }}
+                            className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition"
+                            title="Copiar link de Aceite/Voucher"
+                          >
+                            📜
+                          </button>
+                        </div>
                         <button
                           onClick={() => {
                             setReservationToMove(reservation);
@@ -2580,6 +2848,31 @@ function ReservationDetailModal({
             </>
           ) : reservation.status === 'approved' ? (
             <>
+              {/* Links para enviar ao cliente */}
+              <div className="w-full grid grid-cols-2 gap-2 mb-2 sm:mb-0">
+                <button
+                  onClick={() => {
+                    const link = `${window.location.origin}/confirmacao/${reservation.id}`;
+                    navigator.clipboard.writeText(link);
+                    alert('✅ Link de CONFIRMAÇÃO copiado!\n\nEnvie para o cliente com as instruções do passeio.');
+                  }}
+                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-1 text-sm"
+                  title="Copiar link com instruções do passeio"
+                >
+                  📋 Confirmação
+                </button>
+                <button
+                  onClick={() => {
+                    const link = `${window.location.origin}/aceite/${reservation.id}`;
+                    navigator.clipboard.writeText(link);
+                    alert('✅ Link de ACEITE + VOUCHER copiado!\n\nEnvie para o cliente aceitar os termos e receber o voucher.');
+                  }}
+                  className="px-3 py-2 bg-green-100 text-green-700 rounded-lg font-bold hover:bg-green-200 transition flex items-center justify-center gap-1 text-sm"
+                  title="Copiar link de aceite de termos e voucher"
+                >
+                  📜 Aceite/Voucher
+                </button>
+              </div>
               <button
                 onClick={() => setShowReallocationModal(true)}
                 className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition flex items-center justify-center gap-2"

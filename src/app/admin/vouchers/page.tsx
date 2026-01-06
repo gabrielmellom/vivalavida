@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,12 @@ const LANGUAGES: { code: SupportedLanguage; name: string; flag: string }[] = [
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
 ];
 
+// Idiomas para confirmação pós-compra (apenas PT-BR e Espanhol)
+const CONFIRMATION_LANGUAGES: { code: 'pt-BR' | 'es'; name: string; flag: string }[] = [
+  { code: 'pt-BR', name: 'Português', flag: '🇧🇷' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+];
+
 export default function VouchersPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -31,7 +37,9 @@ export default function VouchersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('pt-BR');
   const [showLanguageDropdown, setShowLanguageDropdown] = useState<string | null>(null);
+  const [showConfirmationDropdown, setShowConfirmationDropdown] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const [vendorNames, setVendorNames] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     // Buscar barcos
@@ -129,10 +137,156 @@ export default function VouchersPage() {
     }
   };
 
+  // Carregar nomes dos vendedores
+  useEffect(() => {
+    const loadVendorNames = async () => {
+      const vendorIds = [...new Set(reservations.map(r => r.vendorId).filter(Boolean))];
+      const names = new Map<string, string>();
+      
+      for (const vendorId of vendorIds) {
+        try {
+          const userRoleDoc = await getDoc(doc(db, 'roles', vendorId));
+          if (userRoleDoc.exists()) {
+            names.set(vendorId, userRoleDoc.data().name || 'Vendedor');
+          }
+        } catch (e) {
+          console.log('Erro ao carregar nome do vendedor:', e);
+        }
+      }
+      
+      setVendorNames(names);
+    };
+    
+    if (reservations.length > 0) {
+      loadVendorNames();
+    }
+  }, [reservations]);
+
   const getWhatsAppLink = (phone: string) => {
     // Remove caracteres não numéricos
     const cleanPhone = phone.replace(/\D/g, '');
     return `https://wa.me/${cleanPhone}`;
+  };
+
+  // Função para enviar confirmação pós-compra pelo WhatsApp
+  const handleSendConfirmation = async (reservation: Reservation, language: 'pt-BR' | 'es') => {
+    const vendorName = vendorNames.get(reservation.vendorId) || 'Vendedor';
+    const isWithLanding = reservation.escunaType === 'com-desembarque';
+    
+    // Formatar data
+    const formatDateForMessage = (dateString: string) => {
+      if (!dateString) return '';
+      const datePart = dateString.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+      const date = new Date(year, month - 1, day, 12, 0, 0);
+      
+      if (language === 'es') {
+        const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year} – ${dias[date.getDay()]}`;
+      }
+      
+      const dias = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+      return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year} – ${dias[date.getDay()]}`;
+    };
+
+    const dateFormatted = formatDateForMessage(reservation.rideDate);
+
+    let message = '';
+
+    if (language === 'es') {
+      // Mensagem em Espanhol
+      message = `*PASEO ISLA DO CAMPECHE 🏝️ – BARCO VIVA LA VIDA*
+
+Reserva con la vendedora *${vendorName}* para la Isla do Campeche ${isWithLanding ? 'con *DESEMBARQUE*' : '*PANORÁMICO*'}
+
+📅 *${dateFormatted}* | 👥 *${reservation.customerName}*
+
+📍 *Check-in:* desde las 08:00 (llegar hasta las 08:30)
+📌 Rua Amaro Coelho, 22 – Barra da Lagoa
+⚠️ Si no se presenta hasta ese horario, la reserva podrá liberarse.
+
+🚢 *Embarque:* 09:00 | *Salida:* 09:15
+⏳ *Trayecto:* aprox. 1h10 de ida y 1h10 de regreso
+🏝️ *Tiempo en la isla:* hasta 3h30
+🏁 *Regreso previsto:* alrededor de las 16:00
+
+🛃 Documento de identidad obligatorio para todos (incluidos menores).
+
+🍽️ La isla cuenta con restaurante y quiosco.
+🎒 Se permite llevar snacks y bebidas.
+❌ La alimentación no está incluida.
+🍹 Bar a bordo con venta de bebidas y caipirinhas.
+🚻 Baño disponible en el barco.
+${isWithLanding ? '\n🏝️ *DESEMBARQUE:* desembarque directo en la arena, barco con rampa (es necesario mojar las piernas).\n' : ''}
+🚫 Prohibido fumar en la embarcación.
+🚫 Prohibido llevar animales.
+🔥 Prohibido hacer asado / churrasco.
+
+🚮 La basura regresa con el pasajero al barco, no se deja en la isla.
+
+📲 *Confirmación del paseo el día del embarque, hasta las 07:00.*
+👉 Espere la confirmación antes de dirigirse al punto de embarque.
+
+💡 ¡No olvide el protector solar!
+
+😃 *Será un placer recibirlos.*`;
+    } else {
+      // Mensagem em Português
+      message = `*PASSEIO ILHA DO CAMPECHE 🏝️ – BARCO VIVA LA VIDA*
+
+Reserva com a vendedora *${vendorName}* para a Ilha do Campeche ${isWithLanding ? 'com *DESEMBARQUE*' : '*PANORÂMICO*'}
+
+📅 *${dateFormatted}* | 👥 *${reservation.customerName}*
+
+📍 *Check-in:* a partir das 08:00 (chegar até 08:30)
+📌 Rua Amaro Coelho, 22 – Barra da Lagoa
+⚠️ Não comparecendo até esse horário, a reserva poderá ser liberada.
+
+🚢 *Embarque:* 09:00 | *Saída:* 09:15
+⏳ *Trajeto:* aprox. 1h10 ida e retorno
+🏝️ *Permanência na ilha:* até 3h30
+🏁 *Retorno previsto:* por volta das 16:00
+
+🛃 Documento obrigatório para todos (inclusive menores).
+
+🍽️ Restaurante e quiosque na ilha.
+🎒 Pode levar lanches e bebidas.
+❌ Alimentação não inclusa.
+🍹 Bar a bordo com venda de bebidas e caipirinhas.
+🚻 Banheiro disponível no barco.
+${isWithLanding ? '\n🏝️ *DESEMBARQUE:* direto na areia, barco com rampa (é necessário molhar as pernas).\n' : ''}
+🚫 Proibido fumar na embarcação.
+🚫 Proibido levar animais.
+🔥 Proibido fazer churrasco.
+
+🚮 O lixo retorna com o passageiro para o barco, não fica na ilha.
+
+📲 *Confirmação do passeio no dia do embarque, até às 07:00.*
+👉 Aguarde a confirmação para se deslocar até o local do embarque.
+
+💡 Não esqueça o protetor solar!
+
+😃 *Será um prazer tê-los conosco.*`;
+    }
+
+    const cleanPhone = reservation.phone.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    
+    // Abrir WhatsApp
+    window.open(whatsappUrl, '_blank');
+    
+    // Marcar que a confirmação foi enviada
+    try {
+      await updateDoc(doc(db, 'reservations', reservation.id), {
+        confirmationSent: true,
+        confirmationSentAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar status da confirmação:', error);
+    }
+    
+    setShowConfirmationDropdown(null);
   };
 
   const handleSendTermsLink = async (reservation: Reservation) => {
@@ -569,6 +723,41 @@ Obrigado e até breve! 🚢`;
 
                       {/* Botões de Ação */}
                       <div className="space-y-2">
+                        {/* Botão de Confirmação Pós-Compra */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowConfirmationDropdown(showConfirmationDropdown === reservation.id ? null : reservation.id)}
+                            className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition ${
+                              reservation.confirmationSent
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-lg'
+                            }`}
+                          >
+                            📋 {reservation.confirmationSent ? 'Confirmação Enviada ✓' : 'Confirmação Pós-Compra'}
+                          </button>
+                          
+                          {/* Dropdown de idiomas para confirmação */}
+                          {showConfirmationDropdown === reservation.id && (
+                            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                              <div className="p-2">
+                                <p className="text-xs text-gray-500 mb-2 text-center">Selecione o idioma</p>
+                                <div className="grid grid-cols-2 gap-1">
+                                  {CONFIRMATION_LANGUAGES.map((lang) => (
+                                    <button
+                                      key={lang.code}
+                                      onClick={() => handleSendConfirmation(reservation, lang.code)}
+                                      className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                    >
+                                      <span>{lang.flag}</span>
+                                      <span>{lang.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
                         {!reservation.acceptedTerms && shouldShowSendTerms(reservation) && (
                           <button
                             onClick={() => handleSendTermsLink(reservation)}
@@ -719,6 +908,40 @@ Obrigado e até breve! 🚢`;
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
+                              {/* Botão Confirmação Pós-Compra */}
+                              <div className="relative">
+                                <button
+                                  onClick={() => setShowConfirmationDropdown(showConfirmationDropdown === `desktop-${reservation.id}` ? null : `desktop-${reservation.id}`)}
+                                  className={`flex items-center gap-1 px-3 py-2 rounded-lg font-semibold transition text-xs ${
+                                    reservation.confirmationSent
+                                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                                  }`}
+                                  title="Enviar confirmação pós-compra via WhatsApp"
+                                >
+                                  📋 {reservation.confirmationSent ? '✓' : 'Confirm.'}
+                                </button>
+                                
+                                {/* Dropdown de idiomas para confirmação */}
+                                {showConfirmationDropdown === `desktop-${reservation.id}` && (
+                                  <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[150px]">
+                                    <div className="p-2">
+                                      <p className="text-xs text-gray-500 mb-2 text-center">Idioma</p>
+                                      {CONFIRMATION_LANGUAGES.map((lang) => (
+                                        <button
+                                          key={lang.code}
+                                          onClick={() => handleSendConfirmation(reservation, lang.code)}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                        >
+                                          <span>{lang.flag}</span>
+                                          <span>{lang.name}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              
                               {!reservation.acceptedTerms && shouldShowSendTerms(reservation) && (
                                 <button
                                   onClick={() => handleSendTermsLink(reservation)}
