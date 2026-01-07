@@ -140,7 +140,7 @@ export interface TourConfig {
   description: string;
   duration: string; // ex: "5 horas"
   durationDetail: string; // ex: "3h na água"
-  type: 'panoramico' | 'desembarque'; // tipo do passeio
+  type: 'panoramico' | 'desembarque' | 'lancha' | 'outro'; // tipo do passeio
   emoji: string; // ex: "🚤"
   features: TourFeature[]; // itens inclusos
   checkInTime: string; // ex: "8:00h"

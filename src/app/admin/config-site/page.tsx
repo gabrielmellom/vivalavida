@@ -1043,7 +1043,7 @@ function TourEditModal({
             <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Passeio *</label>
             <select
               value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value as 'panoramico' | 'desembarque' | 'lancha' | 'outro' })}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
             >
               <option value="panoramico">🚤 Passeio Panorâmico (Principal)</option>
