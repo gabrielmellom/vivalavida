@@ -763,6 +763,82 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Share
           </div>
         </div>
 
+        {/* Outros Passeios - Dinâmico */}
+        {tours.filter(tour => tour.type !== 'panoramico' && tour.type !== 'desembarque').length > 0 && (
+          <div className="mt-8 sm:mt-12">
+            <h3 className="text-xl sm:text-2xl font-black text-viva-blue-dark mb-6 text-center">
+              ✨ Outros Passeios Disponíveis
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {tours
+                .filter(tour => tour.type !== 'panoramico' && tour.type !== 'desembarque')
+                .map((tour) => {
+                  const price = getCurrentPrice(tour);
+                  return (
+                    <div key={tour.id} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
+                      {/* Imagem */}
+                      <div className="relative h-48">
+                        <img 
+                          src={tour.images?.[0] || "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073"}
+                          alt={tour.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                        <div className="absolute bottom-3 left-3">
+                          <span className="bg-viva-blue text-white px-3 py-1 rounded-full text-xs font-bold">
+                            {tour.duration}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Conteúdo */}
+                      <div className="p-4 sm:p-5">
+                        <h4 className="text-lg font-black text-viva-blue-dark mb-1">
+                          {tour.emoji} {tour.name}
+                        </h4>
+                        <p className="text-sm text-gray-500 mb-3">{tour.subtitle}</p>
+                        
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                          {tour.description}
+                        </p>
+                        
+                        {/* Preço */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <p className="text-xs text-gray-500">{price?.label || 'A partir de'}</p>
+                            <p className="text-2xl font-black text-viva-green">
+                              R$ {price?.adult || tour.pricing[0]?.adultPrice || 0}
+                            </p>
+                          </div>
+                          {tour.features && tour.features.length > 0 && (
+                            <div className="flex gap-1">
+                              {tour.features.slice(0, 3).map((feature, idx) => (
+                                <span key={idx} className="text-lg" title={feature.label}>
+                                  {feature.icon}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* CTA */}
+                        <a 
+                          href={getWhatsAppLink(`Olá! Tenho interesse no passeio: ${tour.name}`)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full text-center bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm active:scale-95 transition-all"
+                        >
+                          <MessageCircle className="inline mr-2" size={16} />
+                          Reservar Agora
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* Info importante */}
         <div className="mt-8 sm:mt-12 bg-viva-blue-navy/5 rounded-2xl p-4 sm:p-6">
           <h4 className="font-bold text-viva-blue-dark mb-3 text-sm sm:text-base">{t('info.title')}</h4>

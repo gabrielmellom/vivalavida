@@ -707,15 +707,26 @@ function TourCard({
               <span className="bg-viva-blue/10 text-viva-blue px-3 py-1 rounded-full text-xs font-bold">
                 ⏱️ {tour.duration}
               </span>
-              <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">
-                {tour.durationDetail}
-              </span>
+              {tour.durationDetail && (
+                <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">
+                  {tour.durationDetail}
+                </span>
+              )}
               <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                 tour.isActive 
                   ? 'bg-green-100 text-green-700' 
                   : 'bg-red-100 text-red-700'
               }`}>
                 {tour.isActive ? '✓ Ativo' : '✗ Inativo'}
+              </span>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                tour.type === 'panoramico' ? 'bg-orange-100 text-orange-700' :
+                tour.type === 'desembarque' ? 'bg-teal-100 text-teal-700' :
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {tour.type === 'panoramico' ? '🚤 Principal' :
+                 tour.type === 'desembarque' ? '🏝️ Desembarque' :
+                 tour.type === 'lancha' ? '🛥️ Lancha' : '✨ Outro'}
               </span>
             </div>
 
@@ -1025,6 +1036,26 @@ function TourEditModal({
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
               placeholder="Descreva o passeio..."
             />
+          </div>
+
+          {/* Tipo de Passeio */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Passeio *</label>
+            <select
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+            >
+              <option value="panoramico">🚤 Passeio Panorâmico (Principal)</option>
+              <option value="desembarque">🏝️ Com Desembarque na Ilha</option>
+              <option value="lancha">🛥️ Lancha Privativa</option>
+              <option value="outro">✨ Outro Passeio</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {formData.type === 'panoramico' && '⚠️ Este será exibido como o passeio principal na home'}
+              {formData.type === 'desembarque' && '⚠️ Este será exibido como o segundo passeio na home'}
+              {(formData.type === 'lancha' || formData.type === 'outro') && '✨ Este será exibido na seção "Outros Passeios"'}
+            </p>
           </div>
 
           {/* Duração e Horários */}
