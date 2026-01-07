@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestam
 import { db } from '@/lib/firebase';
 import { Reservation, Boat, Payment, PaymentMethod, BankAccount, SiteConfig } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users } from 'lucide-react';
+import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -48,8 +48,11 @@ function CheckInPageContent() {
   const searchParams = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [allBoats, setAllBoats] = useState<Boat[]>([]);
+  const [allReservations, setAllReservations] = useState<Reservation[]>([]);
   const [boat, setBoat] = useState<Boat | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [reservationToCheckIn, setReservationToCheckIn] = useState<Reservation | null>(null);
   const [groupReservationsToCheckIn, setGroupReservationsToCheckIn] = useState<Reservation[]>([]); // Para check-in em grupo
@@ -100,75 +103,70 @@ function CheckInPageContent() {
     loadBanks();
   }, []);
 
+  // Carregar todos os barcos e reservas para o calendário
   useEffect(() => {
-    let reservationsUnsubscribe: (() => void) | null = null;
-
-    // Buscar todos os barcos e filtrar por data
     const boatsQuery = query(collection(db, 'boats'));
-
-    const unsubscribe = onSnapshot(boatsQuery, async (snapshot) => {
-      const boats = snapshot.docs.map(doc => ({
+    const unsubscribeBoats = onSnapshot(boatsQuery, (snapshot) => {
+      const boatsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate(),
         updatedAt: doc.data().updatedAt?.toDate(),
       })) as Boat[];
+      setAllBoats(boatsData);
+    });
 
-      // Filtrar barco do dia selecionado (comparar apenas a data, não hora)
-      const selectedDateStr = selectedDate;
-      const boatData = boats.find(boat => {
-        const boatDate = new Date(boat.date).toISOString().split('T')[0];
-        return boatDate === selectedDateStr;
-      });
-
-      if (boatData) {
-        setBoat(boatData);
-
-        // Buscar reservas aprovadas do barco em tempo real
-        const reservationsQuery = query(
-          collection(db, 'reservations'),
-          where('boatId', '==', boatData.id),
-          where('status', '==', 'approved')
-        );
-
-        reservationsUnsubscribe = onSnapshot(reservationsQuery, (reservationsSnapshot) => {
-          const reservationsData = reservationsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate(),
-            updatedAt: doc.data().updatedAt?.toDate(),
-            rideDate: doc.data().rideDate,
-            checkedIn: doc.data().checkedIn || false, // Garantir que seja boolean
-          })) as Reservation[];
-
-          // Ordenar para manter grupos juntos
-          reservationsData.sort((a, b) => {
-            // Primeiro, ordenar por groupId para manter grupos juntos
-            if (a.groupId && b.groupId) {
-              if (a.groupId !== b.groupId) {
-                return a.groupId.localeCompare(b.groupId);
-              }
-            }
-            if (a.groupId && !b.groupId) return -1;
-            if (!a.groupId && b.groupId) return 1;
-            // Depois por nome do cliente
-            return a.customerName.localeCompare(b.customerName);
-          });
-          setReservations(reservationsData);
-        });
-      } else {
-        setBoat(null);
-        setReservations([]);
-      }
+    const reservationsQuery = query(collection(db, 'reservations'), where('status', '==', 'approved'));
+    const unsubscribeReservations = onSnapshot(reservationsQuery, (snapshot) => {
+      const reservationsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate(),
+        rideDate: doc.data().rideDate,
+      })) as Reservation[];
+      setAllReservations(reservationsData);
     });
 
     return () => {
-      unsubscribe();
-      if (reservationsUnsubscribe) {
-        reservationsUnsubscribe();
-      }
+      unsubscribeBoats();
+      unsubscribeReservations();
     };
-  }, [selectedDate]);
+  }, []);
+
+  // Filtrar barco e reservas do dia selecionado
+  useEffect(() => {
+    const selectedDateStr = selectedDate;
+    const boatData = allBoats.find(boat => {
+      const boatDate = new Date(boat.date).toISOString().split('T')[0];
+      return boatDate === selectedDateStr && boat.status === 'active';
+    });
+
+    if (boatData) {
+      setBoat(boatData);
+      
+      // Filtrar reservas do barco selecionado
+      const boatReservations = allReservations
+        .filter(r => r.boatId === boatData.id)
+        .map(r => ({ ...r, checkedIn: r.checkedIn || false }));
+      
+      // Ordenar para manter grupos juntos
+      boatReservations.sort((a, b) => {
+        if (a.groupId && b.groupId) {
+          if (a.groupId !== b.groupId) {
+            return a.groupId.localeCompare(b.groupId);
+          }
+        }
+        if (a.groupId && !b.groupId) return -1;
+        if (!a.groupId && b.groupId) return 1;
+        return a.customerName.localeCompare(b.customerName);
+      });
+      setReservations(boatReservations);
+    } else {
+      setBoat(null);
+      setReservations([]);
+    }
+  }, [selectedDate, allBoats, allReservations]);
 
   // Buscar reserva do voucher e definir data automaticamente
   useEffect(() => {
@@ -391,10 +389,10 @@ function CheckInPageContent() {
       return;
     }
 
-    // Validar que as formas de pagamento têm valores
+    // Validar que as formas de pagamento têm valores (apenas se há algo a pagar)
     const validPayments = paymentEntries.filter(e => parseFloat(e.amount) > 0);
-    if (validPayments.length === 0 && effectiveAmountDue > 0 && discount === 0) {
-      alert('Informe pelo menos uma forma de pagamento!');
+    if (validPayments.length === 0 && effectiveAmountDue > 0 && discount < totalGroupAmountDue) {
+      alert('Informe pelo menos uma forma de pagamento ou aplique um desconto!');
       return;
     }
 
@@ -414,7 +412,7 @@ function CheckInPageContent() {
         remainingPayment -= memberPayment;
 
         // Registrar pagamentos para esse membro
-        if (memberPayment > 0) {
+        if (memberPayment > 0 && totalPaidNow > 0) {
           for (const entry of validPayments) {
             const entryAmount = parseFloat(entry.amount) || 0;
             if (entryAmount > 0) {
@@ -645,6 +643,64 @@ function CheckInPageContent() {
     return counts;
   }, [reservations]);
 
+  // Funções do calendário
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+    
+    const days: (Date | null)[] = [];
+    
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+    
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  // Dados do calendário - memoizado
+  const calendarData = useMemo(() => {
+    const data = new Map<string, { hasBoat: boolean; hasReservations: boolean; reservationCount: number }>();
+    
+    allBoats.forEach(boat => {
+      if (boat.status !== 'active') return;
+      const dateKey = new Date(boat.date).toISOString().split('T')[0];
+      const boatReservations = allReservations.filter(r => r.boatId === boat.id);
+      
+      data.set(dateKey, {
+        hasBoat: true,
+        hasReservations: boatReservations.length > 0,
+        reservationCount: boatReservations.length,
+      });
+    });
+    
+    return data;
+  }, [allBoats, allReservations]);
+
+  const getCalendarDayStatus = (date: Date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    const data = calendarData.get(dateKey);
+    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isSelected = dateKey === selectedDate;
+    
+    return {
+      hasBoat: data?.hasBoat || false,
+      hasReservations: data?.hasReservations || false,
+      reservationCount: data?.reservationCount || 0,
+      isToday,
+      isSelected,
+    };
+  };
+
+  const calendarMonthName = calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header Responsivo */}
@@ -666,18 +722,108 @@ function CheckInPageContent() {
       </header>
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Filtro de Data - Compacto no mobile */}
-        <div className="bg-white rounded-lg p-4 sm:p-6 shadow-sm mb-4 sm:mb-6 border border-gray-200">
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-            <Calendar size={18} className="text-gray-500" />
-            Data do Passeio
-          </label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full sm:w-auto px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base bg-white"
-          />
+        {/* Calendário Visual */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-6 border border-gray-200">
+          {/* Header do Calendário */}
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => {
+                const newMonth = new Date(calendarMonth);
+                newMonth.setMonth(newMonth.getMonth() - 1);
+                setCalendarMonth(newMonth);
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ChevronLeft size={20} className="text-gray-600" />
+            </button>
+            <h3 className="text-base sm:text-lg font-bold text-gray-800 capitalize">{calendarMonthName}</h3>
+            <button
+              onClick={() => {
+                const newMonth = new Date(calendarMonth);
+                newMonth.setMonth(newMonth.getMonth() + 1);
+                setCalendarMonth(newMonth);
+              }}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ChevronRight size={20} className="text-gray-600" />
+            </button>
+          </div>
+
+          {/* Dias da Semana */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="text-center text-xs font-medium text-gray-400 py-1">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Dias do Mês */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {getDaysInMonth(calendarMonth).map((date, index) => {
+              if (!date) {
+                return <div key={`empty-${index}`} className="w-10 h-10 sm:w-12 sm:h-12" />;
+              }
+
+              const status = getCalendarDayStatus(date);
+              const dateStr = date.toISOString().split('T')[0];
+
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex flex-col items-center justify-center text-sm font-medium transition relative ${
+                    status.isSelected
+                      ? 'bg-viva-blue text-white shadow-md'
+                      : status.hasReservations
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      : status.hasBoat
+                      ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      : status.isToday
+                      ? 'bg-sky-100 text-sky-700 ring-2 ring-sky-400'
+                      : 'hover:bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  <span>{date.getDate()}</span>
+                  {status.hasReservations && !status.isSelected && (
+                    <span className="text-[8px] font-bold">{status.reservationCount}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legenda */}
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+              <span className="text-xs text-gray-500">Com reservas</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-gray-200"></div>
+              <span className="text-xs text-gray-500">Barco ativo</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full ring-2 ring-sky-400 bg-sky-100"></div>
+              <span className="text-xs text-gray-500">Hoje</span>
+            </div>
+          </div>
+
+          {/* Botão Voltar para Hoje */}
+          {selectedDate !== new Date().toISOString().split('T')[0] && (
+            <div className="flex justify-center mt-3">
+              <button
+                onClick={() => {
+                  const todayDate = new Date();
+                  setSelectedDate(todayDate.toISOString().split('T')[0]);
+                  setCalendarMonth(todayDate);
+                }}
+                className="text-sm text-sky-600 hover:text-sky-700 font-medium"
+              >
+                ← Voltar para Hoje
+              </button>
+            </div>
+          )}
         </div>
 
         {boat ? (

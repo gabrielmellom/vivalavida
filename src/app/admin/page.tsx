@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, setDoc, doc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
@@ -71,6 +71,9 @@ export default function AdminDashboard() {
     precipitation: number;
     windMax: number;
   }[]>([]);
+  const [dayNotes, setDayNotes] = useState<Map<string, string>>(new Map());
+  const [currentNote, setCurrentNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const previousPendingCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const { user, userRole, signOut } = useAuth();
@@ -269,6 +272,56 @@ export default function AdminDashboard() {
       unsubscribeReservations();
     };
   }, []);
+
+  // Carregar notas do dia do Firebase
+  useEffect(() => {
+    const notesQuery = query(collection(db, 'dayNotes'));
+    const unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
+      const notesMap = new Map<string, string>();
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.date && data.note) {
+          notesMap.set(data.date, data.note);
+        }
+      });
+      setDayNotes(notesMap);
+    });
+
+    return () => unsubscribeNotes();
+  }, []);
+
+  // Atualizar nota atual quando muda a data filtrada
+  useEffect(() => {
+    if (filterDate) {
+      setCurrentNote(dayNotes.get(filterDate) || '');
+    }
+  }, [filterDate, dayNotes]);
+
+  // Salvar nota do dia
+  const saveDayNote = async () => {
+    if (!filterDate) return;
+    
+    setSavingNote(true);
+    try {
+      // Usar a data como ID do documento
+      const noteRef = doc(db, 'dayNotes', filterDate);
+      if (currentNote.trim()) {
+        await setDoc(noteRef, {
+          date: filterDate,
+          note: currentNote.trim(),
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        // Se a nota estiver vazia, deletar o documento
+        await deleteDoc(noteRef);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar nota:', error);
+      alert('Erro ao salvar nota. Tente novamente.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   const handleCreateBoat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -711,6 +764,7 @@ export default function AdminDashboard() {
     const data = calendarData.get(dateKey);
     const isToday = dateKey === new Date().toISOString().split('T')[0];
     const isSelected = dateKey === filterDate;
+    const hasNote = dayNotes.has(dateKey);
     
     return {
       hasBoat: data?.hasBoat || false,
@@ -718,6 +772,7 @@ export default function AdminDashboard() {
       reservationCount: data?.reservationCount || 0,
       isToday,
       isSelected,
+      hasNote,
     };
   };
 
@@ -1284,8 +1339,11 @@ export default function AdminDashboard() {
         <div className="mb-6">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Barcos Programados</h2>
 
+          {/* Container do Calendário + Observações */}
+          <div className="flex flex-col lg:flex-row gap-4 mb-4">
+          
           {/* Calendário Visual - Clean Design - Responsivo */}
-          <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 mb-4 sm:max-w-md lg:max-w-lg">
+          <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 sm:max-w-md lg:max-w-lg shrink-0">
             {/* Header do Calendário */}
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <button
@@ -1350,6 +1408,12 @@ export default function AdminDashboard() {
                     {status.hasReservations && !status.isSelected && (
                       <span className="text-[8px] sm:text-[10px] font-bold">{status.reservationCount}</span>
                     )}
+                    {/* Indicador de nota */}
+                    {status.hasNote && (
+                      <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                        status.isSelected ? 'bg-yellow-400' : 'bg-yellow-500'
+                      }`} title="Tem observação" />
+                    )}
                   </button>
                 );
               })}
@@ -1369,6 +1433,10 @@ export default function AdminDashboard() {
                 <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full ring-2 ring-sky-400 bg-sky-100"></div>
                 <span className="text-xs sm:text-sm text-slate-500">Hoje</span>
               </div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-yellow-500"></div>
+                <span className="text-xs sm:text-sm text-slate-500">Obs</span>
+              </div>
             </div>
 
             {/* Botão Voltar para Hoje */}
@@ -1387,6 +1455,39 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
+
+          {/* Card de Observações do Dia - Ao lado no PC */}
+          {filterDate && (
+            <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 flex-1 lg:max-w-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText size={18} className="text-slate-400" />
+                <span className="font-semibold text-slate-700">
+                  Observações
+                </span>
+                {dayNotes.has(filterDate) && (
+                  <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                )}
+              </div>
+              <p className="text-sm text-slate-500 mb-3">{formatDate(filterDate)}</p>
+              <textarea
+                value={currentNote}
+                onChange={(e) => setCurrentNote(e.target.value)}
+                placeholder="Anotações para este dia..."
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-1 focus:ring-slate-400 focus:border-slate-400 outline-none resize-none mb-3"
+                rows={4}
+              />
+              <button
+                onClick={saveDayNote}
+                disabled={savingNote || currentNote === (dayNotes.get(filterDate) || '')}
+                className="w-full px-4 py-2 bg-viva-blue text-white text-sm font-medium rounded-lg hover:bg-viva-blue-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingNote ? 'Salvando...' : 'Salvar Observação'}
+              </button>
+            </div>
+          )}
+          
+          </div>
+          {/* Fim do Container Calendário + Observações */}
 
           {/* Filtrar barcos pela data selecionada */}
           {(() => {
@@ -1526,39 +1627,55 @@ export default function AdminDashboard() {
                     <Users size={16} />
                     Ver Reservas
                   </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditBoat(boat)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-orange-500/10 text-orange-600 rounded-lg hover:bg-orange-500/20 transition text-sm font-medium"
-                      title="Editar Barco"
-                    >
-                      <Edit2 size={16} />
-                      <span className="hidden sm:inline">Editar</span>
-                    </button>
-                    <button
-                      onClick={() => handleToggleBoatStatus(boat)}
-                      className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg transition text-sm font-medium ${
-                        boat.status === 'active'
-                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
-                      }`}
-                      title={boat.status === 'active' ? 'Desativar' : 'Ativar'}
-                    >
-                      <Power size={16} />
-                      <span className="hidden sm:inline">{boat.status === 'active' ? 'Desativar' : 'Ativar'}</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBoat(boat)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-500/10 text-red-600 rounded-lg hover:bg-red-500/20 transition text-sm font-medium"
-                      title="Excluir Barco"
-                    >
-                      <Trash2 size={16} />
-                      <span className="hidden sm:inline">Excluir</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleToggleBoatStatus(boat)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
+                    title="Desativar Barco"
+                  >
+                    <Power size={16} />
+                    Desativar
+                  </button>
                 </div>
               </div>
                 ))}
+              </div>
+            );
+          })()}
+          
+          {/* Barcos Desativados */}
+          {(() => {
+            const inactiveBoatsForDate = boats.filter(boat => {
+              const boatDate = new Date(boat.date).toISOString().split('T')[0];
+              return boatDate === filterDate && boat.status === 'inactive';
+            });
+            
+            if (inactiveBoatsForDate.length === 0) return null;
+            
+            return (
+              <div className="mt-6">
+                <h3 className="text-sm font-medium text-gray-500 mb-3 flex items-center gap-2">
+                  <Power size={16} />
+                  Barcos Desativados ({inactiveBoatsForDate.length})
+                </h3>
+                <div className="space-y-2">
+                  {inactiveBoatsForDate.map((boat) => (
+                    <div key={boat.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div>
+                        <span className="text-sm font-medium text-gray-600">{boat.name}</span>
+                        <span className="text-xs text-gray-400 ml-2">
+                          {boat.seatsTaken}/{boat.seatsTotal} vagas
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleToggleBoatStatus(boat)}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition flex items-center gap-1"
+                      >
+                        <Power size={14} />
+                        Reativar
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           })()}
@@ -2183,6 +2300,24 @@ function BoatSeatsModal({
   // Contar quantos grupos existem
   const totalGroups = groupColorMap.size;
 
+  // Ordenar reservas para manter grupos juntos
+  const sortedReservations = useMemo(() => {
+    return [...activeReservations].sort((a, b) => {
+      // Primeiro: reservas com grupo vêm antes
+      if (a.groupId && !b.groupId) return -1;
+      if (!a.groupId && b.groupId) return 1;
+      
+      // Se ambos têm grupo, agrupa pelo groupId
+      if (a.groupId && b.groupId) {
+        if (a.groupId < b.groupId) return -1;
+        if (a.groupId > b.groupId) return 1;
+      }
+      
+      // Dentro do mesmo grupo ou sem grupo, mantém ordem original
+      return 0;
+    });
+  }, [activeReservations]);
+
   // Função para marcar como não compareceu
   const handleMarkNoShow = async (reservation: Reservation) => {
     const reason = prompt(`${reservation.customerName} não compareceu?\n\nDigite o motivo (opcional):`);
@@ -2224,269 +2359,237 @@ function BoatSeatsModal({
     }
   };
 
+  // Calcular totais financeiros
+  const totalReceita = activeReservations.reduce((sum, r) => sum + r.totalAmount, 0);
+  const totalRecebido = activeReservations.reduce((sum, r) => sum + r.amountPaid, 0);
+  const totalPendente = activeReservations.reduce((sum, r) => sum + r.amountDue, 0);
+
+  // Cores simples para tags de grupo
+  const groupTagColors = [
+    'bg-blue-100 text-blue-700',
+    'bg-purple-100 text-purple-700',
+    'bg-pink-100 text-pink-700',
+    'bg-teal-100 text-teal-700',
+    'bg-orange-100 text-orange-700',
+    'bg-indigo-100 text-indigo-700',
+  ];
+  
+  const getGroupTagColor = (groupId: string | undefined) => {
+    if (!groupId) return '';
+    const index = Array.from(groupColorMap.keys()).indexOf(groupId);
+    return groupTagColors[index % groupTagColors.length];
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-4 sm:mb-6">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-2xl font-black text-viva-blue-dark truncate">{boat.name}</h2>
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <span className="text-xs sm:text-sm text-gray-600 flex items-center gap-1">
-                <Calendar size={14} className="text-gray-500" />
-                {formatDate(boat.date)}
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-viva-blue-dark">
-                👥 {boat.seatsTaken}/{boat.seatsTotal}
-              </span>
+    <div className="fixed inset-0 bg-white z-50 overflow-hidden flex flex-col">
+      {/* Header Fixo */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 shrink-0">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{boat.name}</h1>
+              <p className="text-sm text-gray-500">{formatDate(boat.date)} • {boat.seatsTaken}/{boat.seatsTotal} passageiros</p>
             </div>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-viva-blue text-white text-sm font-medium rounded-lg hover:bg-viva-blue-dark transition"
+            >
+              Fechar
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition shrink-0"
-          >
-            <XCircle size={24} className="text-gray-400" />
-          </button>
+          
+          {/* Resumo Simples */}
+          <div className="flex gap-6 mt-4 text-sm">
+            <div>
+              <span className="text-gray-500">Ocupação: </span>
+              <span className="font-semibold text-gray-900">{occupancyPercent}%</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Vagas livres: </span>
+              <span className="font-semibold text-gray-900">{availableSeats}</span>
+            </div>
+            {totalGroups > 0 && (
+              <div>
+                <span className="text-gray-500">Grupos: </span>
+                <span className="font-semibold text-gray-900">{totalGroups}</span>
+              </div>
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Stats rápidos */}
-        <div className="grid grid-cols-4 gap-2 sm:gap-4 mb-6">
-          <div className="bg-red-50 rounded-lg p-3 text-center">
-            <p className="text-xl sm:text-2xl font-black text-red-600">{boat.seatsTaken}</p>
-            <p className="text-xs text-red-600 font-medium">Ocupadas</p>
-          </div>
-          <div className="bg-green-50 rounded-lg p-3 text-center">
-            <p className="text-xl sm:text-2xl font-black text-green-600">{availableSeats}</p>
-            <p className="text-xs text-green-600 font-medium">Disponíveis</p>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-3 text-center">
-            <p className="text-xl sm:text-2xl font-black text-purple-600">{totalGroups}</p>
-            <p className="text-xs text-purple-600 font-medium">Grupos</p>
-          </div>
-          <div className="bg-gray-100 rounded-lg p-3 text-center">
-            <p className="text-xl sm:text-2xl font-black text-gray-600">{inactiveReservations.length}</p>
-            <p className="text-xs text-gray-600 font-medium">Inativos</p>
-          </div>
-        </div>
-
-        {/* Barra de Progresso Visual */}
-        <div className="mb-6">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-600">Ocupação do Barco</span>
-            <span className="font-bold text-gray-800">{occupancyPercent}%</span>
-          </div>
-          <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-500 ${
-                boat.seatsTaken >= boat.seatsTotal 
-                  ? 'bg-red-500' 
-                  : boat.seatsTaken >= boat.seatsTotal * 0.8 
-                    ? 'bg-orange-500' 
-                    : 'bg-green-500'
-              }`}
-              style={{ width: `${occupancyPercent}%` }}
-            />
-          </div>
-        </div>
-        
-        <div className="space-y-4 sm:space-y-6">
-          {/* Lista de Reservas Ativas */}
+      {/* Conteúdo com Scroll */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+          
+          {/* Lista de Passageiros */}
           {activeReservations.length > 0 ? (
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark mb-3 sm:mb-4 flex items-center gap-2">
-                ✅ Reservas Ativas
-                <span className="bg-viva-blue text-white text-xs px-2 py-0.5 rounded-full">
-                  {activeReservations.length}
-                </span>
-              </h3>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {activeReservations.map((reservation, index) => {
-                  const groupColor = getGroupColor(reservation.groupId, groupColorMap);
-                  const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
-                  
-                  return (
-                  <div
-                    key={reservation.id}
-                    className={`rounded-lg p-3 sm:p-4 border-2 ${
-                      groupColor 
-                        ? `${groupColor.bg} ${groupColor.border}` 
-                        : 'bg-gray-50 border-transparent'
-                    }`}
-                  >
-                    {/* Badge de Grupo */}
-                    {groupColor && groupSize > 1 && (
-                      <div className={`${groupColor.badge} text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 mb-2`}>
-                        <Users size={12} />
-                        Grupo de {groupSize} pessoas
-                      </div>
-                    )}
-                    
-                    <div className="flex items-start gap-3">
-                      <div className={`${
-                        groupColor ? groupColor.badge : 'bg-gradient-to-br from-viva-blue to-viva-blue-dark'
-                      } text-white w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center font-bold text-sm sm:text-base shrink-0`}>
-                        {groupColor ? <Users size={20} /> : index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-900 text-sm sm:text-base truncate">{reservation.customerName}</p>
-                        <p className="text-xs sm:text-sm text-gray-500">{reservation.phone}</p>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          <span className="text-xs font-semibold text-gray-700">
-                            R$ {reservation.totalAmount.toFixed(2)}
-                          </span>
-                          {reservation.amountPaid > 0 && (
-                            <span className="text-xs text-green-600">
-                              <span className="flex items-center gap-1">
-                                <CheckCircle size={12} className="text-green-600" />
-                                Pago: R$ {reservation.amountPaid.toFixed(2)}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Lista de Passageiros ({activeReservations.length})
+                </h2>
+              </div>
+              
+              {/* Tabela Simples */}
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">#</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Passageiro</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 hidden sm:table-cell">Contato</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Valor</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Status</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedReservations.map((reservation, index) => {
+                      const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                      const isGroupMember = groupSize > 1;
+                      const groupTagColor = getGroupTagColor(reservation.groupId);
+                      
+                      return (
+                        <tr key={reservation.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-gray-500">
+                            {index + 1}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-gray-900">{reservation.customerName || 'Sem nome'}</p>
+                                  {isGroupMember && (
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 text-xs font-medium rounded ${groupTagColor}`}>
+                                      G{groupSize}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 sm:hidden">{reservation.phone || '-'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">
+                            {reservation.phone || '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <p className="text-sm font-medium text-gray-900">R$ {reservation.totalAmount.toFixed(2)}</p>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {reservation.amountDue > 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-amber-50 text-amber-700">
+                                Falta R$ {reservation.amountDue.toFixed(2)}
                               </span>
-                            </span>
-                          )}
-                          {reservation.amountDue > 0 && (
-                            <span className="text-xs text-orange-600 font-bold">
-                              <span className="flex items-center gap-1">
-                                <DollarSign size={12} className="text-orange-600" />
-                                Falta: R$ {reservation.amountDue.toFixed(2)}
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700">
+                                Pago
                               </span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 shrink-0">
-                        {/* Links para enviar ao cliente */}
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              const link = `${window.location.origin}/confirmacao/${reservation.id}`;
-                              navigator.clipboard.writeText(link);
-                              alert('✅ Link de CONFIRMAÇÃO copiado!');
-                            }}
-                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
-                            title="Copiar link de Confirmação (instruções)"
-                          >
-                            📋
-                          </button>
-                          <button
-                            onClick={() => {
-                              const link = `${window.location.origin}/aceite/${reservation.id}`;
-                              navigator.clipboard.writeText(link);
-                              alert('✅ Link de ACEITE copiado!');
-                            }}
-                            className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition"
-                            title="Copiar link de Aceite/Voucher"
-                          >
-                            📜
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setReservationToMove(reservation);
-                            setShowMoveModal(true);
-                          }}
-                          className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition"
-                          title="Mover para outro barco"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleMarkNoShow(reservation)}
-                          className="p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 transition"
-                          title="Marcar como Não Compareceu"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Cancelar reserva de ${reservation.customerName}?\nA vaga ficará disponível.`)) {
-                            onCancelReservation(reservation.id);
-                          }
-                        }}
-                          className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                        title="Cancelar Reserva"
-                      >
-                          <Trash2 size={16} />
-                      </button>
-                      </div>
-                    </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => {
+                                  setReservationToMove(reservation);
+                                  setShowMoveModal(true);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                title="Editar"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = `${window.location.origin}/confirmacao/${reservation.id}`;
+                                  navigator.clipboard.writeText(link);
+                                  alert('Link copiado!');
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition"
+                                title="Copiar link"
+                              >
+                                <FileText size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Cancelar reserva de ${reservation.customerName}?`)) {
+                                    onCancelReservation(reservation.id);
+                                  }
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                title="Cancelar"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Resumo Financeiro */}
+              <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <span className="text-gray-500">Total: </span>
+                    <span className="font-semibold text-gray-900">R$ {totalReceita.toFixed(2)}</span>
                   </div>
-                );
-                })}
+                  <div>
+                    <span className="text-gray-500">Recebido: </span>
+                    <span className="font-semibold text-green-600">R$ {totalRecebido.toFixed(2)}</span>
+                  </div>
+                  {totalPendente > 0 && (
+                    <div>
+                      <span className="text-gray-500">Pendente: </span>
+                      <span className="font-semibold text-amber-600">R$ {totalPendente.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <Users className="mx-auto text-gray-300 mb-3" size={48} />
-              <p className="text-gray-500 font-medium">Nenhuma reserva ativa ainda</p>
-              <p className="text-gray-400 text-sm">As reservas aprovadas aparecerão aqui</p>
+            <div className="text-center py-16">
+              <Users className="mx-auto text-gray-300 mb-4" size={48} />
+              <p className="text-gray-500">Nenhum passageiro confirmado</p>
+              <p className="text-sm text-gray-400 mt-1">As reservas aprovadas aparecerão aqui</p>
             </div>
           )}
 
-          {/* Reservas Inativas (Canceladas/Não Compareceu) */}
+          {/* Reservas Inativas */}
           {inactiveReservations.length > 0 && (
-            <div>
+            <div className="mt-8">
               <button
                 onClick={() => setShowInactive(!showInactive)}
-                className="w-full flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition"
               >
-                <span className="flex items-center gap-2 text-gray-600 font-semibold">
-                  <XCircle size={16} />
-                  Reservas Inativas ({inactiveReservations.length})
-                </span>
-                <span className="text-gray-400">{showInactive ? '▲' : '▼'}</span>
+                <span>{showInactive ? '▼' : '▶'}</span>
+                <span>Reservas canceladas ({inactiveReservations.length})</span>
               </button>
               
               {showInactive && (
-                <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto">
+                <div className="mt-3 space-y-2">
                   {inactiveReservations.map((reservation) => (
-                    <div
-                      key={reservation.id}
-                      className={`rounded-lg p-3 border-2 ${
-                        reservation.status === 'no_show' 
-                          ? 'bg-orange-50 border-orange-200' 
-                          : 'bg-gray-100 border-gray-300'
-                      } opacity-75`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                              reservation.status === 'no_show' 
-                                ? 'bg-orange-200 text-orange-700' 
-                                : 'bg-gray-300 text-gray-700'
-                            }`}>
-                              {reservation.status === 'no_show' ? '❌ NÃO COMPARECEU' : '🚫 CANCELADO'}
-                            </span>
-                          </div>
-                          <p className="font-bold text-gray-700 text-sm mt-1 truncate">{reservation.customerName}</p>
-                          <p className="text-xs text-gray-500">{reservation.phone}</p>
-                          {reservation.noShowReason && (
-                            <p className="text-xs text-orange-600 italic mt-1">Motivo: {reservation.noShowReason}</p>
-                          )}
-                          {reservation.cancelledReason && (
-                            <p className="text-xs text-gray-500 italic mt-1">Motivo: {reservation.cancelledReason}</p>
-                          )}
-                        </div>
-                        <span className="text-sm font-bold text-gray-500 line-through">
-                          R$ {reservation.totalAmount.toFixed(2)}
+                    <div key={reservation.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded text-sm">
+                      <div>
+                        <span className="text-gray-600">{reservation.customerName}</span>
+                        <span className="text-gray-400 ml-2">
+                          {reservation.status === 'no_show' ? '(não compareceu)' : '(cancelado)'}
                         </span>
                       </div>
+                      <span className="text-gray-400 line-through">R$ {reservation.totalAmount.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           )}
-
-          <button
-            onClick={onClose}
-            className="w-full px-6 py-3 bg-viva-blue text-white rounded-lg font-bold hover:bg-viva-blue-dark transition"
-          >
-            Fechar
-          </button>
         </div>
       </div>
       
-      {/* Modal para Mover Reserva */}
+      {/* Modal para Editar Reserva */}
       {showMoveModal && reservationToMove && (
         <MoveReservationModal
           reservation={reservationToMove}
@@ -2502,7 +2605,7 @@ function BoatSeatsModal({
   );
 }
 
-// Modal para mover reserva para outro barco
+// Modal para editar reserva e mover para outro barco
 function MoveReservationModal({
   reservation,
   currentBoat,
@@ -2514,8 +2617,24 @@ function MoveReservationModal({
   boats: Boat[];
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<'dados' | 'mover'>('dados');
   const [selectedBoatId, setSelectedBoatId] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Estados de edição dos dados
+  const [editName, setEditName] = useState(reservation.customerName || '');
+  const [editPhone, setEditPhone] = useState(reservation.phone || '');
+  const [editWhatsapp, setEditWhatsapp] = useState(reservation.whatsapp || '');
+  const [editDocument, setEditDocument] = useState(reservation.document || '');
+  const [editBirthDate, setEditBirthDate] = useState(reservation.birthDate || '');
+  const [editEmail, setEditEmail] = useState(reservation.email || '');
+  const [editAddress, setEditAddress] = useState(reservation.address || '');
+  const [editTotalAmount, setEditTotalAmount] = useState(reservation.totalAmount.toString());
+  const [editAmountPaid, setEditAmountPaid] = useState(reservation.amountPaid.toString());
+  const [editPaymentMethod, setEditPaymentMethod] = useState(reservation.paymentMethod || 'pix');
+  const [editEscunaType, setEditEscunaType] = useState(reservation.escunaType || 'sem-desembarque');
+  const [editIsChild, setEditIsChild] = useState(reservation.isChild || false);
+  const [editIsHalfPrice, setEditIsHalfPrice] = useState(reservation.isHalfPrice || false);
   
   const selectedBoat = boats.find(b => b.id === selectedBoatId);
   
@@ -2533,6 +2652,42 @@ function MoveReservationModal({
     }
     return hasSpace;
   });
+
+  // Salvar edição dos dados
+  const handleSaveData = async () => {
+    setLoading(true);
+    try {
+      const totalAmount = parseFloat(editTotalAmount) || 0;
+      const amountPaidValue = parseFloat(editAmountPaid) || 0;
+      const amountDue = totalAmount - amountPaidValue;
+
+      await updateDoc(doc(db, 'reservations', reservation.id), {
+        customerName: editName,
+        phone: editPhone,
+        whatsapp: editWhatsapp || editPhone,
+        document: editDocument,
+        birthDate: editBirthDate,
+        email: editEmail,
+        address: editAddress,
+        totalAmount,
+        amountPaid: amountPaidValue,
+        amountDue: Math.max(0, amountDue),
+        paymentMethod: editPaymentMethod,
+        escunaType: currentBoat.boatType === 'escuna' ? editEscunaType : undefined,
+        isChild: editIsChild,
+        isHalfPrice: editIsHalfPrice,
+        updatedAt: Timestamp.now(),
+      });
+      
+      alert('✅ Dados atualizados com sucesso!');
+      onClose();
+    } catch (error) {
+      console.error('Erro ao salvar dados:', error);
+      alert('Erro ao salvar. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const handleMove = async () => {
     if (!selectedBoatId || !selectedBoat) {
@@ -2598,70 +2753,297 @@ function MoveReservationModal({
   };
   
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-        <h3 className="text-xl font-black text-viva-blue-dark mb-4">Mover Pessoa para Outro Barco</h3>
-        
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <p className="text-sm text-blue-800 font-medium">Cliente: <strong>{reservation.customerName}</strong></p>
-          <p className="text-xs text-blue-600 mt-1">Barco atual: {currentBoat.name} ({formatDate(currentBoat.date)})</p>
-          {reservation.escunaType && (
-            <p className="text-xs text-blue-600 mt-1">
-              Tipo: {reservation.escunaType === 'com-desembarque' ? '🏝️ Com Desembarque' : '🚤 Panorâmico'}
-            </p>
-          )}
-        </div>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Selecionar Novo Barco
-          </label>
-          {availableBoats.length === 0 ? (
-            <p className="text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-3">
-              ⚠️ Não há barcos com vagas disponíveis para o tipo de passeio selecionado.
-            </p>
-          ) : (
-            <select
-              value={selectedBoatId}
-              onChange={(e) => setSelectedBoatId(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-            >
-              <option value="">Selecione um barco...</option>
-              {availableBoats.map(boat => {
-                const vagasDisponiveis = boat.seatsTotal - boat.seatsTaken;
-                return (
-                  <option key={boat.id} value={boat.id}>
-                    {boat.name} - {formatDate(boat.date)} ({vagasDisponiveis} vagas)
-                  </option>
-                );
-              })}
-            </select>
-          )}
-        </div>
-        
-        {selectedBoat && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-green-800 font-medium">Novo destino:</p>
-            <p className="text-green-700 font-bold">{selectedBoat.name}</p>
-            <p className="text-xs text-green-600 mt-1">{formatDate(selectedBoat.date)}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Editar Reserva</h3>
+            <p className="text-sm text-gray-500">{reservation.customerName || 'Cliente'}</p>
           </div>
-        )}
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition">
+            <X size={20} />
+          </button>
+        </div>
         
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleMove}
-            disabled={loading || !selectedBoatId}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
-          >
-            {loading ? 'Movendo...' : 'Confirmar Mudança'}
-          </button>
+        <div className="p-5">
+          {/* Tabs */}
+          <div className="flex gap-4 mb-5 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('dados')}
+              className={`pb-3 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === 'dados'
+                  ? 'text-gray-900 border-gray-900'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
+              }`}
+            >
+              Dados
+            </button>
+            <button
+              onClick={() => setActiveTab('mover')}
+              className={`pb-3 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === 'mover'
+                  ? 'text-gray-900 border-gray-900'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
+              }`}
+            >
+              Mover de Barco
+            </button>
+          </div>
+
+          {/* Tab: Editar Dados */}
+          {activeTab === 'dados' && (
+            <div className="space-y-4">
+              {/* Dados Pessoais */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nome Completo</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="Nome do cliente"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Documento</label>
+                    <input
+                      type="text"
+                      value={editDocument}
+                      onChange={(e) => setEditDocument(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="CPF/RG"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nascimento</label>
+                    <input
+                      type="date"
+                      value={editBirthDate}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+                    <input
+                      type="tel"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="(48) 99999-9999"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">WhatsApp</label>
+                    <input
+                      type="tel"
+                      value={editWhatsapp}
+                      onChange={(e) => setEditWhatsapp(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="(48) 99999-9999"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="email@exemplo.com"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Endereço</label>
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                      placeholder="Rua, número, bairro..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Valores e Pagamento */}
+              <div className="pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-600 mb-3">Pagamento</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Total</label>
+                    <input
+                      type="number"
+                      value={editTotalAmount}
+                      onChange={(e) => setEditTotalAmount(e.target.value)}
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Pago</label>
+                    <input
+                      type="number"
+                      value={editAmountPaid}
+                      onChange={(e) => setEditAmountPaid(e.target.value)}
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Forma</label>
+                    <select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value as 'pix' | 'cartao' | 'dinheiro')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                    >
+                      <option value="pix">PIX</option>
+                      <option value="cartao">Cartão</option>
+                      <option value="dinheiro">Dinheiro</option>
+                    </select>
+                  </div>
+                </div>
+                {(parseFloat(editTotalAmount) - parseFloat(editAmountPaid)) > 0 && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    Restante: R$ {Math.max(0, (parseFloat(editTotalAmount) || 0) - (parseFloat(editAmountPaid) || 0)).toFixed(2)}
+                  </p>
+                )}
+              </div>
+
+              {/* Tipo de Passeio (para escunas) */}
+              {currentBoat.boatType === 'escuna' && (
+                <div className="pt-3 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-600 mb-3">Tipo de Passeio</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditEscunaType('sem-desembarque')}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm transition ${
+                        editEscunaType === 'sem-desembarque'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Panorâmico
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditEscunaType('com-desembarque')}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm transition ${
+                        editEscunaType === 'com-desembarque'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Com Desembarque
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Opções Especiais */}
+              <div className="pt-3 border-t border-gray-100 flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsChild}
+                    onChange={(e) => setEditIsChild(e.target.checked)}
+                    className="w-4 h-4 text-gray-900 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">Criança</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsHalfPrice}
+                    onChange={(e) => setEditIsHalfPrice(e.target.checked)}
+                    className="w-4 h-4 text-gray-900 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">Meia entrada</span>
+                </label>
+              </div>
+
+              {/* Botões */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={onClose}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveData}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Mover de Barco */}
+          {activeTab === 'mover' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-2">
+                  Selecionar Novo Barco
+                </label>
+                {availableBoats.length === 0 ? (
+                  <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+                    Não há barcos com vagas disponíveis.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedBoatId}
+                    onChange={(e) => setSelectedBoatId(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
+                  >
+                    <option value="">Selecione um barco...</option>
+                    {availableBoats.map(boat => {
+                      const vagasDisponiveis = boat.seatsTotal - boat.seatsTaken;
+                      return (
+                        <option key={boat.id} value={boat.id}>
+                          {boat.name} - {formatDate(boat.date)} ({vagasDisponiveis} vagas)
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+              
+              {selectedBoat && (
+                <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                  <p className="text-gray-500">Novo destino:</p>
+                  <p className="font-medium text-gray-900">{selectedBoat.name}</p>
+                  <p className="text-gray-500">{formatDate(selectedBoat.date)}</p>
+                </div>
+              )}
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={onClose}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleMove}
+                  disabled={loading || !selectedBoatId}
+                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  {loading ? 'Movendo...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2685,216 +3067,560 @@ function ReservationDetailModal({
 }) {
   const [amountPaid, setAmountPaid] = useState(reservation.amountPaid.toString());
   const [showReallocationModal, setShowReallocationModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Estados de edição
+  const [editName, setEditName] = useState(reservation.customerName || '');
+  const [editPhone, setEditPhone] = useState(reservation.phone || '');
+  const [editWhatsapp, setEditWhatsapp] = useState(reservation.whatsapp || '');
+  const [editDocument, setEditDocument] = useState(reservation.document || '');
+  const [editBirthDate, setEditBirthDate] = useState(reservation.birthDate || '');
+  const [editEmail, setEditEmail] = useState(reservation.email || '');
+  const [editAddress, setEditAddress] = useState(reservation.address || '');
+  const [editTotalAmount, setEditTotalAmount] = useState(reservation.totalAmount.toString());
+  const [editAmountPaid, setEditAmountPaid] = useState(reservation.amountPaid.toString());
+  const [editPaymentMethod, setEditPaymentMethod] = useState(reservation.paymentMethod || 'pix');
+  const [editEscunaType, setEditEscunaType] = useState(reservation.escunaType || 'sem-desembarque');
+  const [editIsChild, setEditIsChild] = useState(reservation.isChild || false);
+  const [editIsHalfPrice, setEditIsHalfPrice] = useState(reservation.isHalfPrice || false);
+
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    try {
+      const totalAmount = parseFloat(editTotalAmount) || 0;
+      const amountPaidValue = parseFloat(editAmountPaid) || 0;
+      const amountDue = totalAmount - amountPaidValue;
+
+      await updateDoc(doc(db, 'reservations', reservation.id), {
+        customerName: editName,
+        phone: editPhone,
+        whatsapp: editWhatsapp || editPhone,
+        document: editDocument,
+        birthDate: editBirthDate,
+        email: editEmail,
+        address: editAddress,
+        totalAmount,
+        amountPaid: amountPaidValue,
+        amountDue: Math.max(0, amountDue),
+        paymentMethod: editPaymentMethod,
+        escunaType: boat.boatType === 'escuna' ? editEscunaType : undefined,
+        isChild: editIsChild,
+        isHalfPrice: editIsHalfPrice,
+        updatedAt: Timestamp.now(),
+      });
+      
+      setIsEditing(false);
+      alert('✅ Reserva atualizada com sucesso!');
+      onClose(); // Fechar para atualizar os dados
+    } catch (error) {
+      console.error('Erro ao salvar edição:', error);
+      alert('Erro ao salvar alterações');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    // Restaurar valores originais
+    setEditName(reservation.customerName || '');
+    setEditPhone(reservation.phone || '');
+    setEditWhatsapp(reservation.whatsapp || '');
+    setEditDocument(reservation.document || '');
+    setEditBirthDate(reservation.birthDate || '');
+    setEditEmail(reservation.email || '');
+    setEditAddress(reservation.address || '');
+    setEditTotalAmount(reservation.totalAmount.toString());
+    setEditAmountPaid(reservation.amountPaid.toString());
+    setEditPaymentMethod(reservation.paymentMethod || 'pix');
+    setEditEscunaType(reservation.escunaType || 'sem-desembarque');
+    setEditIsChild(reservation.isChild || false);
+    setEditIsHalfPrice(reservation.isHalfPrice || false);
+    setIsEditing(false);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-white rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark">Detalhes da Reserva</h2>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
-          >
-            <XCircle size={24} className="text-gray-400" />
-          </button>
-        </div>
-        
-        {/* Card do Cliente */}
-        <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-white/70 text-xs mb-1">Cliente</p>
-              <p className="font-bold text-lg sm:text-xl truncate">{reservation.customerName}</p>
-            </div>
-            <div className="bg-white text-viva-blue-dark font-black text-xl sm:text-2xl px-3 sm:px-4 py-2 rounded-lg ml-3">
-              #{reservation.seatNumber}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/90">
-            {reservation.phone ? (
-              <>
-                <span className="flex items-center gap-1">
-                  📞 {reservation.phone}
-                </span>
-                {reservation.whatsapp && reservation.whatsapp !== reservation.phone && (
-                  <a 
-                    href={`https://wa.me/${reservation.whatsapp.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-green-300 hover:text-green-200"
-                  >
-                    💬 WhatsApp
-                  </a>
-                )}
-              </>
-            ) : (
-              <span className="text-white/60">Sem telefone cadastrado</span>
+          <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark">
+            {isEditing ? '✏️ Editar Reserva' : 'Detalhes da Reserva'}
+          </h2>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button 
+                onClick={() => setIsEditing(true)}
+                className="p-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-full transition"
+                title="Editar reserva"
+              >
+                <Edit2 size={20} />
+              </button>
             )}
-          </div>
-        </div>
-
-        {/* Aviso para Pré-reserva */}
-        {reservation.status === 'pre_reserved' && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-            <p className="text-sm font-bold text-orange-800 mb-1">⏳ PRÉ-RESERVA</p>
-            <p className="text-xs text-orange-700">
-              Esta é uma pré-reserva criada sem dados completos do cliente. Complete os dados antes de aprovar.
-            </p>
-          </div>
-        )}
-
-        {/* Informações em Grid */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
-          <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-            <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-              <Calendar size={14} className="text-gray-400" />
-              Data do Passeio
-            </p>
-            <p className="font-bold text-sm sm:text-base text-gray-800">{formatDate(reservation.rideDate)}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-            <p className="text-xs text-gray-500 mb-1">💳 Pagamento</p>
-            <p className="font-bold text-sm sm:text-base text-gray-800 capitalize">{reservation.paymentMethod}</p>
-          </div>
-          {reservation.escunaType && (
-            <div className="bg-gray-50 rounded-lg p-3 sm:p-4 col-span-2">
-              <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                <Users size={14} className="text-gray-400" />
-                Tipo de Passeio
-              </p>
-              <p className="font-bold text-sm sm:text-base text-gray-800">
-                {reservation.escunaType === 'com-desembarque' ? 'Com Desembarque na Ilha' : 'Sem Desembarque (Panorâmico)'}
-              </p>
-            </div>
-          )}
-          <div className="bg-gray-50 rounded-lg p-3 sm:p-4 col-span-2">
-            <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-              <MapPin size={14} className="text-gray-400" />
-              Endereço
-            </p>
-            <p className="font-bold text-sm sm:text-base text-gray-800">{reservation.address}</p>
-          </div>
-        </div>
-
-        {/* Valores - Responsivo */}
-        <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-          <p className="flex items-center gap-1 text-xs text-gray-500 mb-3 font-semibold">
-            <DollarSign size={14} className="text-gray-400" />
-            Valores
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-            <div className="text-center p-2 sm:p-3 bg-white rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Total</p>
-              <p className="font-black text-base sm:text-xl text-viva-blue-dark">
-                R$ {reservation.totalAmount.toFixed(2)}
-              </p>
-            </div>
-            <div className="text-center p-2 sm:p-3 bg-green-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Pago</p>
-              <p className="font-black text-base sm:text-xl text-green-600">
-                R$ {reservation.amountPaid.toFixed(2)}
-              </p>
-            </div>
-            <div className={`text-center p-2 sm:p-3 rounded-lg ${reservation.amountDue > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
-              <p className="text-xs text-gray-500 mb-1">Falta</p>
-              <p className={`font-black text-base sm:text-xl ${reservation.amountDue > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                R$ {reservation.amountDue.toFixed(2)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Input de valor pago (se pendente) */}
-        
-
-        {/* Botões de Ação */}
-        <div className="space-y-2 sm:space-y-0 sm:flex sm:gap-3 pt-2">
-          {reservation.status === 'pending' ? (
-            <>
-              
-              {/* Botões em coluna no mobile, linha no desktop */}
-              <button
-                onClick={() => {
-                  const paid = parseFloat(amountPaid) || 0;
-                  if (paid < 0) {
-                    alert('O valor pago não pode ser negativo!');
-                    return;
-                  }
-                  if (paid > reservation.totalAmount) {
-                    alert('O valor pago não pode ser maior que o valor total!');
-                    return;
-                  }
-                  onApprove(reservation, paid);
-                }}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
-              >
-                <CheckCircle size={20} />
-                Aprovar Reserva
-              </button>
-              <button
-                onClick={() => onReject(reservation.id)}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
-              >
-                <XCircle size={18} />
-                Recusar
-              </button>
-              <button
-                onClick={onClose}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
-              >
-                Fechar
-              </button>
-            </>
-          ) : reservation.status === 'approved' ? (
-            <>
-              {/* Links para enviar ao cliente */}
-              <div className="w-full grid grid-cols-2 gap-2 mb-2 sm:mb-0">
-                <button
-                  onClick={() => {
-                    const link = `${window.location.origin}/confirmacao/${reservation.id}`;
-                    navigator.clipboard.writeText(link);
-                    alert('✅ Link de CONFIRMAÇÃO copiado!\n\nEnvie para o cliente com as instruções do passeio.');
-                  }}
-                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-1 text-sm"
-                  title="Copiar link com instruções do passeio"
-                >
-                  📋 Confirmação
-                </button>
-                <button
-                  onClick={() => {
-                    const link = `${window.location.origin}/aceite/${reservation.id}`;
-                    navigator.clipboard.writeText(link);
-                    alert('✅ Link de ACEITE + VOUCHER copiado!\n\nEnvie para o cliente aceitar os termos e receber o voucher.');
-                  }}
-                  className="px-3 py-2 bg-green-100 text-green-700 rounded-lg font-bold hover:bg-green-200 transition flex items-center justify-center gap-1 text-sm"
-                  title="Copiar link de aceite de termos e voucher"
-                >
-                  📜 Aceite/Voucher
-                </button>
-              </div>
-              <button
-                onClick={() => setShowReallocationModal(true)}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition flex items-center justify-center gap-2"
-              >
-                🔄 Realocar Pessoa
-              </button>
-              <button
-                onClick={onClose}
-                className="w-full sm:flex-1 px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
-              >
-                Fechar
-              </button>
-            </>
-          ) : (
-            <button
+            <button 
               onClick={onClose}
-              className="w-full px-6 py-3 bg-viva-blue text-white rounded-lg font-bold hover:bg-viva-blue-dark transition"
+              className="p-2 hover:bg-gray-100 rounded-full transition"
             >
-              Fechar
+              <XCircle size={24} className="text-gray-400" />
             </button>
-          )}
+          </div>
         </div>
+
+        {isEditing ? (
+          /* MODO EDIÇÃO */
+          <div className="space-y-4">
+            {/* Dados Pessoais */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-bold text-blue-800 mb-3 flex items-center gap-2">
+                <User size={18} /> Dados do Cliente
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Nome Completo</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="Nome do cliente"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Documento (CPF/RG)</label>
+                  <input
+                    type="text"
+                    value={editDocument}
+                    onChange={(e) => setEditDocument(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone</label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="(48) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">WhatsApp</label>
+                  <input
+                    type="tel"
+                    value={editWhatsapp}
+                    onChange={(e) => setEditWhatsapp(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="(48) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de Nascimento</label>
+                  <input
+                    type="date"
+                    value={editBirthDate}
+                    onChange={(e) => setEditBirthDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Endereço</label>
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="Rua, número, bairro, cidade..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Valores e Pagamento */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h3 className="font-bold text-green-800 mb-3 flex items-center gap-2">
+                <DollarSign size={18} /> Valores e Pagamento
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Valor Total (R$)</label>
+                  <input
+                    type="number"
+                    value={editTotalAmount}
+                    onChange={(e) => setEditTotalAmount(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm font-bold"
+                    placeholder="200.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Valor Pago (R$)</label>
+                  <input
+                    type="number"
+                    value={editAmountPaid}
+                    onChange={(e) => setEditAmountPaid(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Forma de Pagamento</label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value as 'pix' | 'cartao' | 'dinheiro')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+                  >
+                    <option value="pix">💠 PIX</option>
+                    <option value="cartao">💳 Cartão</option>
+                    <option value="dinheiro">💵 Dinheiro</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3 p-2 bg-white rounded-lg text-center">
+                <span className="text-sm text-gray-600">Valor Restante: </span>
+                <span className={`font-bold ${(parseFloat(editTotalAmount) - parseFloat(editAmountPaid)) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  R$ {Math.max(0, (parseFloat(editTotalAmount) || 0) - (parseFloat(editAmountPaid) || 0)).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Tipo de Passeio (para escunas) */}
+            {boat.boatType === 'escuna' && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
+                  <Users size={18} /> Tipo de Passeio
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditEscunaType('sem-desembarque')}
+                    className={`px-4 py-3 rounded-xl font-bold transition text-sm ${
+                      editEscunaType === 'sem-desembarque'
+                        ? 'bg-purple-600 text-white shadow-lg'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    🚤 Panorâmico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditEscunaType('com-desembarque')}
+                    className={`px-4 py-3 rounded-xl font-bold transition text-sm ${
+                      editEscunaType === 'com-desembarque'
+                        ? 'bg-purple-600 text-white shadow-lg'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    🏝️ Com Desembarque
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Opções Especiais */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="font-bold text-yellow-800 mb-3">⭐ Opções Especiais</h3>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsChild}
+                    onChange={(e) => setEditIsChild(e.target.checked)}
+                    className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                  />
+                  <span className="font-semibold text-gray-700">👶 É criança (menor de 7 anos)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsHalfPrice}
+                    onChange={(e) => setEditIsHalfPrice(e.target.checked)}
+                    className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <span className="font-semibold text-gray-700">🎫 Meia entrada</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Botões de Ação (Edição) */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCancelEdit}
+                disabled={saving}
+                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={20} />
+                    Salvar Alterações
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* MODO VISUALIZAÇÃO */
+          <>
+            {/* Card do Cliente */}
+            <div className="bg-gradient-to-r from-viva-blue to-viva-blue-dark rounded-lg p-4 mb-4 text-white">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/70 text-xs mb-1">Cliente</p>
+                  <p className="font-bold text-lg sm:text-xl truncate">{reservation.customerName || 'Não informado'}</p>
+                </div>
+                <div className="bg-white text-viva-blue-dark font-black text-xl sm:text-2xl px-3 sm:px-4 py-2 rounded-lg ml-3">
+                  #{reservation.seatNumber}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/90">
+                {reservation.phone ? (
+                  <>
+                    <span className="flex items-center gap-1">
+                      📞 {reservation.phone}
+                    </span>
+                    {reservation.whatsapp && reservation.whatsapp !== reservation.phone && (
+                      <a 
+                        href={`https://wa.me/${reservation.whatsapp.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-green-300 hover:text-green-200"
+                      >
+                        💬 WhatsApp
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-white/60">Sem telefone cadastrado</span>
+                )}
+              </div>
+              {reservation.document && (
+                <p className="text-white/70 text-sm mt-2">📄 Doc: {reservation.document}</p>
+              )}
+              {reservation.email && (
+                <p className="text-white/70 text-sm">📧 {reservation.email}</p>
+              )}
+            </div>
+
+            {/* Aviso para Pré-reserva */}
+            {reservation.status === 'pre_reserved' && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-bold text-orange-800 mb-1">⏳ PRÉ-RESERVA</p>
+                <p className="text-xs text-orange-700">
+                  Esta é uma pré-reserva criada sem dados completos do cliente. Complete os dados antes de aprovar.
+                </p>
+              </div>
+            )}
+
+            {/* Informações em Grid */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                  <Calendar size={14} className="text-gray-400" />
+                  Data do Passeio
+                </p>
+                <p className="font-bold text-sm sm:text-base text-gray-800">{formatDate(reservation.rideDate)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                <p className="text-xs text-gray-500 mb-1">💳 Pagamento</p>
+                <p className="font-bold text-sm sm:text-base text-gray-800 capitalize">{reservation.paymentMethod}</p>
+              </div>
+              {reservation.birthDate && (
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                  <p className="text-xs text-gray-500 mb-1">🎂 Nascimento</p>
+                  <p className="font-bold text-sm sm:text-base text-gray-800">{formatDate(reservation.birthDate)}</p>
+                </div>
+              )}
+              {reservation.escunaType && (
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                  <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                    <Users size={14} className="text-gray-400" />
+                    Tipo de Passeio
+                  </p>
+                  <p className="font-bold text-sm sm:text-base text-gray-800">
+                    {reservation.escunaType === 'com-desembarque' ? '🏝️ Com Desembarque' : '🚤 Panorâmico'}
+                  </p>
+                </div>
+              )}
+              {reservation.address && (
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 col-span-2">
+                  <p className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                    <MapPin size={14} className="text-gray-400" />
+                    Endereço
+                  </p>
+                  <p className="font-bold text-sm sm:text-base text-gray-800">{reservation.address}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Tags especiais */}
+            {(reservation.isChild || reservation.isHalfPrice) && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {reservation.isChild && (
+                  <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-bold">
+                    👶 Criança
+                  </span>
+                )}
+                {reservation.isHalfPrice && (
+                  <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-bold">
+                    🎫 Meia Entrada
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Valores - Responsivo */}
+            <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
+              <p className="flex items-center gap-1 text-xs text-gray-500 mb-3 font-semibold">
+                <DollarSign size={14} className="text-gray-400" />
+                Valores
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                <div className="text-center p-2 sm:p-3 bg-white rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Total</p>
+                  <p className="font-black text-base sm:text-xl text-viva-blue-dark">
+                    R$ {reservation.totalAmount.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-center p-2 sm:p-3 bg-green-50 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Pago</p>
+                  <p className="font-black text-base sm:text-xl text-green-600">
+                    R$ {reservation.amountPaid.toFixed(2)}
+                  </p>
+                </div>
+                <div className={`text-center p-2 sm:p-3 rounded-lg ${reservation.amountDue > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
+                  <p className="text-xs text-gray-500 mb-1">Falta</p>
+                  <p className={`font-black text-base sm:text-xl ${reservation.amountDue > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    R$ {reservation.amountDue.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="space-y-2 sm:space-y-0 sm:flex sm:gap-3 pt-2">
+              {reservation.status === 'pending' ? (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="w-full sm:flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={18} />
+                    Editar Dados
+                  </button>
+                  <button
+                    onClick={() => {
+                      const paid = parseFloat(amountPaid) || 0;
+                      if (paid < 0) {
+                        alert('O valor pago não pode ser negativo!');
+                        return;
+                      }
+                      if (paid > reservation.totalAmount) {
+                        alert('O valor pago não pode ser maior que o valor total!');
+                        return;
+                      }
+                      onApprove(reservation, paid);
+                    }}
+                    className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
+                  >
+                    <CheckCircle size={20} />
+                    Aprovar
+                  </button>
+                  <button
+                    onClick={() => onReject(reservation.id)}
+                    className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
+                  >
+                    <XCircle size={18} />
+                    Recusar
+                  </button>
+                </>
+              ) : reservation.status === 'approved' ? (
+                <>
+                  {/* Botão Editar */}
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="w-full sm:flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={18} />
+                    Editar Dados
+                  </button>
+                  {/* Links para enviar ao cliente */}
+                  <div className="w-full grid grid-cols-2 gap-2 mb-2 sm:mb-0">
+                    <button
+                      onClick={() => {
+                        const link = `${window.location.origin}/confirmacao/${reservation.id}`;
+                        navigator.clipboard.writeText(link);
+                        alert('✅ Link de CONFIRMAÇÃO copiado!\n\nEnvie para o cliente com as instruções do passeio.');
+                      }}
+                      className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-1 text-sm"
+                      title="Copiar link com instruções do passeio"
+                    >
+                      📋 Confirmação
+                    </button>
+                    <button
+                      onClick={() => {
+                        const link = `${window.location.origin}/aceite/${reservation.id}`;
+                        navigator.clipboard.writeText(link);
+                        alert('✅ Link de ACEITE + VOUCHER copiado!\n\nEnvie para o cliente aceitar os termos e receber o voucher.');
+                      }}
+                      className="px-3 py-2 bg-green-100 text-green-700 rounded-lg font-bold hover:bg-green-200 transition flex items-center justify-center gap-1 text-sm"
+                      title="Copiar link de aceite de termos e voucher"
+                    >
+                      📜 Aceite/Voucher
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setShowReallocationModal(true)}
+                    className="w-full sm:flex-1 px-4 sm:px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition flex items-center justify-center gap-2"
+                  >
+                    🔄 Realocar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="w-full sm:flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={18} />
+                    Editar Dados
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="w-full sm:flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
+                  >
+                    Fechar
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
         
         {/* Modal Realocação */}
         {showReallocationModal && (
@@ -3386,16 +4112,16 @@ function AdminReservationWizard({
       const vagasDisponiveis = selectedBoat ? selectedBoat.seatsTotal - selectedBoat.seatsTaken : 0;
       return numberOfPeople >= 1 && numberOfPeople <= vagasDisponiveis;
     }
-    // Passos de dados das pessoas
+    // Passos de dados das pessoas - Admin só precisa do telefone do responsável
     if (currentStep >= 3 && currentStep < 3 + numberOfPeople) {
       const personIndex = currentStep - 3;
       const person = people[personIndex];
-      // Telefone obrigatório apenas para o primeiro do grupo (responsável)
+      // Admin: apenas telefone obrigatório para o primeiro do grupo (responsável)
       if (personIndex === 0) {
-        return person && person.name && person.document && person.phone && person.birthDate;
+        return person && person.phone;
       }
-      // Demais pessoas: telefone opcional
-      return person && person.name && person.document && person.birthDate;
+      // Demais pessoas: nenhum campo obrigatório
+      return true;
     }
     return true;
   };
@@ -3851,48 +4577,10 @@ function AdminReservationWizard({
                       <p className="text-gray-500">Vaga #{seatNumber}</p>
                     </div>
 
-                    {/* Nome */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <User className="inline w-4 h-4 mr-1" /> Nome Completo *
-                      </label>
-                      <input
-                        type="text"
-                        value={person.name}
-                        onChange={(e) => {
-                          const newPeople = [...people];
-                          newPeople[personIndex] = { ...person, name: e.target.value };
-                          setPeople(newPeople);
-                        }}
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        placeholder="Nome completo do passageiro"
-                      />
-                    </div>
-
-                    {/* Documento */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        📄 Documento (CPF/RG) *
-                      </label>
-                      <input
-                        type="text"
-                        value={person.document}
-                        onChange={(e) => {
-                          const newPeople = [...people];
-                          newPeople[personIndex] = { ...person, document: e.target.value };
-                          setPeople(newPeople);
-                        }}
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        placeholder="000.000.000-00"
-                      />
-                    </div>
-
-                    {/* Telefone - Obrigatório apenas para o responsável (primeiro do grupo) */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <Phone className="inline w-4 h-4 mr-1" /> Telefone {personIndex === 0 ? '*' : <span className="text-gray-400 font-normal">(opcional)</span>}
+                    {/* Telefone - Único campo obrigatório para Admin */}
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                      <label className="block text-sm font-semibold text-blue-800 mb-2">
+                        <Phone className="inline w-4 h-4 mr-1" /> Telefone *
                         {personIndex === 0 && numberOfPeople > 1 && (
                           <span className="text-xs text-blue-600 ml-2 font-normal">(Responsável do grupo)</span>
                         )}
@@ -3906,15 +4594,54 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required={personIndex === 0}
+                        className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-bold bg-white"
+                        placeholder="(48) 99999-9999"
+                      />
+                      {personIndex === 0 && (
+                        <p className="text-xs text-blue-600 mt-2">⚠️ Campo obrigatório para prosseguir</p>
+                      )}
+                    </div>
+
+                    {/* Nome */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <User className="inline w-4 h-4 mr-1" /> Nome Completo <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={person.name}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, name: e.target.value };
+                          setPeople(newPeople);
+                        }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        placeholder={personIndex === 0 ? "(48) 99999-9999" : "Opcional"}
+                        placeholder="Nome completo do passageiro"
+                      />
+                    </div>
+
+                    {/* Documento */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📄 Documento (CPF/RG) <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={person.document}
+                        onChange={(e) => {
+                          const newPeople = [...people];
+                          newPeople[personIndex] = { ...person, document: e.target.value };
+                          setPeople(newPeople);
+                        }}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="000.000.000-00"
                       />
                     </div>
 
                     {/* Data de Nascimento */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        🎂 Data de Nascimento *
+                        🎂 Data de Nascimento <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
                       <input
                         type="date"
@@ -3924,7 +4651,6 @@ function AdminReservationWizard({
                           newPeople[personIndex] = { ...person, birthDate: e.target.value };
                           setPeople(newPeople);
                         }}
-                        required
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                       />
                     </div>
