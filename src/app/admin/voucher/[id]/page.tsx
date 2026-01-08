@@ -25,7 +25,11 @@ export default function VoucherPage() {
       }
 
       if (!user) {
-        setError('Você precisa estar logado para acessar este voucher. Faça login e escaneie novamente.');
+        // Salvar o ID do voucher no localStorage para redirecionar após login
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('pendingVoucherId', params.id as string);
+        }
+        setError('LOGIN_REQUIRED');
         setLoading(false);
         return;
       }
@@ -156,8 +160,40 @@ export default function VoucherPage() {
   }
 
   if (error) {
+    // Verificar se precisa fazer login
+    const isLoginRequired = error === 'LOGIN_REQUIRED';
     // Verificar se é erro de data (passada ou futura)
     const isDateError = error.includes('QR Code inválido') || error.includes('não está elegível');
+    
+    if (isLoginRequired) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 sm:p-8 shadow-sm border border-gray-200 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-blue-100">
+                <AlertCircle className="text-blue-600" size={32} />
+              </div>
+              <h2 className="text-xl font-bold mb-2 text-blue-800">
+                Login Necessário
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Você precisa estar logado para processar este voucher.
+              </p>
+              <p className="text-xs text-gray-500">
+                Após fazer login, você será redirecionado automaticamente.
+              </p>
+            </div>
+            
+            <Link
+              href="/login"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-viva-blue text-white rounded-lg hover:bg-viva-blue-dark transition font-semibold"
+            >
+              Fazer Login
+            </Link>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

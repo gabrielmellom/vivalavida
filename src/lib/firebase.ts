@@ -1,5 +1,5 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
+import { getAuth, Auth, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
@@ -24,6 +24,10 @@ if (typeof window !== 'undefined') {
     app = getApps()[0];
   }
   auth = getAuth(app);
+  
+  // Garantir persistência local para manter login entre abas
+  setPersistence(auth, browserLocalPersistence).catch(console.error);
+  
   db = getFirestore(app);
   storage = getStorage(app);
 }

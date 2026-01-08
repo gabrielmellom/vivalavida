@@ -16,6 +16,18 @@ export default function LoginPage() {
   // Redirecionar quando o userRole for carregado
   useEffect(() => {
     if (!authLoading && userRole) {
+      // Verificar se há voucher pendente para processar
+      const pendingVoucherId = typeof window !== 'undefined' ? localStorage.getItem('pendingVoucherId') : null;
+      
+      if (pendingVoucherId) {
+        // Limpar o voucher pendente
+        localStorage.removeItem('pendingVoucherId');
+        // Redirecionar para o voucher
+        router.push(`/admin/voucher/${pendingVoucherId}`);
+        return;
+      }
+      
+      // Redirecionamento normal baseado no role
       if (userRole.role === 'admin') {
         router.push('/admin');
       } else if (userRole.role === 'vendor') {

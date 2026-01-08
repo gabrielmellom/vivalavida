@@ -33,24 +33,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Flag para evitar race conditions
+    let isMounted = true;
+    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
+      
       if (user) {
         setUser(user);
         // Buscar role do usuário
-        const roleDoc = await getDoc(doc(db, 'roles', user.uid));
-        if (roleDoc.exists()) {
-          setUserRole(roleDoc.data() as UserRole);
-        } else {
-          setUserRole(null);
+        try {
+          const roleDoc = await getDoc(doc(db, 'roles', user.uid));
+          if (isMounted) {
+            if (roleDoc.exists()) {
+              setUserRole(roleDoc.data() as UserRole);
+            } else {
+              setUserRole(null);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar role:', error);
+          if (isMounted) {
+            setUserRole(null);
+          }
         }
       } else {
         setUser(null);
         setUserRole(null);
       }
-      setLoading(false);
+      
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
