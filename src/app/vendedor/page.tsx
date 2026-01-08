@@ -894,6 +894,7 @@ function ReservationWizard({
   // Estados do wizard
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [dateInputValue, setDateInputValue] = useState<string>(''); // Valor visual do input de data
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
   const [currentPersonIndex, setCurrentPersonIndex] = useState(0);
@@ -1167,22 +1168,21 @@ function ReservationWizard({
                   inputMode="numeric"
                   placeholder="DD/MM/AAAA"
                   maxLength={10}
-                  value={selectedDate ? (() => {
-                    const [year, month, day] = selectedDate.split('-');
-                    return year && month && day ? `${day}/${month}/${year}` : '';
-                  })() : ''}
+                  value={dateInputValue}
                   onChange={(e) => {
                     let value = e.target.value.replace(/\D/g, '');
                     if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
                     if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
                     value = value.slice(0, 10);
                     
+                    setDateInputValue(value);
+                    
                     // Converter DD/MM/AAAA para AAAA-MM-DD quando completo
                     if (value.length === 10) {
                       const [day, month, year] = value.split('/');
                       const isoDate = `${year}-${month}-${day}`;
                       setSelectedDate(isoDate);
-                    } else if (value.length === 0) {
+                    } else {
                       setSelectedDate('');
                     }
                     setSelectedBoat(null);
