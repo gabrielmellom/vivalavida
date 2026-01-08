@@ -63,6 +63,8 @@ export interface Reservation {
   acceptedUserAgent?: string; // browser/dispositivo usado
   termsLinkSent?: boolean; // se o link de termos foi enviado
   termsLinkSentAt?: Date; // quando o link foi enviado
+  receiptSent?: boolean; // se o recibo foi enviado
+  receiptSentAt?: Date; // quando o recibo foi enviado
 }
 
 export interface UserRole {

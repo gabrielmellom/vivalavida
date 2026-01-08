@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluxograma do Sistema</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .buttons {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        #diagrama {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .legenda {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        .legenda h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .legenda-item {
+            display: inline-block;
+            margin: 5px 15px;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .leg-home { background: #FFD700; border: 2px solid #FF8C00; }
+        .leg-modulo { background: #87CEEB; border: 2px solid #4682B4; }
+        .leg-admin { background: #FFE4B5; border: 2px solid #FF8C00; }
+        .leg-checkin { background: #FFB6C1; border: 2px solid #FF69B4; }
+        .leg-voucher { background: #90EE90; border: 2px solid #32CD32; }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .buttons {
+                display: none;
+            }
+            .container {
+                box-shadow: none;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fluxograma do Sistema de Gestão de Passeios</h1>
+        
+        <div class="buttons">
+            <button onclick="window.print()">📄 Salvar como PDF</button>
+            <button onclick="baixarPNG()">🖼️ Baixar como PNG</button>
+        </div>
+        
+        <div id="diagrama">
+            <pre class="mermaid">
+graph TD
+    Start([Início - Login ADM]) --> HomeADM[Home do Administrador]
+    
+    HomeADM --> Config[Configurações do Site]
+    HomeADM --> GestaoPass[Gestão de Passeios]
+    HomeADM --> InfraFin[Infraestrutura Financeira]
+    HomeADM --> VendasRel[Vendas e Relatórios]
+    HomeADM --> CheckInMod[Módulo Check-In]
+    
+    Config --> ConfigGerais[Configurações Gerais]
+    Config --> NovoPasseio[Novo Passeio Card]
+    
+    ConfigGerais --> SocialMedia[Social Instagram Facebook Google]
+    ConfigGerais --> Contatos[Contato WhatsApp Email Endereço]
+    
+    NovoPasseio --> TipoPasseio[Tipo Lancha Escuna Desembarque]
+    NovoPasseio --> Precos[Preços Normal Alta Temporada]
+    
+    GestaoPass --> DefPerfil{Definir Perfil}
+    DefPerfil --> AtendPV[Atendentes Pós-Venda]
+    DefPerfil --> Vendedores[Vendedores]
+    
+    Vendedores --> VinculoExt[Vínculos Externos]
+    VinculoExt --> RealizaReserva[Realiza Reserva de Passeio]
+    
+    RealizaReserva --> RecebePag[Receber Pagamento]
+    RecebePag --> EnviaADM[Enviar Acesso para ADM]
+    
+    InfraFin --> CadBancos[Cadastro Bancos Sicred Caixa BB]
+    
+    EnviaADM --> AdminCentral[Administração Central]
+    AdminCentral --> ValidaReserva{Valida Reserva?}
+    
+    ValidaReserva -->|Sim| CriacaoAuto[Criação Automática da Reserva]
+    ValidaReserva -->|Não| Rejeita[Rejeitar e Notificar]
+    
+    CriacaoAuto --> GerarVoucher[Gerar Voucher Pós-Venda]
+    GerarVoucher --> FluxoEtapas[Fluxo de 4 Etapas]
+    
+    FluxoEtapas --> E1[1 Enviar Recibo]
+    E1 --> E2[2 Aceite dos Termos]
+    E2 --> E3[3 Pré-confirmação]
+    E3 --> E4[4 Voucher PDF com QR Code]
+    
+    E4 --> ModuloCheckIn[Módulo de Check-In]
+    CheckInMod --> ModuloCheckIn
+    
+    ModuloCheckIn --> SelDataBarco[Seleção de Data e Barco]
+    SelDataBarco --> ListaEmbarque[Lista de Embarque]
+    ListaEmbarque --> LeituraQR[Leitura de QR Code]
+    
+    LeituraQR --> CheckInGrupo[Check-in do Grupo]
+    CheckInGrupo --> Resumo[Resumo Total Pago Falta]
+    
+    Resumo --> PagamentoFinal[Pagamento Pix Cartão Dinheiro]
+    
+    PagamentoFinal --> AcaoFinal{Ação Final}
+    AcaoFinal -->|Pagar| PagarImediatamente[Pagar Imediatamente]
+    AcaoFinal -->|Embarcar| ConfirmarEmbarque[Confirmar Embarque]
+    
+    PagarImediatamente --> FimProcesso([Fim do Processo])
+    ConfirmarEmbarque --> FimProcesso
+    
+    VendasRel --> GerarRelatorio[Gerar Relatório Filtro Período]
+    GerarRelatorio --> LucroLiq[Lucro Líquido]
+    GerarRelatorio --> VendasVendedor[Vendas por Vendedor]
+    GerarRelatorio --> AnalPagBancos[Análise Pagamentos Bancos]
+    GerarRelatorio --> IndicadoresGerais[Indicadores Gerais Reservas Vendas]
+    
+    LucroLiq --> FimRel([Relatórios Gerados])
+    VendasVendedor --> FimRel
+    AnalPagBancos --> FimRel
+    IndicadoresGerais --> FimRel
+    
+    style HomeADM fill:#FFD700,stroke:#FF8C00,stroke-width:4px
+    style Config fill:#87CEEB,stroke:#4682B4,stroke-width:2px
+    style GestaoPass fill:#87CEEB,stroke:#4682B4,stroke-width:2px
+    style InfraFin fill:#87CEEB,stroke:#4682B4,stroke-width:2px
+    style VendasRel fill:#87CEEB,stroke:#4682B4,stroke-width:2px
+    style CheckInMod fill:#87CEEB,stroke:#4682B4,stroke-width:2px
+    style AdminCentral fill:#FFE4B5,stroke:#FF8C00,stroke-width:2px
+    style ModuloCheckIn fill:#FFB6C1,stroke:#FF69B4,stroke-width:2px
+    style GerarVoucher fill:#90EE90,stroke:#32CD32,stroke-width:2px
+            </pre>
+        </div>
+        
+        <div class="legenda">
+            <h3>Legenda de Cores:</h3>
+            <span class="legenda-item leg-home">Home Principal</span>
+            <span class="legenda-item leg-modulo">Módulos</span>
+            <span class="legenda-item leg-admin">Administração Central</span>
+            <span class="legenda-item leg-checkin">Check-In</span>
+            <span class="legenda-item leg-voucher">Geração de Voucher</span>
+        </div>
+    </div>
+    
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+        
+        function baixarPNG() {
+            const svg = document.querySelector('#diagrama svg');
+            if (!svg) {
+                alert('Aguarde o diagrama carregar completamente!');
+                return;
+            }
+            
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            canvas.width = svg.width.baseVal.value * 2;
+            canvas.height = svg.height.baseVal.value * 2;
+            
+            img.onload = function() {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                const link = document.createElement('a');
+                link.download = 'fluxograma-sistema.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            };
+            
+            img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+        }
+    </script>
+</body>
+</html>
