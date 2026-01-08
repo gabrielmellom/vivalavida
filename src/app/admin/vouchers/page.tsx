@@ -800,58 +800,49 @@ Obrigado e até breve! 🚢`;
                     >
                         {/* Header do Card */}
                         <div 
-                          className="px-4 py-3.5 cursor-pointer hover:bg-gray-50/80 transition"
+                          className="px-3 sm:px-4 py-3.5 cursor-pointer hover:bg-gray-50/80 transition"
                           onClick={(e) => handleCardHeaderClick(e, leader.id, leader.groupId || leader.id)}
                         >
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-start gap-2 sm:gap-3">
                             {/* Número da reserva */}
-                            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0 mt-0.5">
+                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gray-100 flex items-center justify-center text-[10px] sm:text-xs font-bold text-gray-500 flex-shrink-0 mt-0.5">
                               {index + 1}
                             </div>
                             
                             {/* Info do responsável */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <p className="font-bold text-gray-900 text-sm">{leader.customerName}</p>
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-1">
+                                <p className="font-bold text-gray-900 text-sm truncate max-w-[150px] sm:max-w-none">{leader.customerName}</p>
                                 {isGroup && (
-                                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
-                                    👤 Responsável • {groupTotals?.count} pessoas
+                                  <span className="text-[9px] sm:text-[10px] bg-blue-100 text-blue-700 px-1.5 sm:px-2 py-0.5 rounded-full font-medium flex-shrink-0 whitespace-nowrap">
+                                    👤 {groupTotals?.count}p
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500 flex-wrap">
                                 <a 
                                   href={getWhatsAppLink(leader.phone)} 
                                   target="_blank" 
                                   rel="noopener noreferrer"
-                                  className="text-green-600 hover:text-green-700 font-medium hover:underline flex items-center gap-1"
+                                  className="text-green-600 hover:text-green-700 font-medium hover:underline flex items-center gap-0.5 sm:gap-1"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <MessageCircle size={12} />
-                                  {leader.phone}
+                                  <MessageCircle size={10} className="sm:w-3 sm:h-3" />
+                                  <span className="truncate max-w-[90px] sm:max-w-none">{leader.phone}</span>
                                 </a>
-                                {!isGroup && <span className="text-gray-300">|</span>}
+                                <span className="text-gray-300 hidden sm:inline">|</span>
                                 {isGroup ? (
                                   <>
-                                    <span className="text-gray-300">|</span>
-                                    <span className="font-semibold text-gray-700">Total: R$ {groupTotals?.total.toFixed(2)}</span>
+                                    <span className="font-semibold text-gray-700">R$ {groupTotals?.total.toFixed(2)}</span>
                                     {groupTotals && groupTotals.due > 0 && (
-                                      <>
-                                        <span className="text-gray-300">|</span>
-                                        <span className="text-orange-600 font-bold">Falta: R$ {groupTotals.due.toFixed(2)}</span>
-                                      </>
+                                      <span className="text-orange-600 font-bold">-R$ {groupTotals.due.toFixed(2)}</span>
                                     )}
                                   </>
                                 ) : (
                                   <>
-                                    <span className="text-gray-400">#{leader.seatNumber}</span>
-                                    <span className="text-gray-300">|</span>
                                     <span className="font-semibold text-gray-700">R$ {leader.totalAmount.toFixed(2)}</span>
                                     {leader.amountDue > 0 && (
-                                      <>
-                                        <span className="text-gray-300">|</span>
-                                        <span className="text-orange-600 font-bold">Falta: R$ {leader.amountDue.toFixed(2)}</span>
-                                      </>
+                                      <span className="text-orange-600 font-bold">-R$ {leader.amountDue.toFixed(2)}</span>
                                     )}
                                   </>
                                 )}
@@ -859,19 +850,19 @@ Obrigado e até breve! 🚢`;
                             </div>
                             
                             {/* Indicador de progresso */}
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <div className="flex items-center gap-0 flex-shrink-0">
                               {[1, 2, 3, 4].map((step) => {
                                 const status = getStepStatus(leader, step);
                                 return (
                                   <div key={step} className="flex items-center">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                    <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold border-2 ${
                                       status === 'done' ? 'bg-viva-blue border-viva-blue text-white' :
                                       status === 'current' ? 'bg-blue-50 border-viva-blue text-viva-blue' :
                                       'bg-gray-50 border-gray-200 text-gray-400'
                                     }`}>
                                       {status === 'done' ? '✓' : step}
                                     </div>
-                                    {step < 4 && <div className={`w-2 h-0.5 ${status === 'done' ? 'bg-viva-blue' : 'bg-gray-200'}`}></div>}
+                                    {step < 4 && <div className={`w-1 sm:w-2 h-0.5 ${status === 'done' ? 'bg-viva-blue' : 'bg-gray-200'}`}></div>}
                                   </div>
                                 );
                               })}

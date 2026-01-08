@@ -801,12 +801,19 @@ export default function PublicReservationModal({ isOpen, onClose }: PublicReserv
                                       Data de Nascimento
                                     </label>
                                     <input
-                                      type="date"
+                                      type="text"
+                                      inputMode="numeric"
+                                      placeholder="DD/MM/AAAA"
+                                      maxLength={10}
                                       value={data.birthDate}
                                       onChange={(e) => {
+                                        let value = e.target.value.replace(/\D/g, '');
+                                        if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                                        if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                                        value = value.slice(0, 10);
                                         setSeatData({
                                           ...seatData,
-                                          [seatNum]: { ...data, birthDate: e.target.value }
+                                          [seatNum]: { ...data, birthDate: value }
                                         });
                                       }}
                                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"

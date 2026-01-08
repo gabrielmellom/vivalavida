@@ -1545,11 +1545,18 @@ function ReservationWizard({
                         🎂 Data de Nascimento *
                       </label>
                       <input
-                        type="date"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="DD/MM/AAAA"
+                        maxLength={10}
                         value={person.birthDate}
                         onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, '');
+                          if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                          if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                          value = value.slice(0, 10);
                           const newPeople = [...people];
-                          newPeople[personIndex] = { ...person, birthDate: e.target.value };
+                          newPeople[personIndex] = { ...person, birthDate: value };
                           setPeople(newPeople);
                         }}
                         required

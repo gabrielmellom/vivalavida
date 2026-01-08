@@ -2820,9 +2820,18 @@ function MoveReservationModal({
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Nascimento</label>
                     <input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/AAAA"
+                      maxLength={10}
                       value={editBirthDate}
-                      onChange={(e) => setEditBirthDate(e.target.value)}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/\D/g, '');
+                        if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                        if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                        value = value.slice(0, 10);
+                        setEditBirthDate(value);
+                      }}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-900 focus:border-gray-900 outline-none text-sm"
                     />
                   </div>
@@ -3218,9 +3227,18 @@ function ReservationDetailModal({
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Data de Nascimento</label>
                   <input
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
                     value={editBirthDate}
-                    onChange={(e) => setEditBirthDate(e.target.value)}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '');
+                      if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                      if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                      value = value.slice(0, 10);
+                      setEditBirthDate(value);
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
                   />
                 </div>
@@ -4644,11 +4662,18 @@ function AdminReservationWizard({
                         🎂 Data de Nascimento <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
                       <input
-                        type="date"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="DD/MM/AAAA"
+                        maxLength={10}
                         value={person.birthDate}
                         onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, '');
+                          if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                          if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                          value = value.slice(0, 10);
                           const newPeople = [...people];
-                          newPeople[personIndex] = { ...person, birthDate: e.target.value };
+                          newPeople[personIndex] = { ...person, birthDate: value };
                           setPeople(newPeople);
                         }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
