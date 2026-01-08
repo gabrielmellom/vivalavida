@@ -894,7 +894,7 @@ function ReservationWizard({
   // Estados do wizard
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [dateInputValue, setDateInputValue] = useState<string>(''); // Valor visual do input de data
+  const [wizardCalendarMonth, setWizardCalendarMonth] = useState<Date>(new Date());
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
   const [currentPersonIndex, setCurrentPersonIndex] = useState(0);
@@ -913,6 +913,41 @@ function ReservationWizard({
     const boatDate = new Date(boat.date).toISOString().split('T')[0];
     return boatDate === selectedDate;
   });
+
+  // Funções do calendário do wizard
+  const getWizardDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+    
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
+  };
+
+  const getWizardDayStatus = (date: Date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    const hasBoat = boats.some(b => new Date(b.date).toISOString().split('T')[0] === dateKey && b.status === 'active');
+    const isPast = dateKey < today;
+    
+    return {
+      hasBoat,
+      isPast,
+      isToday: dateKey === today,
+      isSelected: dateKey === selectedDate,
+    };
+  };
+
+  const wizardCalendarMonthName = wizardCalendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   // Buscar assentos disponíveis quando um barco é selecionado
   useEffect(() => {
@@ -1151,51 +1186,111 @@ function ReservationWizard({
           {/* PASSO 1: Seleção de Data e Barco */}
           {currentStep === 1 && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                  <Calendar className="w-8 h-8 text-blue-600" />
+              <div className="text-center mb-4">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-full mb-3">
+                  <Calendar className="w-7 h-7 text-blue-600" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-800">Quando será o passeio?</h3>
-                <p className="text-gray-500">Selecione a data e o barco desejado</p>
+                <h3 className="text-lg font-bold text-gray-800">Quando será o passeio?</h3>
+                <p className="text-gray-500 text-sm">Selecione a data no calendário</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  📅 Data do Passeio
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
-                  value={dateInputValue}
-                  onChange={(e) => {
-                    let value = e.target.value.replace(/\D/g, '');
-                    if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
-                    if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
-                    value = value.slice(0, 10);
-                    
-                    setDateInputValue(value);
-                    
-                    // Converter DD/MM/AAAA para AAAA-MM-DD quando completo
-                    if (value.length === 10) {
-                      const [day, month, year] = value.split('/');
-                      const isoDate = `${year}-${month}-${day}`;
-                      setSelectedDate(isoDate);
-                    } else {
-                      setSelectedDate('');
+              {/* Calendário Visual */}
+              <div className="bg-gray-50 rounded-2xl p-4">
+                {/* Header do Calendário */}
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newMonth = new Date(wizardCalendarMonth);
+                      newMonth.setMonth(newMonth.getMonth() - 1);
+                      setWizardCalendarMonth(newMonth);
+                    }}
+                    className="p-2 hover:bg-white rounded-lg transition"
+                  >
+                    <ChevronLeft size={20} className="text-gray-600" />
+                  </button>
+                  <h3 className="text-base font-bold text-gray-800 capitalize">{wizardCalendarMonthName}</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newMonth = new Date(wizardCalendarMonth);
+                      newMonth.setMonth(newMonth.getMonth() + 1);
+                      setWizardCalendarMonth(newMonth);
+                    }}
+                    className="p-2 hover:bg-white rounded-lg transition"
+                  >
+                    <ChevronRight size={20} className="text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Dias da Semana */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, i) => (
+                    <div key={i} className="text-center text-xs font-semibold text-gray-400 py-1">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Dias do Mês */}
+                <div className="grid grid-cols-7 gap-1">
+                  {getWizardDaysInMonth(wizardCalendarMonth).map((date, index) => {
+                    if (!date) {
+                      return <div key={`empty-${index}`} className="w-10 h-10 sm:w-11 sm:h-11" />;
                     }
-                    setSelectedBoat(null);
-                    setSelectedSeats([]);
-                  }}
-                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg"
-                />
-                {selectedDate && (
-                  <p className="mt-2 text-sm text-blue-600 font-medium">
-                    {formatDisplayDate(selectedDate)}
-                  </p>
-                )}
+
+                    const status = getWizardDayStatus(date);
+                    const dateStr = date.toISOString().split('T')[0];
+
+                    return (
+                      <button
+                        key={dateStr}
+                        type="button"
+                        disabled={status.isPast || !status.hasBoat}
+                        onClick={() => {
+                          setSelectedDate(dateStr);
+                          setSelectedBoat(null);
+                          setSelectedSeats([]);
+                        }}
+                        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-sm font-medium transition ${
+                          status.isSelected
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : status.isPast
+                            ? 'text-gray-300 cursor-not-allowed'
+                            : status.hasBoat
+                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer'
+                            : status.isToday
+                            ? 'bg-blue-50 text-blue-600 ring-2 ring-blue-300'
+                            : 'text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {date.getDate()}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Legenda */}
+                <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-200">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-emerald-100 border border-emerald-300"></div>
+                    <span className="text-xs text-gray-500">Disponível</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                    <span className="text-xs text-gray-500">Selecionado</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Data selecionada */}
+              {selectedDate && (
+                <div className="text-center py-2 px-4 bg-blue-50 rounded-xl">
+                  <p className="text-sm text-blue-700 font-semibold">
+                    📅 {formatDisplayDate(selectedDate)}
+                  </p>
+                </div>
+              )}
 
               {selectedDate && (
                 <div className="animate-fadeIn">
