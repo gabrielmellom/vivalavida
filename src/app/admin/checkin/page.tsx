@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, Timestamp, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation, Boat, Payment, PaymentMethod, BankAccount, SiteConfig } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users, ChevronLeft, ChevronRight, Camera, X } from 'lucide-react';
+import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -85,10 +85,6 @@ function CheckInPageContent() {
   const [noShowReason, setNoShowReason] = useState('');
   const pendingReservationIdRef = useRef<string | null>(null);
   const hasProcessedVoucherRef = useRef(false);
-  // Scanner de QR Code
-  const [showQrScanner, setShowQrScanner] = useState(false);
-  const [qrScannerError, setQrScannerError] = useState<string | null>(null);
-  const qrScannerRef = useRef<any>(null);
 
   // Carregar bancos da configuração
   useEffect(() => {
@@ -304,232 +300,6 @@ function CheckInPageContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservations, boat]);
-
-  // Processar QR Code escaneado
-  const processScannedQRCode = useCallback(async (decodedText: string) => {
-    // Fechar o scanner
-    setShowQrScanner(false);
-    
-    // Extrair o ID da reserva do QR code
-    // O QR code pode ser uma URL completa ou apenas o ID
-    let reservationId = decodedText;
-    
-    // Se for uma URL, extrair o ID
-    if (decodedText.includes('/voucher/')) {
-      const parts = decodedText.split('/voucher/');
-      reservationId = parts[parts.length - 1].split('?')[0].split('#')[0];
-    } else if (decodedText.includes('/admin/voucher/')) {
-      const parts = decodedText.split('/admin/voucher/');
-      reservationId = parts[parts.length - 1].split('?')[0].split('#')[0];
-    }
-    
-    // Limpar o ID
-    reservationId = reservationId.trim();
-    
-    if (!reservationId) {
-      setQrCodeError({ message: 'QR Code inválido. Não foi possível identificar a reserva.' });
-      return;
-    }
-    
-    // Buscar a reserva
-    try {
-      const reservationDoc = await getDoc(doc(db, 'reservations', reservationId));
-      
-      if (!reservationDoc.exists()) {
-        setQrCodeError({ message: 'Reserva não encontrada no sistema.' });
-        return;
-      }
-      
-      const reservationData = {
-        id: reservationDoc.id,
-        ...reservationDoc.data(),
-      } as Reservation;
-      
-      // Verificar status da reserva
-      if (reservationData.status === 'cancelled') {
-        setQrCodeError({
-          message: `Esta reserva foi CANCELADA. Cliente: ${reservationData.customerName}.`,
-          rideDate: reservationData.rideDate
-        });
-        return;
-      }
-      
-      if (reservationData.status === 'no_show') {
-        setQrCodeError({
-          message: `Esta reserva está marcada como NÃO COMPARECEU. Cliente: ${reservationData.customerName}.`,
-          rideDate: reservationData.rideDate
-        });
-        return;
-      }
-      
-      if (reservationData.status === 'pending') {
-        setQrCodeError({
-          message: `Esta reserva está PENDENTE de aprovação. Cliente: ${reservationData.customerName}.`,
-          rideDate: reservationData.rideDate
-        });
-        return;
-      }
-      
-      // Buscar o barco para verificar a data
-      if (!reservationData.boatId) {
-        setQrCodeError({ message: 'Barco não encontrado para esta reserva.' });
-        return;
-      }
-      
-      const boatDoc = await getDoc(doc(db, 'boats', reservationData.boatId));
-      
-      if (!boatDoc.exists()) {
-        setQrCodeError({ message: 'Barco não encontrado.' });
-        return;
-      }
-      
-      const boatData = boatDoc.data() as Boat;
-      const boatDate = new Date(boatData.date).toISOString().split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Verificar se a reserva é para hoje
-      if (boatDate !== today) {
-        const isPast = boatDate < today;
-        setQrCodeError({
-          message: isPast 
-            ? `QR Code de passeio já realizado! Data: ${formatDateForDisplay(boatData.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`
-            : `Este voucher é para outro dia! Data do passeio: ${formatDateForDisplay(boatData.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`,
-          rideDate: reservationData.rideDate
-        });
-        return;
-      }
-      
-      // Verificar se já fez check-in
-      if (reservationData.checkedIn) {
-        setQrCodeError({
-          message: `✅ ${reservationData.customerName} já fez check-in!`,
-          rideDate: reservationData.rideDate
-        });
-        return;
-      }
-      
-      // Reserva válida! Processar check-in
-      // Definir a data do passeio no calendário se necessário
-      if (selectedDate !== boatDate) {
-        setSelectedDate(boatDate);
-      }
-      
-      // Encontrar a reserva na lista carregada ou aguardar carregar
-      const existingReservation = reservations.find(r => r.id === reservationId);
-      
-      if (existingReservation) {
-        // Se tem pagamento pendente, abrir modal
-        if (existingReservation.amountDue > 0) {
-          // Verificar se é grupo
-          const groupMembers = existingReservation.groupId 
-            ? reservations.filter(r => r.groupId === existingReservation.groupId && !r.checkedIn)
-            : [existingReservation];
-          
-          setReservationToCheckIn(existingReservation);
-          setGroupReservationsToCheckIn(groupMembers);
-          const totalDue = groupMembers.reduce((sum, r) => sum + r.amountDue, 0);
-          setRemainingAmount(totalDue.toString());
-          setPaymentEntries([{ id: '1', amount: totalDue.toString(), method: 'pix', bankId: '' }]);
-          setShowPaymentConfirm(true);
-        } else {
-          // Fazer check-in direto
-          handleCheckIn(reservationId, false);
-        }
-      } else {
-        // Aguardar carregar a reserva - definir como pendente
-        pendingReservationIdRef.current = reservationId;
-      }
-      
-    } catch (error) {
-      console.error('Erro ao processar QR Code:', error);
-      setQrCodeError({ message: 'Erro ao processar QR Code. Tente novamente.' });
-    }
-  }, [reservations, selectedDate]);
-
-  // Inicializar/Parar scanner de QR Code usando BarcodeDetector API nativa
-  useEffect(() => {
-    let videoStream: MediaStream | null = null;
-    let animationFrameId: number | null = null;
-    let isScanning = true;
-    
-    const initScanner = async () => {
-      if (showQrScanner) {
-        try {
-          // Verificar se BarcodeDetector está disponível
-          if (!('BarcodeDetector' in window)) {
-            setQrScannerError(
-              'Seu navegador não suporta leitura de QR Code nativa. Use o Chrome no celular ou escaneie o QR code com o app de câmera e acesse o link.'
-            );
-            return;
-          }
-          
-          // Solicitar acesso à câmera
-          videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
-          });
-          
-          const videoElement = document.getElementById('qr-video') as HTMLVideoElement;
-          if (videoElement) {
-            videoElement.srcObject = videoStream;
-            await videoElement.play();
-            
-            // Criar detector de QR Code
-            // @ts-ignore - BarcodeDetector é uma API experimental
-            const barcodeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
-            
-            // Função de escaneamento contínuo
-            const scanFrame = async () => {
-              if (!isScanning || !videoElement.videoWidth) {
-                animationFrameId = requestAnimationFrame(scanFrame);
-                return;
-              }
-              
-              try {
-                const barcodes = await barcodeDetector.detect(videoElement);
-                if (barcodes.length > 0) {
-                  isScanning = false;
-                  // Parar a câmera
-                  if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                  }
-                  processScannedQRCode(barcodes[0].rawValue);
-                  return;
-                }
-              } catch (err) {
-                // Ignorar erros de detecção
-              }
-              
-              animationFrameId = requestAnimationFrame(scanFrame);
-            };
-            
-            // Iniciar escaneamento
-            scanFrame();
-          }
-          
-          setQrScannerError(null);
-        } catch (err: any) {
-          console.error('Erro ao iniciar câmera:', err);
-          setQrScannerError(
-            err.name === 'NotAllowedError' || err.message?.includes('Permission')
-              ? 'Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.'
-              : 'Erro ao acessar a câmera. Verifique se outro app não está usando a câmera.'
-          );
-        }
-      }
-    };
-    
-    initScanner();
-    
-    return () => {
-      isScanning = false;
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      if (videoStream) {
-        videoStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [showQrScanner, processScannedQRCode]);
 
   const handleCheckIn = async (reservationId: string, currentlyCheckedIn: boolean) => {
     const reservation = reservations.find(r => r.id === reservationId);
@@ -947,15 +717,6 @@ function CheckInPageContent() {
                 <h1 className="text-lg sm:text-2xl font-black text-viva-blue-dark">Check-in</h1>
                 <p className="text-gray-600 text-xs sm:text-sm">Gerenciar embarque</p>
               </div>
-            </div>
-            {/* Botão Escanear QR Code */}
-            <button
-              onClick={() => setShowQrScanner(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all active:scale-95"
-            >
-              <Camera size={20} />
-              <span className="hidden sm:inline">Escanear QR</span>
-            </button>
           </div>
         </header>
 
@@ -1902,95 +1663,7 @@ function CheckInPageContent() {
           </div>
         )}
 
-        {/* Modal Scanner QR Code */}
-        {showQrScanner && (
-          <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50">
-            {/* Header */}
-            <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
-              <h2 className="text-white font-bold text-lg">📷 Escanear QR Code</h2>
-              <button
-                onClick={() => {
-                  if (qrScannerRef.current) {
-                    qrScannerRef.current.stop().catch(() => {});
-                  }
-                  setShowQrScanner(false);
-                  setQrScannerError(null);
-                }}
-                className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition"
-              >
-                <X size={24} className="text-white" />
-              </button>
-            </div>
-
-            {/* Área do Scanner */}
-            <div className="w-full max-w-md px-4">
-              {qrScannerError ? (
-                <div className="bg-red-500/20 border border-red-500 rounded-2xl p-6 text-center">
-                  <div className="mx-auto w-16 h-16 bg-red-500/30 rounded-full flex items-center justify-center mb-4">
-                    <XCircle className="text-red-400" size={32} />
-                  </div>
-                  <h3 className="text-white font-bold mb-2">Erro na Câmera</h3>
-                  <p className="text-red-200 text-sm mb-4">{qrScannerError}</p>
-                  <button
-                    onClick={() => {
-                      setQrScannerError(null);
-                      setShowQrScanner(false);
-                      setTimeout(() => setShowQrScanner(true), 100);
-                    }}
-                    className="px-4 py-2 bg-white text-red-600 rounded-lg font-semibold text-sm"
-                  >
-                    Tentar Novamente
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ minHeight: '300px' }}>
-                    <video 
-                      id="qr-video"
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                      style={{ minHeight: '300px' }}
-                    />
-                    {/* Overlay com guia de escaneamento */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-64 h-64 border-4 border-white/50 rounded-2xl relative">
-                        {/* Cantos animados */}
-                        <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-lg"></div>
-                        <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-lg"></div>
-                        <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-lg"></div>
-                        <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-lg"></div>
-                        {/* Linha de escaneamento */}
-                        <div className="absolute left-2 right-2 h-0.5 bg-green-400 animate-pulse" style={{ top: '50%' }}></div>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-white/70 text-center mt-4 text-sm">
-                    Aponte a câmera para o QR Code do voucher
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Botão Cancelar */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-              <button
-                onClick={() => {
-                  if (qrScannerRef.current) {
-                    qrScannerRef.current.stop().catch(() => {});
-                  }
-                  setShowQrScanner(false);
-                  setQrScannerError(null);
-                }}
-                className="w-full max-w-md mx-auto block px-6 py-3 bg-white/20 border border-white/30 text-white rounded-xl font-semibold hover:bg-white/30 transition"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
     </div>
   );
 }

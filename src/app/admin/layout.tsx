@@ -1,4 +1,5 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
+import GlobalNotification from '@/components/GlobalNotification';
 
 export default function AdminLayout({
   children,
@@ -7,6 +8,7 @@ export default function AdminLayout({
 }) {
   return (
     <ProtectedRoute requireAdmin={true}>
+      <GlobalNotification />
       {children}
     </ProtectedRoute>
   );
