@@ -446,39 +446,71 @@ function CheckInPageContent() {
     }
   }, [reservations, selectedDate]);
 
-  // Inicializar/Parar scanner de QR Code
+  // Inicializar/Parar scanner de QR Code usando BarcodeDetector API nativa
   useEffect(() => {
-    let html5QrcodeScanner: any = null;
+    let videoStream: MediaStream | null = null;
+    let animationFrameId: number | null = null;
+    let isScanning = true;
     
     const initScanner = async () => {
       if (showQrScanner) {
         try {
-          const { Html5Qrcode } = await import('html5-qrcode');
+          // Verificar se BarcodeDetector está disponível
+          if (!('BarcodeDetector' in window)) {
+            setQrScannerError(
+              'Seu navegador não suporta leitura de QR Code nativa. Use o Chrome no celular ou escaneie o QR code com o app de câmera e acesse o link.'
+            );
+            return;
+          }
           
-          html5QrcodeScanner = new Html5Qrcode('qr-reader');
-          qrScannerRef.current = html5QrcodeScanner;
+          // Solicitar acesso à câmera
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }
+          });
           
-          await html5QrcodeScanner.start(
-            { facingMode: 'environment' }, // Câmera traseira
-            {
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-            },
-            (decodedText: string) => {
-              // QR Code detectado!
-              html5QrcodeScanner.stop().catch(console.error);
-              processScannedQRCode(decodedText);
-            },
-            () => {
-              // Ignorar erros de frames sem QR code
-            }
-          );
+          const videoElement = document.getElementById('qr-video') as HTMLVideoElement;
+          if (videoElement) {
+            videoElement.srcObject = videoStream;
+            await videoElement.play();
+            
+            // Criar detector de QR Code
+            // @ts-ignore - BarcodeDetector é uma API experimental
+            const barcodeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+            
+            // Função de escaneamento contínuo
+            const scanFrame = async () => {
+              if (!isScanning || !videoElement.videoWidth) {
+                animationFrameId = requestAnimationFrame(scanFrame);
+                return;
+              }
+              
+              try {
+                const barcodes = await barcodeDetector.detect(videoElement);
+                if (barcodes.length > 0) {
+                  isScanning = false;
+                  // Parar a câmera
+                  if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                  }
+                  processScannedQRCode(barcodes[0].rawValue);
+                  return;
+                }
+              } catch (err) {
+                // Ignorar erros de detecção
+              }
+              
+              animationFrameId = requestAnimationFrame(scanFrame);
+            };
+            
+            // Iniciar escaneamento
+            scanFrame();
+          }
           
           setQrScannerError(null);
         } catch (err: any) {
           console.error('Erro ao iniciar câmera:', err);
           setQrScannerError(
-            err.message?.includes('Permission') || err.name === 'NotAllowedError'
+            err.name === 'NotAllowedError' || err.message?.includes('Permission')
               ? 'Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.'
               : 'Erro ao acessar a câmera. Verifique se outro app não está usando a câmera.'
           );
@@ -489,8 +521,12 @@ function CheckInPageContent() {
     initScanner();
     
     return () => {
-      if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().catch(() => {});
+      isScanning = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [showQrScanner, processScannedQRCode]);
@@ -1908,11 +1944,28 @@ function CheckInPageContent() {
                 </div>
               ) : (
                 <>
-                  <div 
-                    id="qr-reader" 
-                    className="w-full rounded-2xl overflow-hidden bg-black"
-                    style={{ minHeight: '300px' }}
-                  />
+                  <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ minHeight: '300px' }}>
+                    <video 
+                      id="qr-video"
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                      style={{ minHeight: '300px' }}
+                    />
+                    {/* Overlay com guia de escaneamento */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-64 h-64 border-4 border-white/50 rounded-2xl relative">
+                        {/* Cantos animados */}
+                        <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-lg"></div>
+                        <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-lg"></div>
+                        <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-lg"></div>
+                        <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-lg"></div>
+                        {/* Linha de escaneamento */}
+                        <div className="absolute left-2 right-2 h-0.5 bg-green-400 animate-pulse" style={{ top: '50%' }}></div>
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-white/70 text-center mt-4 text-sm">
                     Aponte a câmera para o QR Code do voucher
                   </p>
