@@ -991,7 +991,7 @@ function ReservationWizard({
         address: '',
         isChild: false,
         isHalfPrice: false,
-        amount: 200, // Valor padrão
+        amount: selectedBoat?.ticketPrice || 200, // Usa preço do barco
         paymentMethod: 'pix',
         amountPaid: 0,
       });
@@ -1576,7 +1576,7 @@ function ReservationWizard({
                   address: '',
                   isChild: false,
                   isHalfPrice: false,
-                  amount: 200,
+                  amount: selectedBoat?.ticketPrice || 200,
                   paymentMethod: 'pix',
                   amountPaid: 0,
                 };
@@ -1742,13 +1742,31 @@ function ReservationWizard({
                           checked={person.isChild}
                           onChange={(e) => {
                             const newPeople = [...people];
-                            newPeople[personIndex] = { ...person, isChild: e.target.checked };
+                            const isChild = e.target.checked;
+                            const basePrice = selectedBoat?.ticketPrice || 200;
+                            
+                            // Criança menor de 7 anos = cortesia (R$ 0)
+                            // Se desmarcar criança, verifica se é meia
+                            let newAmount = basePrice;
+                            if (isChild) {
+                              newAmount = 0;
+                            } else if (person.isHalfPrice) {
+                              newAmount = basePrice / 2;
+                            }
+                            
+                            newPeople[personIndex] = { 
+                              ...person, 
+                              isChild, 
+                              isHalfPrice: isChild ? false : person.isHalfPrice, // Se é criança, não é meia
+                              amount: newAmount,
+                              amountPaid: Math.min(person.amountPaid, newAmount) // Ajusta pago se necessário
+                            };
                             setPeople(newPeople);
                           }}
                           className="w-5 h-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
                         />
                         <label htmlFor={`child-${personIndex}`} className="font-semibold text-yellow-800 cursor-pointer">
-                          👶 É criança (menor de 7 anos)?
+                          👶 É criança (menor de 7 anos)? <span className="text-yellow-600 font-normal">(cortesia)</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-3">
@@ -1756,17 +1774,42 @@ function ReservationWizard({
                           type="checkbox"
                           id={`half-${personIndex}`}
                           checked={person.isHalfPrice}
+                          disabled={person.isChild} // Desabilita se for criança
                           onChange={(e) => {
                             const newPeople = [...people];
-                            newPeople[personIndex] = { ...person, isHalfPrice: e.target.checked };
+                            const isHalfPrice = e.target.checked;
+                            const basePrice = selectedBoat?.ticketPrice || 200;
+                            
+                            // Meia entrada = metade do preço
+                            const newAmount = isHalfPrice ? basePrice / 2 : basePrice;
+                            
+                            newPeople[personIndex] = { 
+                              ...person, 
+                              isHalfPrice, 
+                              amount: newAmount,
+                              amountPaid: Math.min(person.amountPaid, newAmount) // Ajusta pago se necessário
+                            };
                             setPeople(newPeople);
                           }}
-                          className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                          className="w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 disabled:opacity-50"
                         />
-                        <label htmlFor={`half-${personIndex}`} className="font-semibold text-orange-700 cursor-pointer">
-                          🎫 Paga meia entrada?
+                        <label htmlFor={`half-${personIndex}`} className={`font-semibold cursor-pointer ${person.isChild ? 'text-gray-400' : 'text-orange-700'}`}>
+                          🎫 Paga meia entrada? <span className={`font-normal ${person.isChild ? 'text-gray-400' : 'text-orange-600'}`}>(50%)</span>
                         </label>
                       </div>
+                      
+                      {/* Mostra o valor atual */}
+                      {(person.isChild || person.isHalfPrice) && (
+                        <div className="mt-3 pt-3 border-t border-yellow-200">
+                          <p className="text-sm font-medium">
+                            {person.isChild ? (
+                              <span className="text-green-600">✓ Cortesia - R$ 0,00</span>
+                            ) : person.isHalfPrice ? (
+                              <span className="text-orange-600">✓ Meia entrada - R$ {person.amount.toFixed(2)}</span>
+                            ) : null}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </>
                 );
