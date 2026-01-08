@@ -202,17 +202,41 @@ export default function VouchersPage() {
     
     let pagantes = 1;
     let cortesias = 0;
+    let groupMembersList: { name: string; document?: string; isChild?: boolean; amount: number }[] = [];
     
     if (reservation.groupId) {
       const groupMembers = reservations.filter(r => r.groupId === reservation.groupId);
       pagantes = groupMembers.filter(r => !r.isChild || (r.isChild && r.totalAmount > 0)).length;
       cortesias = groupMembers.filter(r => r.isChild && r.totalAmount === 0).length;
+      
+      // Criar lista de membros do grupo para o recibo
+      groupMembersList = groupMembers.map(m => ({
+        name: m.customerName,
+        document: m.document,
+        isChild: m.isChild,
+        amount: m.totalAmount,
+      }));
     } else {
       if (reservation.isChild && reservation.totalAmount === 0) {
         pagantes = 0;
         cortesias = 1;
       }
+      // Individual - ainda assim adicionar na lista
+      groupMembersList = [{
+        name: reservation.customerName,
+        document: reservation.document,
+        isChild: reservation.isChild,
+        amount: reservation.totalAmount,
+      }];
     }
+    
+    // Calcular valores totais do grupo
+    const totalGroupPaid = reservation.groupId 
+      ? reservations.filter(r => r.groupId === reservation.groupId).reduce((sum, r) => sum + r.amountPaid, 0)
+      : reservation.amountPaid;
+    const totalGroupDue = reservation.groupId
+      ? reservations.filter(r => r.groupId === reservation.groupId).reduce((sum, r) => sum + r.amountDue, 0)
+      : reservation.amountDue;
     
     const receiptData: ReceiptData = {
       reservation,
@@ -221,9 +245,10 @@ export default function VouchersPage() {
       pagantes,
       cortesias,
       valorPorPessoa: selectedBoat.ticketPrice || 180,
-      valorReserva: reservation.amountPaid,
-      valorRestante: reservation.amountDue,
+      valorReserva: totalGroupPaid,
+      valorRestante: totalGroupDue,
       formaPagamento: reservation.paymentMethod,
+      groupMembers: groupMembersList,
     };
     
     try {

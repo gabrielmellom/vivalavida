@@ -4130,16 +4130,16 @@ function AdminReservationWizard({
       const vagasDisponiveis = selectedBoat ? selectedBoat.seatsTotal - selectedBoat.seatsTaken : 0;
       return numberOfPeople >= 1 && numberOfPeople <= vagasDisponiveis;
     }
-    // Passos de dados das pessoas - Admin só precisa do telefone do responsável
+    // Passos de dados das pessoas
     if (currentStep >= 3 && currentStep < 3 + numberOfPeople) {
       const personIndex = currentStep - 3;
       const person = people[personIndex];
-      // Admin: apenas telefone obrigatório para o primeiro do grupo (responsável)
+      // Primeiro do grupo (responsável): Nome, Telefone, Documento, Data de Nascimento obrigatórios
       if (personIndex === 0) {
-        return person && person.phone;
+        return person && person.name && person.phone && person.document && person.birthDate;
       }
-      // Demais pessoas: nenhum campo obrigatório
-      return true;
+      // Demais pessoas: Nome, Documento, Data de Nascimento obrigatórios (telefone opcional)
+      return person && person.name && person.document && person.birthDate;
     }
     return true;
   };
@@ -4598,7 +4598,7 @@ function AdminReservationWizard({
                     {/* Telefone - Único campo obrigatório para Admin */}
                     <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
                       <label className="block text-sm font-semibold text-blue-800 mb-2">
-                        <Phone className="inline w-4 h-4 mr-1" /> Telefone *
+                        <Phone className="inline w-4 h-4 mr-1" /> Telefone {personIndex === 0 ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(opcional)</span>}
                         {personIndex === 0 && numberOfPeople > 1 && (
                           <span className="text-xs text-blue-600 ml-2 font-normal">(Responsável do grupo)</span>
                         )}
@@ -4612,18 +4612,18 @@ function AdminReservationWizard({
                           setPeople(newPeople);
                         }}
                         required={personIndex === 0}
-                        className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-bold bg-white"
+                        className={`w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${personIndex === 0 ? 'border-2 border-blue-300 text-lg font-bold bg-white' : 'border border-gray-300'}`}
                         placeholder="(48) 99999-9999"
                       />
                       {personIndex === 0 && (
-                        <p className="text-xs text-blue-600 mt-2">⚠️ Campo obrigatório para prosseguir</p>
+                        <p className="text-xs text-blue-600 mt-2">Obrigatorio para o responsavel do grupo</p>
                       )}
                     </div>
 
                     {/* Nome */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <User className="inline w-4 h-4 mr-1" /> Nome Completo <span className="text-gray-400 font-normal">(opcional)</span>
+                        <User className="inline w-4 h-4 mr-1" /> Nome Completo <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -4641,7 +4641,7 @@ function AdminReservationWizard({
                     {/* Documento */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        📄 Documento (CPF/RG) <span className="text-gray-400 font-normal">(opcional)</span>
+                        📄 Documento (CPF/RG) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -4659,7 +4659,7 @@ function AdminReservationWizard({
                     {/* Data de Nascimento */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        🎂 Data de Nascimento <span className="text-gray-400 font-normal">(opcional)</span>
+                        🎂 Data de Nascimento <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -4683,7 +4683,7 @@ function AdminReservationWizard({
                     {/* Email */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        <Mail className="inline w-4 h-4 mr-1" /> Email
+                        <Mail className="inline w-4 h-4 mr-1" /> Email <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
                       <input
                         type="email"

@@ -1,5 +1,12 @@
 import { Reservation, Boat } from '@/types';
 
+export interface GroupMember {
+  name: string;
+  document?: string;
+  isChild?: boolean;
+  amount: number;
+}
+
 export interface ReceiptData {
   reservation: Reservation;
   boat: Boat;
@@ -10,6 +17,7 @@ export interface ReceiptData {
   valorReserva: number;
   valorRestante: number;
   formaPagamento: string;
+  groupMembers?: GroupMember[];
 }
 
 export const generateReceiptPDF = async (data: ReceiptData) => {
@@ -20,7 +28,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
 
     const { default: jsPDF } = await import('jspdf');
 
-    const { reservation, boat, vendorName, pagantes, cortesias, valorPorPessoa, valorReserva, valorRestante, formaPagamento } = data;
+    const { reservation, boat, vendorName, pagantes, cortesias, valorPorPessoa, valorReserva, valorRestante, formaPagamento, groupMembers } = data;
 
     const pdf = new jsPDF({
       orientation: 'portrait',
@@ -76,8 +84,34 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setTextColor(100, 100, 100);
     pdf.text(`Tel: ${reservation.phone}`, margin, currentY);
 
+    // Lista de membros do grupo (se houver)
+    if (groupMembers && groupMembers.length > 1) {
+      currentY += 8;
+      pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('MEMBROS DO GRUPO', margin, currentY);
+      
+      currentY += 5;
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      
+      groupMembers.forEach((member, index) => {
+        pdf.setTextColor(60, 60, 60);
+        const memberInfo = `${index + 1}. ${member.name}${member.isChild ? ' (Crianca)' : ''}`;
+        pdf.text(memberInfo, margin, currentY);
+        
+        // Valor ao lado direito
+        pdf.setTextColor(100, 100, 100);
+        const valorText = member.amount === 0 ? 'Cortesia' : `R$ ${member.amount.toFixed(2).replace('.', ',')}`;
+        pdf.text(valorText, pageWidth - margin - 25, currentY);
+        
+        currentY += 4;
+      });
+    }
+
     // Linha separadora
-    currentY += 8;
+    currentY += 4;
     pdf.setDrawColor(220, 220, 220);
     pdf.setLineWidth(0.3);
     pdf.line(margin, currentY, pageWidth - margin, currentY);

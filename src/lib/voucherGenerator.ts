@@ -190,6 +190,49 @@ export const generateVoucherPDF = async (reservation: Reservation, boat: Boat, l
     }
     pdf.setTextColor(0, 0, 0);
 
+    // Local de Embarque com link
+    const locationY = valuesY + 40;
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(33, 150, 243);
+    
+    const locationTitleMap: Record<string, string> = {
+      'pt-BR': 'LOCAL DE EMBARQUE',
+      'en': 'BOARDING LOCATION',
+      'es': 'LUGAR DE EMBARQUE',
+      'de': 'ABFAHRTSORT',
+      'fr': 'LIEU D\'EMBARQUEMENT',
+    };
+    pdf.text(locationTitleMap[language] || locationTitleMap['pt-BR'], margin, locationY);
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(60, 60, 60);
+    pdf.text('Trapiche Barra da Lagoa', margin, locationY + 8);
+    pdf.text('R. Amaro Coelho, 22 - Barra da Lagoa', margin, locationY + 14);
+    pdf.text('Florianopolis - SC, 88061-090', margin, locationY + 20);
+    
+    // Link clicável para o Google Maps
+    const mapsUrl = 'https://maps.google.com/?q=R.+Amaro+Coelho,+22+-+Barra+da+Lagoa,+Florianopolis+-+SC,+88061-090';
+    pdf.setTextColor(33, 150, 243);
+    pdf.setFont('helvetica', 'bold');
+    
+    const openMapsMap: Record<string, string> = {
+      'pt-BR': 'Abrir no Google Maps',
+      'en': 'Open in Google Maps',
+      'es': 'Abrir en Google Maps',
+      'de': 'In Google Maps offnen',
+      'fr': 'Ouvrir dans Google Maps',
+    };
+    const linkText = openMapsMap[language] || openMapsMap['pt-BR'];
+    pdf.textWithLink(linkText, margin, locationY + 28, { url: mapsUrl });
+    
+    // Sublinhado para indicar que é clicável
+    const linkWidth = pdf.getTextWidth(linkText);
+    pdf.setDrawColor(33, 150, 243);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, locationY + 29, margin + linkWidth, locationY + 29);
+
     // QR Code com box decorativo
     try {
       const qrSize = 55; // mm
