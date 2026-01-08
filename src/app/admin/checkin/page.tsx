@@ -718,7 +718,8 @@ function CheckInPageContent() {
                 <p className="text-gray-600 text-xs sm:text-sm">Gerenciar embarque</p>
               </div>
           </div>
-        </header>
+        </div>
+      </header>
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Calendário Visual */}
