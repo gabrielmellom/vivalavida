@@ -1163,14 +1163,31 @@ function ReservationWizard({
                   📅 Data do Passeio
                 </label>
                 <input
-                  type="date"
-                  value={selectedDate}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  value={selectedDate ? (() => {
+                    const [year, month, day] = selectedDate.split('-');
+                    return year && month && day ? `${day}/${month}/${year}` : '';
+                  })() : ''}
                   onChange={(e) => {
-                    setSelectedDate(e.target.value);
+                    let value = e.target.value.replace(/\D/g, '');
+                    if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                    if (value.length >= 5) value = value.slice(0, 5) + '/' + value.slice(5);
+                    value = value.slice(0, 10);
+                    
+                    // Converter DD/MM/AAAA para AAAA-MM-DD quando completo
+                    if (value.length === 10) {
+                      const [day, month, year] = value.split('/');
+                      const isoDate = `${year}-${month}-${day}`;
+                      setSelectedDate(isoDate);
+                    } else if (value.length === 0) {
+                      setSelectedDate('');
+                    }
                     setSelectedBoat(null);
                     setSelectedSeats([]);
                   }}
-                  min={new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg"
                 />
                 {selectedDate && (
