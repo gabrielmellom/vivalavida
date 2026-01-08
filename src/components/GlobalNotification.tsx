@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Reservation } from '@/types';
-import { Bell, BellOff, X, ShoppingCart } from 'lucide-react';
+import { Bell, BellOff, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 
 export default function GlobalNotification() {
@@ -12,22 +12,9 @@ export default function GlobalNotification() {
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [newOrderCount, setNewOrderCount] = useState(0);
-  const [showPermissionBanner, setShowPermissionBanner] = useState(false);
   const previousPendingCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const isInitializedRef = useRef(false);
-
-  // Verificar se precisa pedir permissão do áudio
-  useEffect(() => {
-    // Mostrar banner se o áudio ainda não foi desbloqueado
-    const timer = setTimeout(() => {
-      if (!audioUnlocked) {
-        setShowPermissionBanner(true);
-      }
-    }, 2000);
-    
-    return () => clearTimeout(timer);
-  }, [audioUnlocked]);
 
   // Inicializar contexto de áudio (precisa de interação do usuário)
   const initAudio = useCallback(() => {
@@ -47,7 +34,6 @@ export default function GlobalNotification() {
       oscillator.stop(audioContextRef.current.currentTime + 0.1);
       
       setAudioUnlocked(true);
-      setShowPermissionBanner(false);
       console.log('🔊 Áudio global desbloqueado!');
     } catch (error) {
       console.log('Erro ao inicializar áudio:', error);
@@ -160,37 +146,6 @@ export default function GlobalNotification() {
 
   return (
     <>
-      {/* Banner para ativar som - aparece se não clicou em nada ainda */}
-      {showPermissionBanner && (
-        <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2 px-4 z-[100] shadow-lg animate-slide-down">
-          <div className="container mx-auto flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Bell size={18} className="animate-bounce" />
-              <span className="text-sm font-medium">
-                Clique para ativar notificações sonoras de novas reservas
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  initAudio();
-                  playNotificationSound();
-                }}
-                className="px-4 py-1.5 bg-white text-orange-600 rounded-full text-sm font-bold hover:bg-orange-50 transition"
-              >
-                Ativar Som
-              </button>
-              <button
-                onClick={() => setShowPermissionBanner(false)}
-                className="p-1 hover:bg-white/20 rounded-full transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Alerta de nova reserva - aparece quando chega pedido novo */}
       {newOrderAlert && (
         <div className="fixed top-4 right-4 z-[100] animate-bounce-in">

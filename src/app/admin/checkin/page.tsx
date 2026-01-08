@@ -241,14 +241,28 @@ function CheckInPageContent() {
           return;
         }
         
+        // Buscar membros do grupo se existir
+        let groupMembers: Reservation[] = [];
+        if (reservation.groupId) {
+          groupMembers = reservations.filter(r => 
+            r.groupId === reservation.groupId && !r.checkedIn
+          );
+        } else {
+          groupMembers = [reservation];
+        }
+
+        // Calcular valor total pendente do grupo
+        const totalGroupAmountDue = groupMembers.reduce((sum, r) => sum + r.amountDue, 0);
+
         // Se tem pagamento pendente, abrir modal
-        if (reservation.amountDue > 0) {
+        if (totalGroupAmountDue > 0) {
           setReservationToCheckIn(reservation);
-          setRemainingAmount(reservation.amountDue.toString());
-          setPaymentEntries([{ id: '1', amount: reservation.amountDue.toString(), method: 'pix', bankId: '' }]);
+          setGroupReservationsToCheckIn(groupMembers);
+          setRemainingAmount(totalGroupAmountDue.toString());
+          setPaymentEntries([{ id: '1', amount: totalGroupAmountDue.toString(), method: 'pix', bankId: '' }]);
           setShowPaymentConfirm(true);
         } else {
-          // Se não tem pendência, fazer check-in direto
+          // Se não tem pendência, fazer check-in direto de todos do grupo
           handleCheckIn(reservation.id, false);
         }
       } else if (reservations.length > 0) {
