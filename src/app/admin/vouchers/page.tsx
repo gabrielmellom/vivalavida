@@ -307,77 +307,77 @@ export default function VouchersPage() {
     let message = '';
 
     if (language === 'es') {
-      message = `*PASEO ISLA DO CAMPECHE 🏝️ – BARCO VIVA LA VIDA*
+      message = `*PASEO ISLA DO CAMPECHE - BARCO VIVA LA VIDA*
 
-Reserva con la vendedora *${vendorName}* para la Isla do Campeche ${isWithLanding ? 'con *DESEMBARQUE*' : '*PANORÁMICO*'}
+Reserva con la vendedora *${vendorName}* para la Isla do Campeche ${isWithLanding ? 'con *DESEMBARQUE*' : '*PANORAMICO*'}
 
-📅 *${dateFormatted}* | 👥 *${reservation.customerName}*
+*${dateFormatted}* | *${reservation.customerName}*
 
-📍 *Check-in:* desde las 08:00 (llegar hasta las 08:30)
-📌 Rua Amaro Coelho, 22 – Barra da Lagoa
-⚠️ Si no se presenta hasta ese horario, la reserva podrá liberarse.
+*Check-in:* desde las 08:00 (llegar hasta las 08:30)
+Rua Amaro Coelho, 22 - Barra da Lagoa
+Si no se presenta hasta ese horario, la reserva podra liberarse.
 
-🚢 *Embarque:* 09:00 | *Salida:* 09:15
-⏳ *Trayecto:* aprox. 1h10 de ida y 1h10 de regreso
-🏝️ *Tiempo en la isla:* hasta 3h30
-🏁 *Regreso previsto:* alrededor de las 16:00
+*Embarque:* 09:00 | *Salida:* 09:15
+*Trayecto:* aprox. 1h10 de ida y 1h10 de regreso
+*Tiempo en la isla:* hasta 3h30
+*Regreso previsto:* alrededor de las 16:00
 
-🛃 Documento de identidad obligatorio para todos (incluidos menores).
+Documento de identidad obligatorio para todos (incluidos menores).
 
-🍽️ La isla cuenta con restaurante y quiosco.
-🎒 Se permite llevar snacks y bebidas.
-❌ La alimentación no está incluida.
-🍹 Bar a bordo con venta de bebidas y caipirinhas.
-🚻 Baño disponible en el barco.
-${isWithLanding ? '\n🏝️ *DESEMBARQUE:* desembarque directo en la arena, barco con rampa (es necesario mojar las piernas).\n' : ''}
-🚫 Prohibido fumar en la embarcación.
-🚫 Prohibido llevar animales.
-🔥 Prohibido hacer asado / churrasco.
+La isla cuenta con restaurante y quiosco.
+Se permite llevar snacks y bebidas.
+La alimentacion no esta incluida.
+Bar a bordo con venta de bebidas y caipirinhas.
+Bano disponible en el barco.
+${isWithLanding ? '\n*DESEMBARQUE:* desembarque directo en la arena, barco con rampa (es necesario mojar las piernas).\n' : ''}
+Prohibido fumar en la embarcacion.
+Prohibido llevar animales.
+Prohibido hacer asado / churrasco.
 
-🚮 La basura regresa con el pasajero al barco, no se deja en la isla.
+La basura regresa con el pasajero al barco, no se deja en la isla.
 
-📲 *Confirmación del paseo el día del embarque, hasta las 07:00.*
-👉 Espere la confirmación antes de dirigirse al punto de embarque.
+*Confirmacion del paseo el dia del embarque, hasta las 07:00.*
+Espere la confirmacion antes de dirigirse al punto de embarque.
 
-💡 ¡No olvide el protector solar!
+No olvide el protector solar!
 
-😃 *Será un placer recibirlos.*`;
+*Sera un placer recibirlos.*`;
     } else {
-      message = `*PASSEIO ILHA DO CAMPECHE 🏝️ – BARCO VIVA LA VIDA*
+      message = `*PASSEIO ILHA DO CAMPECHE - BARCO VIVA LA VIDA*
 
-Reserva com a vendedora *${vendorName}* para a Ilha do Campeche ${isWithLanding ? 'com *DESEMBARQUE*' : '*PANORÂMICO*'}
+Reserva com a vendedora *${vendorName}* para a Ilha do Campeche ${isWithLanding ? 'com *DESEMBARQUE*' : '*PANORAMICO*'}
 
-📅 *${dateFormatted}* | 👥 *${reservation.customerName}*
+*${dateFormatted}* | *${reservation.customerName}*
 
-📍 *Check-in:* a partir das 08:00 (chegar até 08:30)
-📌 Rua Amaro Coelho, 22 – Barra da Lagoa
-⚠️ Não comparecendo até esse horário, a reserva poderá ser liberada.
+*Check-in:* a partir das 08:00 (chegar ate 08:30)
+Rua Amaro Coelho, 22 - Barra da Lagoa
+Nao comparecendo ate esse horario, a reserva podera ser liberada.
 
-🚢 *Embarque:* 09:00 | *Saída:* 09:15
-⏳ *Trajeto:* aprox. 1h10 ida e retorno
-🏝️ *Permanência na ilha:* até 3h30
-🏁 *Retorno previsto:* por volta das 16:00
+*Embarque:* 09:00 | *Saida:* 09:15
+*Trajeto:* aprox. 1h10 ida e retorno
+*Permanencia na ilha:* ate 3h30
+*Retorno previsto:* por volta das 16:00
 
-🛃 Documento obrigatório para todos (inclusive menores).
+Documento obrigatorio para todos (inclusive menores).
 
-🍽️ Restaurante e quiosque na ilha.
-🎒 Pode levar lanches e bebidas.
-❌ Alimentação não inclusa.
-🍹 Bar a bordo com venda de bebidas e caipirinhas.
-🚻 Banheiro disponível no barco.
-${isWithLanding ? '\n🏝️ *DESEMBARQUE:* direto na areia, barco com rampa (é necessário molhar as pernas).\n' : ''}
-🚫 Proibido fumar na embarcação.
-🚫 Proibido levar animais.
-🔥 Proibido fazer churrasco.
+Restaurante e quiosque na ilha.
+Pode levar lanches e bebidas.
+Alimentacao nao inclusa.
+Bar a bordo com venda de bebidas e caipirinhas.
+Banheiro disponivel no barco.
+${isWithLanding ? '\n*DESEMBARQUE:* direto na areia, barco com rampa (e necessario molhar as pernas).\n' : ''}
+Proibido fumar na embarcacao.
+Proibido levar animais.
+Proibido fazer churrasco.
 
-🚮 O lixo retorna com o passageiro para o barco, não fica na ilha.
+O lixo retorna com o passageiro para o barco, nao fica na ilha.
 
-📲 *Confirmação do passeio no dia do embarque, até às 07:00.*
-👉 Aguarde a confirmação para se deslocar até o local do embarque.
+*Confirmacao do passeio no dia do embarque, ate as 07:00.*
+Aguarde a confirmacao para se deslocar ate o local do embarque.
 
-💡 Não esqueça o protetor solar!
+Nao esqueca o protetor solar!
 
-😃 *Será um prazer tê-los conosco.*`;
+*Sera um prazer te-los conosco.*`;
     }
 
     const cleanPhone = reservation.phone.replace(/\D/g, '');
@@ -407,19 +407,19 @@ ${isWithLanding ? '\n🏝️ *DESEMBARQUE:* direto na areia, barco com rampa (é
     const totalPeople = 1 + groupMembers.length;
     let groupInfo = '';
     if (totalPeople > 1) {
-      groupInfo = `\n\n👥 Você é o responsável pelo grupo de ${totalPeople} pessoas. Ao aceitar os termos, você estará aceitando em nome de todo o grupo.`;
+      groupInfo = `\n\nVoce e o responsavel pelo grupo de ${totalPeople} pessoas. Ao aceitar os termos, voce estara aceitando em nome de todo o grupo.`;
     }
     
-    const message = `Olá ${reservation.customerName.split(' ')[0]}! 🌊
+    const message = `Ola ${reservation.customerName.split(' ')[0]}!
 
 Falta apenas um passo para completar sua reserva no passeio VIVA LA VIDA!
 
-📋 Por favor, acesse o link abaixo para aceitar os termos do passeio:
+Por favor, acesse o link abaixo para aceitar os termos do passeio:
 ${termsUrl}${groupInfo}
 
-Após aceitar, você receberá seu voucher de embarque.
+Apos aceitar, voce recebera seu voucher de embarque.
 
-Obrigado e até breve! 🚢`;
+Obrigado e ate breve!`;
 
     const cleanPhone = reservation.phone.replace(/\D/g, '');
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;

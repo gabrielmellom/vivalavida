@@ -433,17 +433,25 @@ function CheckInPageContent() {
               const ratio = memberPayment / totalPaidNow;
               const bank = banks.find(b => b.id === entry.bankId);
               
-              await addDoc(collection(db, 'payments'), {
+              const paymentData: Record<string, unknown> = {
                 reservationId: member.id,
                 amount: entryAmount * ratio,
                 method: entry.method,
-                bankId: entry.bankId || undefined,
-                bankName: bank?.name || undefined,
                 source: 'checkin',
                 groupPayment: groupReservationsToCheckIn.length > 1,
                 createdAt: Timestamp.now(),
                 createdBy: user.uid,
-              });
+              };
+              
+              // Só adicionar bankId e bankName se existirem
+              if (entry.bankId) {
+                paymentData.bankId = entry.bankId;
+              }
+              if (bank?.name) {
+                paymentData.bankName = bank.name;
+              }
+              
+              await addDoc(collection(db, 'payments'), paymentData);
             }
           }
         }
@@ -452,14 +460,20 @@ function CheckInPageContent() {
         const newAmountPaid = member.amountPaid + memberPayment + memberDiscount;
         const newAmountDue = member.totalAmount - newAmountPaid;
         
-        await updateDoc(doc(db, 'reservations', member.id), {
+        const updateData: Record<string, unknown> = {
           checkedIn: true,
           amountPaid: newAmountPaid,
           amountDue: Math.max(0, newAmountDue),
-          discountAmount: memberDiscount > 0 ? memberDiscount : undefined,
-          discountReason: memberDiscount > 0 ? discountReason : undefined,
           updatedAt: Timestamp.now(),
-        });
+        };
+        
+        // Só adicionar desconto se existir
+        if (memberDiscount > 0) {
+          updateData.discountAmount = memberDiscount;
+          updateData.discountReason = discountReason;
+        }
+        
+        await updateDoc(doc(db, 'reservations', member.id), updateData);
       }
       
       setShowPaymentConfirm(false);
@@ -591,18 +605,18 @@ function CheckInPageContent() {
       // Gerar link do voucher e abrir WhatsApp
       const voucherUrl = `${window.location.origin}/admin/voucher/${reservationToConfirm.id}`;
       const message = encodeURIComponent(
-        `✅ *CONFIRMAÇÃO DE RESERVA*\n\n` +
-        `Olá ${reservationToConfirm.customerName}!\n\n` +
-        `Sua reserva está confirmada! 🎉\n\n` +
-        `📅 *Data:* ${formatDateForDisplay(reservationToConfirm.rideDate, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
-        `🚤 *Passeio:* ${boat.name}\n` +
-        `💰 *Valor:* R$ ${reservationToConfirm.totalAmount.toFixed(2)}\n` +
+        `*CONFIRMACAO DE RESERVA*\n\n` +
+        `Ola ${reservationToConfirm.customerName}!\n\n` +
+        `Sua reserva esta confirmada!\n\n` +
+        `*Data:* ${formatDateForDisplay(reservationToConfirm.rideDate, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
+        `*Passeio:* ${boat.name}\n` +
+        `*Valor:* R$ ${reservationToConfirm.totalAmount.toFixed(2)}\n` +
         (reservationToConfirm.amountDue > 0 
-          ? `⚠️ *Valor pendente:* R$ ${reservationToConfirm.amountDue.toFixed(2)}\n` 
-          : `✅ *Status:* Pagamento completo\n`) +
+          ? `*Valor pendente:* R$ ${reservationToConfirm.amountDue.toFixed(2)}\n` 
+          : `*Status:* Pagamento completo\n`) +
         `\n` +
-        `📍 *Voucher:* ${voucherUrl}\n\n` +
-        `Qualquer dúvida, estamos à disposição!`
+        `*Voucher:* ${voucherUrl}\n\n` +
+        `Qualquer duvida, estamos a disposicao!`
       );
       
       const phone = (reservationToConfirm.whatsapp || reservationToConfirm.phone).replace(/\D/g, '');
