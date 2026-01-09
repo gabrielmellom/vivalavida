@@ -104,6 +104,7 @@ export const DEFAULT_SITE_CONFIG = {
   facebookUrl: 'https://facebook.com/vivalavida',
   googleRating: 5.0,
   googleReviews: 400,
+  galleryImages: ['/panoramico1.jpeg', '/panoramico2.jpeg', '/panoramico3.jpeg', '/panoramico4.jpeg'],
 };
 
 export const DEFAULT_TOURS = {
@@ -113,6 +114,9 @@ export const DEFAULT_TOURS = {
     duration: '5 horas',
     currentPrice: 200,
     seasonPrice: 250,
+    drinks: '1 Caipirinha por adulto e Água Mineral',
+    food: '1 Choripán por pessoa',
+    spots: ['Prainha da Barra', 'Piscinas Naturais da Barra', 'Em frente à Ilha do Campeche', 'Praia da Galheta', 'Praia Mole', 'Praia do Gravatá'],
   },
   desembarque: {
     name: 'Com Desembarque',
@@ -120,6 +124,9 @@ export const DEFAULT_TOURS = {
     duration: '7 horas',
     currentPrice: 300,
     seasonPrice: 350,
+    drinks: 'Não incluso',
+    food: 'Não incluso',
+    spots: ['Prainha da Barra', 'Piscinas Naturais da Barra', 'Ilha do Xavier', 'Praia da Galheta', 'Praia Mole', 'Praia do Gravatá', 'Ilha do Campeche (3h em terra)'],
   },
 };
 

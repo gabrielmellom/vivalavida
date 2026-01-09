@@ -145,6 +145,9 @@ export interface TourConfig {
   type: 'panoramico' | 'desembarque' | 'lancha' | 'outro'; // tipo do passeio
   emoji: string; // ex: "🚤"
   features: TourFeature[]; // itens inclusos
+  drinks: string; // ex: "1 Caipirinha por adulto e Água Mineral"
+  food: string; // ex: "1 Choripan por pessoa"
+  spots: string[]; // ex: ["Prainha da Barra", "Piscinas Naturais"]
   checkInTime: string; // ex: "8:00h"
   departureTime: string; // ex: "9:15h"
   pricing: TourPricing[];
@@ -177,6 +180,7 @@ export interface SiteConfig {
   heroTitle: string;
   heroSubtitle: string;
   banks?: BankAccount[]; // Lista de bancos configurados
+  galleryImages?: string[]; // URLs das imagens do carrossel da galeria
   updatedAt: Date;
 }
 

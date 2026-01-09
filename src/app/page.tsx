@@ -19,6 +19,8 @@ import {
   Users, 
   Star,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
   Camera,
   Palmtree,
@@ -328,7 +330,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
   const precoDesembarque = tourDesembarque?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.currentPrice;
 
   return (
-    <section className="pt-10 sm:pt-20 pb-24 sm:pb-32 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
+    <section className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
       {/* Background decorativo */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute top-10 left-10 text-8xl">⭐</div>
@@ -414,12 +416,6 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
         </div>
       </div>
       
-      {/* Wave transition para próxima seção */}
-      <div className="absolute bottom-0 left-0 right-0 z-20">
-        <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
-          <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,90 1440,80 L1440,120 L0,120 Z" fill="white"/>
-        </svg>
-      </div>
     </section>
   );
 }
@@ -484,365 +480,214 @@ function ImageCarousel({ images: propImages, altText = 'Tour Panorâmico Viva La
   );
 }
 
-// Tours Section - ROTEIROS VIVA LA VIDA
-function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
-  const [showReservationModal, setShowReservationModal] = useState(false);
+// Carrossel compacto para cards
+function CardCarousel({ images, altText = 'Passeio' }: { images: string[]; altText?: string }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
   
-  // Encontrar passeios ou usar defaults
-  const tourPanoramico = tours.find(tour => tour.type === 'panoramico');
-  const tourDesembarque = tours.find(tour => tour.type === 'desembarque');
-  
-  // Obter preços atuais e todos os preços
-  const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
-  const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
+  useEffect(() => {
+    if (images.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+    }, 3000); // Troca a cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [images.length]);
+
+  if (images.length === 0) {
+    return (
+      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+        <span className="text-gray-400">Sem imagem</span>
+      </div>
+    );
+  }
 
   return (
-    <section id="passeios" className="py-12 sm:py-20 bg-white relative z-10">
-      <div className="container mx-auto px-4">
+    <div className="relative w-full h-full overflow-hidden">
+      {images.map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt={`${altText} ${index + 1}`}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            index === currentIndex ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      ))}
+      
+      {/* Indicadores */}
+      {images.length > 1 && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
+          <div className="flex gap-1">
+            {images.map((_, index) => (
+              <span
+                key={index}
+                onClick={() => setCurrentIndex(index)}
+                className={`block rounded-full cursor-pointer transition-all ${
+                  index === currentIndex 
+                    ? 'bg-white w-4 h-1.5' 
+                    : 'bg-white/50 w-1.5 h-1.5'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Tours Section - ROTEIROS VIVA LA VIDA
+function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
+  const [showReservationModal, setShowReservationModal] = useState(false);
+
+  // Lista de todos os passeios - pega do Firebase/Admin dinamicamente
+  // Se não houver passeios cadastrados, usa passeios padrão
+  const mainTours = tours.length > 0 
+    ? tours.map((tour) => {
+        const currentPrice = getCurrentPrice(tour);
+        const isPanoramico = tour.type === 'panoramico';
+        
+        return {
+          id: tour.id,
+          name: tour.name,
+          subtitle: tour.subtitle || '',
+          duration: tour.duration || '5 horas',
+          images: tour.images?.length > 0 ? tour.images : ['/panoramico1.jpeg'],
+          description: tour.description || '',
+          price: currentPrice?.adult || tour.pricing?.[0]?.adultPrice || 0,
+          priceLabel: currentPrice?.label || 'Preço atual',
+          emoji: tour.emoji || '🚤',
+          features: tour.features || [],
+          drinks: tour.drinks || DEFAULT_TOURS.panoramico.drinks,
+          food: tour.food || DEFAULT_TOURS.panoramico.food,
+          spots: tour.spots || [],
+          isHighlight: isPanoramico,
+          whatsappMessage: `Olá! Tenho interesse no passeio: ${tour.name}`
+        };
+      })
+    : [
+        // Passeios padrão caso não haja nenhum cadastrado
+        {
+          id: 'panoramico-default',
+          name: DEFAULT_TOURS.panoramico.name,
+          subtitle: 'Viva La Vida',
+          duration: DEFAULT_TOURS.panoramico.duration,
+          images: ['/panoramico1.jpeg', '/panoramico2.jpeg', '/panoramico3.jpeg'],
+          description: 'A experiência mais completa! 3 horas em frente à Ilha do Campeche com diversas atividades na água!',
+          price: DEFAULT_TOURS.panoramico.currentPrice,
+          priceLabel: 'Preço atual',
+          emoji: DEFAULT_TOURS.panoramico.emoji,
+          features: [],
+          drinks: DEFAULT_TOURS.panoramico.drinks,
+          food: DEFAULT_TOURS.panoramico.food,
+          spots: DEFAULT_TOURS.panoramico.spots,
+          isHighlight: true,
+          whatsappMessage: t('whatsapp.bookPanoramic')
+        },
+        {
+          id: 'desembarque-default',
+          name: DEFAULT_TOURS.desembarque.name,
+          subtitle: 'Ilha do Campeche',
+          duration: DEFAULT_TOURS.desembarque.duration,
+          images: ['/panoramico4.jpeg'],
+          description: 'Desembarque na ilha e explore por 3 horas! Praias de areia branca, águas cristalinas.',
+          price: DEFAULT_TOURS.desembarque.currentPrice,
+          priceLabel: 'Preço atual',
+          emoji: DEFAULT_TOURS.desembarque.emoji,
+          features: [],
+          drinks: DEFAULT_TOURS.desembarque.drinks,
+          food: DEFAULT_TOURS.desembarque.food,
+          spots: DEFAULT_TOURS.desembarque.spots,
+          isHighlight: false,
+          whatsappMessage: t('whatsapp.bookLanding')
+        }
+      ];
+
+  return (
+    <section id="passeios" className="py-12 sm:py-20 relative z-10 overflow-hidden">
+      {/* Video de fundo */}
+      <div className="absolute inset-0">
+        <video 
+          autoPlay 
+          muted 
+          loop 
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src="/videoback.mp4" type="video/mp4" />
+        </video>
+      </div>
+
+      <div className="container mx-auto px-4 relative z-10">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12">
-          <span className="inline-block bg-viva-orange/10 text-viva-orange font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4">
-            {t('tours.badge')}
+          <span className="inline-block bg-viva-blue/90 backdrop-blur-sm text-white font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4 shadow-lg">
+            ✨ DETALHES COMPLETOS
           </span>
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-viva-blue-dark mb-3 sm:mb-4">
-            {t('tours.title')} <span className="gradient-text">{t('tours.titleHighlight')}</span>
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+            Escolha seu <span className="text-viva-yellow drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">Roteiro</span>
           </h2>
-          <p className="text-gray-600 text-sm sm:text-lg px-2">
-            {t('tours.subtitle')}
+          <p className="text-white text-sm sm:text-lg px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            Confira todos os detalhes e escolha a experiência ideal para você!
           </p>
         </div>
 
-        {/* DESTAQUE - Tour Panorâmico (Opção 2) */}
-        <div className="mb-8 sm:mb-12">
-          <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-gradient-to-br from-viva-orange via-viva-yellow to-viva-green p-1">
-            {/* Badge de destaque */}
-            <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-r from-viva-orange to-viva-yellow text-white text-center py-2 sm:py-3 font-black text-sm sm:text-lg">
-              {t('tours.bestSeller')}
-            </div>
-            
-            <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden mt-8 sm:mt-10">
-              <div className="grid lg:grid-cols-2 gap-0">
-                {/* Carrossel de Imagens - usando imagens dinâmicas do Firebase */}
-                <ImageCarousel 
-                  images={tourPanoramico?.images} 
-                  altText={tourPanoramico?.name || 'Tour Panorâmico Viva La Vida'} 
-                />
-
-                {/* Conteúdo */}
-                <div className="p-5 sm:p-8">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="bg-viva-blue/10 text-viva-blue px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                      ⏱️ {tourPanoramico?.duration || '5 horas'}
-                    </span>
-                    <span className="bg-viva-green/10 text-viva-green px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                      3h na água
-                    </span>
-                  </div>
-
-                  <h3 className="text-xl sm:text-3xl font-black text-viva-blue-dark mb-3 sm:mb-4">
-                    {tourPanoramico?.emoji || '🚤'} {tourPanoramico?.name || 'Tour Panorâmico'}<br/>
-                    <span className="gradient-text">{tourPanoramico?.subtitle || 'VIVA LA VIDA'}</span>
-                  </h3>
-
-                  <p className="text-gray-600 text-sm sm:text-base mb-4">
-                    {tourPanoramico?.description || 'A experiência mais completa! 3 horas em frente à Ilha do Campeche com diversas atividades na água!'}
-                  </p>
-
-                  {/* O que está incluso - Dinâmico */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    {(tourPanoramico?.features || [
-                      { icon: '🍢', label: 'Choripán' },
-                      { icon: '🍹', label: 'Caipirinha' },
-                      { icon: '🛶', label: 'Caiaque' },
-                      { icon: '🏄‍♂️', label: 'Stand Up' },
-                      { icon: '🤿', label: 'Snorkel' },
-                      { icon: '🫧', label: 'Piscina' },
-                      { icon: '🪷', label: 'Flutuante' },
-                      { icon: '📸', label: 'Foto Sub' },
-                    ]).map((item: { icon: string; label: string }, idx: number) => (
-                      <div key={idx} className="bg-gray-50 rounded-xl p-2 sm:p-3 text-center">
-                        <span className="text-lg sm:text-2xl">{item.icon}</span>
-                        <p className="text-xs sm:text-sm font-semibold text-gray-700">{item.label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Horários */}
-                  <div className="flex flex-wrap gap-2 sm:gap-4 mb-4 text-xs sm:text-sm text-gray-600">
-                    <span>🕘 Check-in: {tourPanoramico?.checkInTime || '8:00h'}</span>
-                    <span>🚤 Saída: {tourPanoramico?.departureTime || '9:15h'}</span>
-                  </div>
-
-                  {/* Preços - Dinâmico */}
-                  <div className="mb-4 sm:mb-6">
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                      {/* Preço Atual */}
-                      {pricePanoramico ? (
-                        <div className="bg-gradient-to-br from-viva-green/20 to-viva-green/5 border-2 border-viva-green/30 rounded-2xl p-4 text-center relative overflow-hidden">
-                          <div className="absolute top-0 right-0 bg-viva-green text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                            ATUAL
-                          </div>
-                          <p className="text-xs text-gray-500 mb-1">{pricePanoramico.label}</p>
-                          <p className="text-3xl sm:text-4xl font-black text-viva-green">R${pricePanoramico.adult}</p>
-                          <p className="text-[10px] text-gray-400">por pessoa</p>
-                        </div>
-                      ) : (
-                        <div className="bg-gradient-to-br from-viva-green/20 to-viva-green/5 border-2 border-viva-green/30 rounded-2xl p-4 text-center relative overflow-hidden">
-                          <div className="absolute top-0 right-0 bg-viva-green text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                            ATUAL
-                          </div>
-                          <p className="text-xs text-gray-500 mb-1">Preço atual</p>
-                          <p className="text-3xl sm:text-4xl font-black text-viva-green">R${DEFAULT_TOURS.panoramico.currentPrice}</p>
-                          <p className="text-[10px] text-gray-400">por pessoa</p>
-                        </div>
-                      )}
-                      
-                      {/* Outros preços do passeio */}
-                      {tourPanoramico?.pricing && tourPanoramico.pricing.length > 1 ? (
-                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center">
-                          <p className="text-xs text-gray-500 mb-1">
-                            {tourPanoramico.pricing.find(p => !p.isCurrent)?.label || 'Alta Temporada'}
-                          </p>
-                          <p className="text-3xl sm:text-4xl font-black text-gray-400">
-                            R${tourPanoramico.pricing.find(p => !p.isCurrent)?.adultPrice || DEFAULT_TOURS.panoramico.seasonPrice}
-                          </p>
-                          <p className="text-[10px] text-gray-400">por pessoa</p>
-                        </div>
-                      ) : (
-                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-center">
-                          <p className="text-xs text-gray-500 mb-1">Alta Temporada</p>
-                          <p className="text-3xl sm:text-4xl font-black text-gray-400">R${DEFAULT_TOURS.panoramico.seasonPrice}</p>
-                          <p className="text-[10px] text-gray-400">por pessoa</p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Info crianças */}
-                    <div className="flex justify-center gap-3 mt-3">
-                      <span className="bg-viva-blue/10 text-viva-blue text-[10px] sm:text-xs font-semibold px-3 py-1 rounded-full">
-                        👶 Até {pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4} anos: GRÁTIS
-                      </span>
-                      <span className="bg-viva-orange/10 text-viva-orange text-[10px] sm:text-xs font-semibold px-3 py-1 rounded-full">
-                        👧 {(pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4) + 1}-{pricePanoramico ? (tourPanoramico?.pricing.find(p => p.isCurrent)?.halfPriceAgeLimit || 7) : 7} anos: MEIA
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* CTA */}
-                  <button
-                    onClick={() => setShowReservationModal(true)}
-                    className="block w-full text-center bg-gradient-to-r from-green-500 to-green-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-base sm:text-xl shadow-lg shadow-green-500/30 active:scale-95 transition-all"
-                  >
-                    <MessageCircle className="inline mr-2" size={20} />
-                    {t('tours.bookPanoramic')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Opção 2 - COM Desembarque - Dinâmico */}
-        <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white shadow-xl border border-gray-100">
-          <div className="grid lg:grid-cols-2 gap-0">
-            {/* Conteúdo */}
-            <div className="p-5 sm:p-8 order-2 lg:order-1">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="bg-viva-blue/10 text-viva-blue px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                  ⏱️ {tourDesembarque?.duration || '7 horas'}
-                </span>
-                <span className="bg-viva-teal/10 text-viva-teal px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                  3h na ilha
-                </span>
+        {/* Cards de Passeios - Layout estilo referência */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 max-w-6xl mx-auto">
+          {mainTours.map((tour) => (
+            <div key={tour.id} className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 hover:shadow-xl transition-all">
+              {/* Carrossel de Imagens */}
+              <div className="relative aspect-square rounded-xl overflow-hidden mb-4 shadow-md">
+                <CardCarousel images={tour.images} altText={tour.name} />
               </div>
 
-              <h3 className="text-xl sm:text-2xl font-black text-viva-blue-dark mb-3">
-                {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || 'Passeio com Desembarque'}<br/>
-                <span className="text-viva-teal">{tourDesembarque?.subtitle || 'Ilha do Campeche'}</span>
-              </h3>
-
-              <p className="text-gray-600 text-sm sm:text-base mb-4">
-                {tourDesembarque?.description || 'Desembarque na ilha e explore por 3 horas! Praias de areia branca, águas cristalinas e contato com a natureza.'}
-              </p>
-
-              {/* O que está incluso */}
-              <ul className="space-y-2 mb-4 text-sm text-gray-600">
-                <li className="flex items-center gap-2">
-                  <span className="text-viva-green">✓</span>
-                  Autorização de acesso à ilha inclusa
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-viva-green">✓</span>
-                  3 horas para explorar em terra
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-viva-green">✓</span>
-                  Embarque 9h • Retorno ~16h
-                </li>
-              </ul>
-
-              {/* Preços - Dinâmico */}
+              {/* Título em Badge */}
               <div className="mb-4">
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Preço Atual */}
-                  {priceDesembarque ? (
-                    <div className="bg-gradient-to-br from-viva-teal/20 to-viva-teal/5 border-2 border-viva-teal/30 rounded-xl p-3 text-center relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-viva-teal text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
-                        ATUAL
-                      </div>
-                      <p className="text-[10px] text-gray-500 mb-1">{priceDesembarque.label}</p>
-                      <p className="text-2xl sm:text-3xl font-black text-viva-teal">R${priceDesembarque.adult}</p>
-                      <p className="text-[9px] text-gray-400">por pessoa</p>
-                    </div>
-                  ) : (
-                    <div className="bg-gradient-to-br from-viva-teal/20 to-viva-teal/5 border-2 border-viva-teal/30 rounded-xl p-3 text-center relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-viva-teal text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">
-                        ATUAL
-                      </div>
-                      <p className="text-[10px] text-gray-500 mb-1">Preço atual</p>
-                      <p className="text-2xl sm:text-3xl font-black text-viva-teal">R${DEFAULT_TOURS.desembarque.currentPrice}</p>
-                      <p className="text-[9px] text-gray-400">por pessoa</p>
-                    </div>
-                  )}
-                  
-                  {/* Outros preços */}
-                  {tourDesembarque?.pricing && tourDesembarque.pricing.length > 1 ? (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
-                      <p className="text-[10px] text-gray-500 mb-1">
-                        {tourDesembarque.pricing.find(p => !p.isCurrent)?.label || 'Alta Temporada'}
-                      </p>
-                      <p className="text-2xl sm:text-3xl font-black text-gray-400">
-                        R${tourDesembarque.pricing.find(p => !p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.seasonPrice}
-                      </p>
-                      <p className="text-[9px] text-gray-400">por pessoa</p>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
-                      <p className="text-[10px] text-gray-500 mb-1">Alta Temporada</p>
-                      <p className="text-2xl sm:text-3xl font-black text-gray-400">R${DEFAULT_TOURS.desembarque.seasonPrice}</p>
-                      <p className="text-[9px] text-gray-400">por pessoa</p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Info crianças */}
-                <div className="flex justify-center gap-2 mt-2">
-                  <span className="bg-viva-blue/10 text-viva-blue text-[9px] sm:text-[10px] font-semibold px-2 py-1 rounded-full">
-                    👶 Até {priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4} anos: GRÁTIS
-                  </span>
-                  <span className="bg-viva-orange/10 text-viva-orange text-[9px] sm:text-[10px] font-semibold px-2 py-1 rounded-full">
-                    👧 {(priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.freeAgeLimit || 4) : 4) + 1}-{priceDesembarque ? (tourDesembarque?.pricing.find(p => p.isCurrent)?.halfPriceAgeLimit || 7) : 7} anos: MEIA
-                  </span>
+                <div className="inline-block w-full text-center py-2.5 px-4 rounded-lg font-bold text-white text-sm bg-viva-blue">
+                  {tour.name}
                 </div>
               </div>
 
-              {/* CTA - Dinâmico */}
-              <a 
-                href={getWhatsAppLink(t('whatsapp.bookLanding'))}
-                className="block w-full text-center bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base active:scale-95 transition-all"
+              {/* Informações */}
+              <div className="space-y-2 text-sm text-center mb-4">
+                <p className="text-gray-700">
+                  <span className="text-viva-blue">⏱</span> <strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}
+                </p>
+                <p className="text-gray-700">
+                  <span className="text-viva-orange">🍹</span> <strong className="text-viva-blue-dark">Bebidas:</strong> {tour.drinks}
+                </p>
+                <p className="text-gray-700">
+                  <span className="text-viva-orange">🍽</span> <strong className="text-viva-blue-dark">Alimentação:</strong> {tour.food}
+                </p>
+              </div>
+
+              {/* Roteiro - Lista de locais */}
+              <div className="text-center text-xs text-gray-600 mb-4 leading-relaxed">
+                {tour.spots.map((spot, idx) => (
+                  <span key={idx}>
+                    {spot}
+                    {idx < tour.spots.length - 1 && <br />}
+                  </span>
+                ))}
+              </div>
+
+              {/* Botão CTA */}
+              <button
+                onClick={() => tour.id === 'panoramico' ? setShowReservationModal(true) : window.open(getWhatsAppLink(tour.whatsappMessage), '_blank')}
+                className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-3 rounded-lg font-bold text-sm transition-colors"
               >
-                <MessageCircle className="inline mr-2" size={18} />
-                {t('tours.bookLanding')}
-              </a>
+                Ver Passeio
+              </button>
             </div>
-
-            {/* Imagem - usando imagens dinâmicas do Firebase */}
-            <div className="relative h-64 sm:h-80 lg:h-full min-h-[280px] order-1 lg:order-2">
-              <img 
-                src={tourDesembarque?.images?.[0] || "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073"}
-                alt={tourDesembarque?.name || "Ilha do Campeche - Com Desembarque"}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent lg:bg-gradient-to-l" />
-              <div className="absolute bottom-4 left-4">
-                <span className="bg-viva-teal text-white px-3 py-1 rounded-full text-xs sm:text-sm font-bold">
-                  COM DESEMBARQUE
-                </span>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Outros Passeios - Dinâmico */}
-        {tours.filter(tour => tour.type !== 'panoramico' && tour.type !== 'desembarque').length > 0 && (
-          <div className="mt-8 sm:mt-12">
-            <h3 className="text-xl sm:text-2xl font-black text-viva-blue-dark mb-6 text-center">
-              ✨ Outros Passeios Disponíveis
-            </h3>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {tours
-                .filter(tour => tour.type !== 'panoramico' && tour.type !== 'desembarque')
-                .map((tour) => {
-                  const price = getCurrentPrice(tour);
-                  return (
-                    <div key={tour.id} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
-                      {/* Imagem */}
-                      <div className="relative h-48">
-                        <img 
-                          src={tour.images?.[0] || "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2073"}
-                          alt={tour.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                        <div className="absolute bottom-3 left-3">
-                          <span className="bg-viva-blue text-white px-3 py-1 rounded-full text-xs font-bold">
-                            {tour.duration}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {/* Conteúdo */}
-                      <div className="p-4 sm:p-5">
-                        <h4 className="text-lg font-black text-viva-blue-dark mb-1">
-                          {tour.emoji} {tour.name}
-                        </h4>
-                        <p className="text-sm text-gray-500 mb-3">{tour.subtitle}</p>
-                        
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                          {tour.description}
-                        </p>
-                        
-                        {/* Preço */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <p className="text-xs text-gray-500">{price?.label || 'A partir de'}</p>
-                            <p className="text-2xl font-black text-viva-green">
-                              R$ {price?.adult || tour.pricing[0]?.adultPrice || 0}
-                            </p>
-                          </div>
-                          {tour.features && tour.features.length > 0 && (
-                            <div className="flex gap-1">
-                              {tour.features.slice(0, 3).map((feature, idx) => (
-                                <span key={idx} className="text-lg" title={feature.label}>
-                                  {feature.icon}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* CTA */}
-                        <a 
-                          href={getWhatsAppLink(`Olá! Tenho interesse no passeio: ${tour.name}`)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block w-full text-center bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm active:scale-95 transition-all"
-                        >
-                          <MessageCircle className="inline mr-2" size={16} />
-                          Reservar Agora
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        )}
 
         {/* Info importante */}
-        <div className="mt-8 sm:mt-12 bg-viva-blue-navy/5 rounded-2xl p-4 sm:p-6">
-          <h4 className="font-bold text-viva-blue-dark mb-3 text-sm sm:text-base">{t('info.title')}</h4>
-          <ul className="grid sm:grid-cols-2 gap-2 text-xs sm:text-sm text-gray-600">
+        <div className="mt-8 sm:mt-12 bg-viva-blue-dark/90 backdrop-blur-sm rounded-2xl p-4 sm:p-6 shadow-xl">
+          <h4 className="font-bold text-white mb-3 text-sm sm:text-base">{t('info.title')}</h4>
+          <ul className="grid sm:grid-cols-2 gap-2 text-xs sm:text-sm text-white/90">
             <li>• {t('info.doc')}</li>
             <li>• {t('info.bring')}</li>
             <li>• {t('info.noPets')}</li>
@@ -860,119 +705,127 @@ function Tours({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: Share
   );
 }
 
-// Routes Section - Comparativo dos Roteiros
-function Routes({ tours, siteConfig, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
-  // Encontrar passeios ou usar defaults
-  const tourPanoramico = tours.find(tour => tour.type === 'panoramico');
-  const tourDesembarque = tours.find(tour => tour.type === 'desembarque');
-  
-  // Obter preços atuais
-  const pricePanoramico = tourPanoramico ? getCurrentPrice(tourPanoramico) : null;
-  const priceDesembarque = tourDesembarque ? getCurrentPrice(tourDesembarque) : null;
+// Galeria de Fotos com Carrossel 3D
+function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const images = siteConfig?.galleryImages && siteConfig.galleryImages.length > 0 
+    ? siteConfig.galleryImages 
+    : DEFAULT_SITE_CONFIG.galleryImages;
+
+  useEffect(() => {
+    if (images.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [images.length]);
+
+  // Calcula índices para as 3 imagens visíveis
+  const getVisibleIndex = (offset: number) => {
+    return (currentIndex + offset + images.length) % images.length;
+  };
+
+  const prevIndex = getVisibleIndex(-1);
+  const nextIndex = getVisibleIndex(1);
 
   return (
-    <section id="roteiros" className="py-12 sm:py-20 relative overflow-hidden z-10">
-      {/* Overlay semi-transparente - vídeo aparece por trás */}
-      <div className="absolute inset-0 bg-gradient-to-b from-viva-blue-navy/60 via-viva-blue-dark/50 to-viva-blue-navy/70 backdrop-blur-[2px]" />
-      
-      {/* Animated background - esconde no mobile */}
-      <div className="absolute inset-0 opacity-10 hidden sm:block z-10">
-        <div className="absolute top-0 left-0 w-full h-full">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute bg-white/20 rounded-full animate-wave-slow"
-              style={{
-                width: `${100 + i * 50}px`,
-                height: `${100 + i * 50}px`,
-                top: `${20 + i * 15}%`,
-                left: `${i * 20}%`,
-                animationDelay: `${i * 0.5}s`,
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 relative z-20">
-        <div className="text-center mb-8 sm:mb-12">
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4">
-            {t('routes.title')} <span className="text-viva-yellow">{t('routes.titleHighlight')}</span>
+    <section id="roteiros" className="py-12 sm:py-16 relative overflow-hidden z-10 bg-viva-blue-navy">
+      <div className="container mx-auto px-4">
+        {/* Título */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl sm:text-4xl font-black text-white mb-2">
+            Galeria de <span className="text-viva-yellow">Fotos</span>
           </h2>
-          <p className="text-white/80 text-sm sm:text-lg max-w-2xl mx-auto px-2">
-            {t('routes.subtitle')}
-          </p>
+          <p className="text-white/70 text-sm sm:text-base">Momentos inesquecíveis dos nossos passeios</p>
         </div>
 
-        {/* Comparativo em cards */}
-        <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 max-w-4xl mx-auto">
-          {/* Tour Panorâmico - DESTAQUE */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-viva-orange to-viva-yellow text-white text-center py-1.5 text-xs sm:text-sm font-bold">
-              {t('routes.recommended')}
-            </div>
-            <div className="pt-6">
-              <h3 className="text-lg sm:text-xl font-black text-viva-blue-dark mb-2">
-                🚤 {t('features.panoramic')}
-              </h3>
-              <p className="text-viva-orange font-bold text-sm mb-3">{t('routes.onboard')}</p>
-              
-              <ul className="space-y-2 text-sm text-gray-600 mb-4">
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.tripHours')}</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.frontIsland')}</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.food')}</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.kayakSup')}</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.snorkelPhoto')}</li>
-                <li className="flex items-center gap-2"><span className="text-green-500">✓</span> {t('routes.inflatablePool')}</li>
-              </ul>
-
-              <div className="text-center">
-                <p className="text-xs text-gray-500">{t('features.fromPrice')}</p>
-                <p className="text-3xl font-black text-viva-green">R${pricePanoramico?.adult || DEFAULT_TOURS.panoramico.currentPrice}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Com Desembarque */}
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
-            <h3 className="text-lg sm:text-xl font-black text-white mb-2">
-              {tourDesembarque?.emoji || '🌴'} {tourDesembarque?.name || t('features.landing')}
-            </h3>
-            <p className="text-viva-teal font-bold text-sm mb-3">{t('routes.onIsland')}</p>
+        {/* Carrossel 3D */}
+        <div className="relative max-w-6xl mx-auto">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 h-[200px] sm:h-[300px] md:h-[400px]">
             
-            <ul className="space-y-2 text-sm text-white/80 mb-4">
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {tourDesembarque?.duration || '7 horas'} {t('routes.totalHours')}</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.hoursOnIsland')}</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.authIncluded')}</li>
-              <li className="flex items-center gap-2"><span className="text-viva-teal">✓</span> {t('routes.exploreOnLand')}</li>
-              <li className="flex items-center gap-2 text-white/50"><span>—</span> {t('routes.noActivities')}</li>
-              <li className="flex items-center gap-2 text-white/50"><span>—</span> {t('routes.noFood')}</li>
-            </ul>
+            {/* Imagem Esquerda */}
+            <button
+              onClick={() => setCurrentIndex(prevIndex)}
+              className="relative w-[20%] sm:w-[25%] h-[70%] rounded-xl overflow-hidden opacity-50 hover:opacity-70 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg"
+            >
+              <img
+                src={images[prevIndex]}
+                alt={`Galeria ${prevIndex + 1}`}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+            </button>
 
-            <div className="text-center">
-              <p className="text-xs text-white/60">{t('features.fromPrice')}</p>
-              <p className="text-3xl font-black text-white">R${priceDesembarque?.adult || DEFAULT_TOURS.desembarque.currentPrice}</p>
+            {/* Imagem Central (Principal) */}
+            <div className="relative w-[55%] sm:w-[50%] h-full rounded-2xl overflow-hidden shadow-2xl z-10 ring-4 ring-white/20">
+              <img
+                src={images[currentIndex]}
+                alt={`Galeria ${currentIndex + 1}`}
+                className="w-full h-full object-cover"
+              />
+              {/* Gradiente inferior */}
+              <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
             </div>
+
+            {/* Imagem Direita */}
+            <button
+              onClick={() => setCurrentIndex(nextIndex)}
+              className="relative w-[20%] sm:w-[25%] h-[70%] rounded-xl overflow-hidden opacity-50 hover:opacity-70 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg"
+            >
+              <img
+                src={images[nextIndex]}
+                alt={`Galeria ${nextIndex + 1}`}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+            </button>
           </div>
+
+          {/* Botões de navegação */}
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={() => setCurrentIndex(prevIndex)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                <ChevronLeft size={24} />
+              </button>
+              <button
+                onClick={() => setCurrentIndex(nextIndex)}
+                className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                <ChevronRight size={24} />
+              </button>
+            </>
+          )}
+
+          {/* Indicadores */}
+          {images.length > 1 && (
+            <div className="flex justify-center gap-2 mt-6">
+              {images.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentIndex(index)}
+                  className={`transition-all duration-300 rounded-full ${
+                    index === currentIndex 
+                      ? 'bg-viva-yellow w-8 h-2' 
+                      : 'bg-white/30 hover:bg-white/50 w-2 h-2'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Big CTA */}
-        <div className="mt-10 sm:mt-16 text-center px-2">
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
-            <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4">
-              {t('routes.doubt')} 🤔
-            </h3>
-            <p className="text-white/80 text-sm sm:text-base mb-5 sm:mb-6 max-w-lg mx-auto">
-              {t('routes.helpChoose')}
-            </p>
-            <a 
-              href={getWhatsAppLink(t('whatsapp.doubt'))}
-              className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 sm:px-10 py-4 sm:py-5 rounded-2xl sm:rounded-full font-bold text-base sm:text-xl shadow-xl shadow-green-500/30 active:scale-95 transition-all shimmer"
-            >
-              <MessageCircle size={24} />
-              {t('routes.askQuestions')}
-            </a>
-          </div>
+        {/* CTA */}
+        <div className="text-center mt-8">
+          <a 
+            href={getWhatsAppLink(t('whatsapp.moreInfo'))}
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-full font-bold text-sm sm:text-base shadow-lg active:scale-95 transition-all"
+          >
+            <MessageCircle size={20} />
+            Quero Reservar!
+          </a>
         </div>
       </div>
     </section>
@@ -1084,25 +937,13 @@ function About({ siteConfig, getWhatsAppLink, t }: SharedProps) {
           <div className="relative order-1 lg:order-2">
             <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl">
               <img 
-                src="https://images.unsplash.com/photo-1559827291-72ee739d0d9a?q=80&w=2070"
-                alt="Lancha Viva la Vida"
-                className="w-full h-[250px] sm:h-[500px] object-cover"
+                src="/cadastur.jpg"
+                alt="Cadastur - Fazendo o turismo legal"
+                className="w-full h-[250px] sm:h-[500px] object-contain bg-white"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-viva-blue-dark/50 to-transparent" />
             </div>
             
-            {/* Badge flutuante - ajustado para mobile */}
-            <div className="absolute bottom-3 left-3 sm:-bottom-6 sm:-left-6 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg sm:shadow-xl">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-viva-green to-viva-teal rounded-lg sm:rounded-xl flex items-center justify-center">
-                  <Shield className="text-white w-5 h-5 sm:w-6 sm:h-6" />
-                </div>
-                <div>
-                  <div className="font-bold text-viva-blue-dark text-xs sm:text-base">{t('about.certified')}</div>
-                  <div className="text-gray-500 text-[10px] sm:text-sm">Cadastur</div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Texto */}
@@ -1202,87 +1043,115 @@ function FinalCTA({ getWhatsAppLink, t }: SharedProps) {
 
 // Footer
 function Footer({ siteConfig, getWhatsAppLink, t }: SharedProps) {
-  // Valores do siteConfig ou defaults
   const whatsappNumber = siteConfig?.whatsappNumber || DEFAULT_SITE_CONFIG.whatsappNumber;
   const displayPhone = siteConfig?.phone || DEFAULT_SITE_CONFIG.phone;
   const email = siteConfig?.email || DEFAULT_SITE_CONFIG.email;
-  const address = siteConfig?.address || DEFAULT_SITE_CONFIG.address;
   const instagramUrl = siteConfig?.instagramUrl || DEFAULT_SITE_CONFIG.instagramUrl;
   const facebookUrl = siteConfig?.facebookUrl || DEFAULT_SITE_CONFIG.facebookUrl;
 
   return (
     <footer id="contato" className="bg-viva-blue-navy text-white relative z-10">
-      {/* Wave top - esconde no mobile */}
-      <div className="absolute top-0 left-0 right-0 -translate-y-full hidden sm:block">
-        <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0,30L80,35C160,40,320,50,480,50C640,50,800,40,960,35C1120,30,1280,30,1360,30L1440,30L1440,60L1360,60C1280,60,1120,60,960,60C800,60,640,60,480,60C320,60,160,60,80,60L0,60Z" fill="#0D47A1"/>
-        </svg>
-      </div>
-
-      <div className="container mx-auto px-4 py-10 sm:py-16">
-        {/* Mobile: Layout centralizado e simplificado */}
-        <div className="text-center sm:text-left">
-          {/* Logo centralizado no mobile */}
-          <div className="flex justify-center sm:justify-start mb-6">
-            <Image 
-              src="/imagemlogo1.png" 
-              alt="Viva la Vida" 
-              width={160} 
-              height={64}
-              className="bg-white rounded-xl p-2 sm:p-3 sm:w-[200px]"
+      <div className="container mx-auto px-4 py-8">
+        
+        {/* Mapa - largura total no mobile */}
+        <div className="mb-6 sm:hidden">
+          <div className="w-full aspect-square rounded-xl overflow-hidden shadow-lg">
+            <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3536.5!2d-48.4235!3d-27.5742!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x9527438a43fbe9e7%3A0x2a9d9c4c9e4b9c9c!2sR.%20Amaro%20Coelho%2C%2022%20-%20Barra%20da%20Lagoa%2C%20Florian%C3%B3polis%20-%20SC%2C%2088061-090!5e0!3m2!1spt-BR!2sbr!4v1704825600000!5m2!1spt-BR!2sbr"
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              loading="lazy"
+              title="Localização"
             />
-          </div>
-          
-          {/* Redes Sociais - mais destaque no mobile */}
-          <div className="flex justify-center gap-4 mb-8">
-            <a href={getWhatsAppLink()} className="w-12 h-12 sm:w-10 sm:h-10 bg-green-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
-              <MessageCircle size={24} className="sm:w-5 sm:h-5" />
-            </a>
-            <a href={instagramUrl} className="w-12 h-12 sm:w-10 sm:h-10 bg-pink-500 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
-              <Instagram size={24} className="sm:w-5 sm:h-5" />
-            </a>
-            <a href={facebookUrl} className="w-12 h-12 sm:w-10 sm:h-10 bg-blue-600 sm:bg-white/10 rounded-full flex items-center justify-center active:scale-95 transition-all">
-              <Facebook size={24} className="sm:w-5 sm:h-5" />
-            </a>
-          </div>
-
-          {/* Contato - compacto no mobile */}
-          <div className="space-y-3 mb-8">
-            <a href={`tel:+55${whatsappNumber}`} className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
-              <Phone size={16} />
-              {displayPhone}
-            </a>
-            <a href={`mailto:${email}`} className="flex items-center justify-center sm:justify-start gap-2 text-white/80 active:text-white text-sm sm:text-base">
-              <Mail size={16} />
-              {email}
-            </a>
-            <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 text-sm sm:text-base">
-              <MapPin size={16} className="shrink-0" />
-              <span>{address}</span>
-            </div>
-            <div className="flex items-center justify-center sm:justify-start gap-2 text-white/80 text-sm sm:text-base">
-              <Clock size={16} />
-              <span>{t('footer.support')}</span>
-            </div>
-          </div>
-
-          {/* Links - horizontal no mobile */}
-          <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-8 text-sm">
-            <a href="#inicio" className="text-white/70 active:text-white">{t('nav.home')}</a>
-            <a href="#passeios" className="text-white/70 active:text-white">{t('nav.tours')}</a>
-            <a href="#roteiros" className="text-white/70 active:text-white">{t('nav.routes')}</a>
-            <a href="#sobre" className="text-white/70 active:text-white">{t('nav.about')}</a>
           </div>
         </div>
 
-        {/* Bottom */}
-        <div className="border-t border-white/10 pt-6 sm:pt-8 text-center">
-          <p className="text-white/50 text-xs sm:text-sm mb-2">
-            {t('footer.rights')}
-          </p>
-          <div className="flex items-center justify-center gap-2 text-white/50 text-xs sm:text-sm">
-            <span>{t('footer.certified')}</span>
-            <span className="text-viva-yellow font-bold">Cadastur</span>
+        {/* Grid compacto */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 items-start">
+          
+          {/* Logo - esconde no mobile */}
+          <div className="hidden sm:block sm:col-span-1">
+            <Image 
+              src="/imagemlogo1.png" 
+              alt="Viva la Vida" 
+              width={140} 
+              height={56}
+              className="bg-white rounded-lg p-2"
+            />
+          </div>
+
+          {/* Links */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-2">Links</h4>
+            <div className="flex flex-col gap-1 text-xs">
+              <a href="#inicio" className="text-white/70 hover:text-white">{t('nav.home')}</a>
+              <a href="#passeios" className="text-white/70 hover:text-white">{t('nav.tours')}</a>
+              <a href="#sobre" className="text-white/70 hover:text-white">{t('nav.about')}</a>
+            </div>
+          </div>
+
+          {/* Contato */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-2">Contato</h4>
+            <div className="flex flex-col gap-1 text-xs text-white/70">
+              <a href={`tel:+55${whatsappNumber}`} className="hover:text-white flex items-center gap-1">
+                <Phone size={12} /> {displayPhone}
+              </a>
+              <a href={`mailto:${email}`} className="hover:text-white flex items-center gap-1 break-all">
+                <Mail size={12} className="shrink-0" /> <span className="truncate">{email}</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Endereço */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-2">Endereço</h4>
+            <p className="text-xs text-white/70 leading-relaxed">
+              R. Amaro Coelho, 22<br/>Barra da Lagoa<br/>Florianópolis/SC
+            </p>
+          </div>
+
+          {/* Mapa - só aparece no desktop */}
+          <div className="hidden lg:block">
+            <h4 className="font-bold text-white text-sm mb-2">Mapa</h4>
+            <div className="w-full aspect-square max-w-[120px] rounded-lg overflow-hidden">
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3536.5!2d-48.4235!3d-27.5742!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x9527438a43fbe9e7%3A0x2a9d9c4c9e4b9c9c!2sR.%20Amaro%20Coelho%2C%2022%20-%20Barra%20da%20Lagoa%2C%20Florian%C3%B3polis%20-%20SC%2C%2088061-090!5e0!3m2!1spt-BR!2sbr!4v1704825600000!5m2!1spt-BR!2sbr"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                title="Localização"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-4 border-t border-white/10">
+          <p className="text-white/50 text-xs">{t('footer.rights')}</p>
+          
+          {/* Redes + Cadastur */}
+          <div className="flex items-center gap-4">
+            <div className="flex gap-2">
+              <a href={getWhatsAppLink()} className="w-8 h-8 bg-white/10 hover:bg-green-500 rounded-full flex items-center justify-center transition-colors">
+                <MessageCircle size={14} />
+              </a>
+              <a href={instagramUrl} className="w-8 h-8 bg-white/10 hover:bg-pink-500 rounded-full flex items-center justify-center transition-colors">
+                <Instagram size={14} />
+              </a>
+              <a href={facebookUrl} className="w-8 h-8 bg-white/10 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors">
+                <Facebook size={14} />
+              </a>
+            </div>
+            <Image 
+              src="/cadastur.jpg" 
+              alt="Cadastur" 
+              width={80} 
+              height={32} 
+              className="h-6 w-auto bg-white rounded px-1"
+            />
           </div>
         </div>
       </div>

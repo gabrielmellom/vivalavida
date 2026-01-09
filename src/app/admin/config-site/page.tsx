@@ -93,6 +93,8 @@ export default function ConfigSitePage() {
     }
   };
 
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
   const handleSaveSiteConfig = async () => {
     if (!siteConfig) return;
     
@@ -109,12 +111,61 @@ export default function ConfigSitePage() {
         heroTitle: siteConfig.heroTitle,
         heroSubtitle: siteConfig.heroSubtitle,
         banks: siteConfig.banks || [],
+        galleryImages: siteConfig.galleryImages || [],
         updatedAt: Timestamp.now(),
       });
       alert('Configurações salvas com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
       alert('Erro ao salvar configurações');
+    }
+  };
+
+  const handleGalleryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !siteConfig) return;
+    
+    setUploadingGallery(true);
+    const files = Array.from(e.target.files);
+    const newImages: string[] = [];
+
+    try {
+      for (const file of files) {
+        const fileName = `gallery_${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, `gallery/${fileName}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        newImages.push(url);
+      }
+      
+      setSiteConfig({
+        ...siteConfig,
+        galleryImages: [...(siteConfig.galleryImages || []), ...newImages],
+      });
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+      alert('Erro ao fazer upload das imagens');
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveGalleryImage = async (imageUrl: string) => {
+    if (!siteConfig) return;
+    
+    try {
+      // Tentar deletar do Storage se for uma URL do Firebase
+      if (imageUrl.includes('firebase')) {
+        const imageRef = ref(storage, imageUrl);
+        await deleteObject(imageRef).catch(() => {});
+      }
+      
+      setSiteConfig({
+        ...siteConfig,
+        galleryImages: (siteConfig.galleryImages || []).filter(img => img !== imageUrl),
+      });
+    } catch (error) {
+      console.error('Erro ao remover imagem:', error);
     }
   };
 
@@ -171,6 +222,9 @@ export default function ConfigSitePage() {
           { icon: '🪷', label: 'Flutuante' },
           { icon: '📸', label: 'Foto Sub' },
         ],
+        drinks: '1 Caipirinha por adulto e Água Mineral',
+        food: '1 Choripán por pessoa',
+        spots: ['Prainha da Barra', 'Piscinas Naturais da Barra', 'Em frente à Ilha do Campeche', 'Praia da Galheta', 'Praia Mole', 'Praia do Gravatá'],
         checkInTime: '8:00h',
         departureTime: '9:15h',
         pricing: [
@@ -221,6 +275,9 @@ export default function ConfigSitePage() {
           { icon: '✓', label: '3 horas para explorar em terra' },
           { icon: '✓', label: 'Embarque 9h • Retorno ~16h' },
         ],
+        drinks: 'Não incluso',
+        food: 'Não incluso',
+        spots: ['Prainha da Barra', 'Piscinas Naturais da Barra', 'Ilha do Xavier', 'Praia da Galheta', 'Praia Mole', 'Praia do Gravatá', 'Ilha do Campeche (3h em terra)'],
         checkInTime: '8:30h',
         departureTime: '9:00h',
         pricing: [
@@ -635,6 +692,71 @@ export default function ConfigSitePage() {
                 </div>
               </div>
 
+              {/* Galeria de Fotos */}
+              <div className="border-t pt-6">
+                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <ImagePlus size={20} className="text-purple-600" />
+                  Galeria de Fotos (Carrossel)
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Adicione fotos que aparecerão no carrossel da galeria do site. Recomendamos imagens em alta qualidade (16:9).
+                </p>
+
+                {/* Preview das imagens */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                  {(siteConfig.galleryImages || []).map((url, index) => (
+                    <div key={url} className="relative aspect-video rounded-lg overflow-hidden group">
+                      <img
+                        src={url}
+                        alt={`Galeria ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGalleryImage(url)}
+                          className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <span className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                        {index + 1}
+                      </span>
+                    </div>
+                  ))}
+                  
+                  {(siteConfig.galleryImages || []).length === 0 && (
+                    <div className="col-span-full text-center py-8 border-2 border-dashed border-gray-300 rounded-lg text-gray-500">
+                      Nenhuma imagem adicionada ainda
+                    </div>
+                  )}
+                </div>
+
+                {/* Botão de upload */}
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition cursor-pointer">
+                  {uploadingGallery ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Fazendo upload...
+                    </>
+                  ) : (
+                    <>
+                      <ImagePlus size={18} />
+                      Adicionar Imagens
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleGalleryImageUpload}
+                    className="hidden"
+                    disabled={uploadingGallery}
+                  />
+                </label>
+              </div>
+
               {/* Botão Salvar */}
               <button
                 onClick={handleSaveSiteConfig}
@@ -815,6 +937,9 @@ function TourEditModal({
     type: tour?.type || 'panoramico',
     emoji: tour?.emoji || '🚤',
     features: tour?.features || [],
+    drinks: tour?.drinks || '',
+    food: tour?.food || '',
+    spots: tour?.spots || [],
     checkInTime: tour?.checkInTime || '8:00h',
     departureTime: tour?.departureTime || '9:15h',
     pricing: tour?.pricing || [
@@ -836,6 +961,8 @@ function TourEditModal({
     images: tour?.images || [],
     whatsappMessage: tour?.whatsappMessage || '',
   });
+
+  const [newSpot, setNewSpot] = useState('');
 
   const [newFeatureIcon, setNewFeatureIcon] = useState('');
   const [newFeatureLabel, setNewFeatureLabel] = useState('');
@@ -1145,6 +1272,94 @@ function TourEditModal({
                 <Plus size={18} />
               </button>
             </div>
+          </div>
+
+          {/* Bebidas e Alimentação */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">🍹 Bebidas</label>
+              <input
+                type="text"
+                value={formData.drinks}
+                onChange={(e) => setFormData({ ...formData, drinks: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                placeholder="1 Caipirinha por adulto e Água Mineral"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">🍽 Alimentação</label>
+              <input
+                type="text"
+                value={formData.food}
+                onChange={(e) => setFormData({ ...formData, food: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-transparent outline-none"
+                placeholder="1 Choripan por pessoa"
+              />
+            </div>
+          </div>
+
+          {/* Roteiro - Locais Visitados */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">📍 Roteiro (Locais Visitados)</label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(formData.spots || []).map((spot, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center gap-1 bg-viva-blue/10 text-viva-blue px-3 py-1.5 rounded-lg text-sm"
+                >
+                  {spot}
+                  <button
+                    type="button"
+                    onClick={() => setFormData({
+                      ...formData,
+                      spots: (formData.spots || []).filter((_, i) => i !== index),
+                    })}
+                    className="ml-1 text-red-500 hover:text-red-700"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSpot}
+                onChange={(e) => setNewSpot(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (newSpot.trim()) {
+                      setFormData({
+                        ...formData,
+                        spots: [...(formData.spots || []), newSpot.trim()],
+                      });
+                      setNewSpot('');
+                    }
+                  }
+                }}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Nome do local (ex: Prainha da Barra)"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (newSpot.trim()) {
+                    setFormData({
+                      ...formData,
+                      spots: [...(formData.spots || []), newSpot.trim()],
+                    });
+                    setNewSpot('');
+                  }
+                }}
+                className="px-4 py-2 bg-viva-blue text-white rounded-lg font-semibold hover:bg-viva-blue-dark transition"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Pressione Enter ou clique em + para adicionar cada local
+            </p>
           </div>
 
           {/* Fotos do Passeio */}

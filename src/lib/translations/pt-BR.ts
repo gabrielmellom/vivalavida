@@ -144,7 +144,7 @@ export const translations: Record<string, string> = {
   'footer.rights': '© 2025 Viva la Vida - Todos os direitos reservados.',
 
   // WhatsApp messages
-  'whatsapp.moreInfo': 'Olá! Gostaria de saber mais sobre os passeios de lancha.',
+  'whatsapp.moreInfo': 'Olá! Gostaria de saber sobre os passeios de barco.',
   'whatsapp.bookPanoramic': 'Olá! Quero reservar o passeio panorâmico da Ilha do Campeche!',
   'whatsapp.bookLanding': 'Olá! Quero reservar o passeio COM desembarque na Ilha do Campeche!',
   'whatsapp.doubt': 'Olá! Estou em dúvida entre os roteiros. Podem me ajudar?',
