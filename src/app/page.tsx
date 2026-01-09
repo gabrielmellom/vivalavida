@@ -537,9 +537,232 @@ function CardCarousel({ images, altText = 'Passeio' }: { images: string[]; altTe
   );
 }
 
+// Modal de Detalhes do Passeio
+interface TourDetail {
+  id: string;
+  name: string;
+  subtitle: string;
+  duration: string;
+  images: string[];
+  description: string;
+  price: number;
+  priceLabel: string;
+  emoji: string;
+  features: { icon: string; label: string }[];
+  drinks: string;
+  food: string;
+  spots: string[];
+  isHighlight: boolean;
+  whatsappMessage: string;
+}
+
+function TourDetailModal({ 
+  tour, 
+  isOpen, 
+  onClose, 
+  getWhatsAppLink 
+}: { 
+  tour: TourDetail | null; 
+  isOpen: boolean; 
+  onClose: () => void;
+  getWhatsAppLink: (msg?: string) => string;
+}) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  useEffect(() => {
+    if (!tour || tour.images.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % tour.images.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [tour]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      setCurrentImageIndex(0);
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
+
+  if (!isOpen || !tour) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      
+      {/* Modal - Horizontal no desktop */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[70vh] sm:h-[65vh] overflow-hidden animate-scale-in flex flex-col lg:flex-row">
+        {/* Botão Fechar */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-20 w-9 h-9 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors text-lg"
+        >
+          ✕
+        </button>
+
+        {/* Lado Esquerdo - Carrossel de Imagens */}
+        <div className="relative w-full lg:w-1/2 h-40 sm:h-52 lg:h-full overflow-hidden flex-shrink-0">
+          {tour.images.map((img, idx) => (
+            <img
+              key={img}
+              src={img}
+              alt={`${tour.name} ${idx + 1}`}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+                idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          ))}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-transparent lg:to-black/20" />
+          
+          {/* Indicadores */}
+          {tour.images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+              {tour.images.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentImageIndex(idx)}
+                  className={`rounded-full transition-all ${
+                    idx === currentImageIndex ? 'bg-white w-6 h-2' : 'bg-white/50 w-2 h-2'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Badge do nome - só no mobile */}
+          <div className="absolute bottom-4 left-4 lg:hidden">
+            <span className="inline-block bg-viva-blue text-white font-bold px-3 py-1.5 rounded-lg shadow-lg text-sm">
+              {tour.emoji} {tour.name}
+            </span>
+          </div>
+        </div>
+
+        {/* Lado Direito - Conteúdo */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 sm:p-6">
+            {/* Título - só no desktop */}
+            <div className="hidden lg:block mb-4">
+              <span className="inline-block bg-viva-blue text-white font-bold px-4 py-2 rounded-lg text-lg">
+                {tour.emoji} {tour.name}
+              </span>
+            </div>
+
+            {/* Preço e Duração */}
+            <div className="flex items-center justify-between mb-4 pb-4 border-b">
+              <div>
+                <p className="text-xs text-gray-500">{tour.priceLabel}</p>
+                <p className="text-2xl sm:text-3xl font-black text-viva-blue">
+                  R$ {tour.price}<span className="text-sm font-normal text-gray-500">/pessoa</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500">Duração</p>
+                <p className="text-lg sm:text-xl font-bold text-viva-blue-dark">{tour.duration}</p>
+              </div>
+            </div>
+
+            {/* Info rápida */}
+            <div className="flex flex-wrap gap-3 mb-4 text-xs">
+              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-medium">
+                📍 Saída: Barra da Lagoa
+              </span>
+              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-medium">
+                ⏱ Duração: {tour.duration}
+              </span>
+            </div>
+
+            {/* Descrição */}
+            <p className="text-gray-700 mb-4 leading-relaxed text-sm">{tour.description}</p>
+
+            {/* Atividades Inclusas */}
+            {tour.features.length > 0 && (
+              <div className="bg-viva-blue/5 rounded-xl p-3 sm:p-4 mb-4">
+                <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
+                  🎯 Atividades Inclusas
+                </h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {tour.features.map((feature, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                      <span className="text-base">{feature.icon}</span>
+                      <span>{feature.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Alimentação e Bebidas */}
+            <div className="bg-viva-orange/10 rounded-xl p-3 sm:p-4 mb-4">
+              <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
+                🍽 Alimentação e Bebidas
+              </h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span>🍹</span>
+                  <span>{tour.drinks}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span>🍢</span>
+                  <span>{tour.food}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Roteiro */}
+            {tour.spots.length > 0 && (
+              <div className="bg-viva-green/10 rounded-xl p-3 sm:p-4 mb-4">
+                <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
+                  🗺️ Locais Visitados
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {tour.spots.map((spot, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
+                      <span className="w-4 h-4 bg-viva-green text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                      {spot}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Informações importantes */}
+            <div className="bg-amber-50 rounded-xl p-3 sm:p-4 mb-4">
+              <h4 className="font-bold text-amber-800 mb-2 text-sm">
+                ⚠️ Informações Importantes
+              </h4>
+              <ul className="text-xs text-amber-900 space-y-0.5">
+                <li>• Documento de identificação obrigatório</li>
+                <li>• Traga protetor solar e toalha</li>
+                <li>• Não é permitido animais de estimação</li>
+                <li>• Passeio sujeito às condições climáticas</li>
+              </ul>
+            </div>
+
+            {/* Botão WhatsApp */}
+            <a
+              href={getWhatsAppLink(tour.whatsappMessage)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
+            >
+              <MessageCircle size={20} />
+              Reservar pelo WhatsApp
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Tours Section - ROTEIROS VIVA LA VIDA
 function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const [selectedTour, setSelectedTour] = useState<TourDetail | null>(null);
 
   // Lista de todos os passeios - pega do Firebase/Admin dinamicamente
   // Se não houver passeios cadastrados, usa passeios padrão
@@ -674,7 +897,7 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
 
               {/* Botão CTA */}
               <button
-                onClick={() => tour.id === 'panoramico' ? setShowReservationModal(true) : window.open(getWhatsAppLink(tour.whatsappMessage), '_blank')}
+                onClick={() => setSelectedTour(tour)}
                 className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-3 rounded-lg font-bold text-sm transition-colors"
               >
                 Ver Passeio
@@ -700,6 +923,14 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
       <PublicReservationModal
         isOpen={showReservationModal}
         onClose={() => setShowReservationModal(false)}
+      />
+
+      {/* Modal de Detalhes do Passeio */}
+      <TourDetailModal
+        tour={selectedTour}
+        isOpen={!!selectedTour}
+        onClose={() => setSelectedTour(null)}
+        getWhatsAppLink={getWhatsAppLink}
       />
     </section>
   );
@@ -741,12 +972,12 @@ function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 
         {/* Carrossel 3D */}
         <div className="relative max-w-6xl mx-auto">
-          <div className="flex items-center justify-center gap-2 sm:gap-4 h-[200px] sm:h-[300px] md:h-[400px]">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 h-[280px] sm:h-[350px] md:h-[450px]">
             
             {/* Imagem Esquerda */}
             <button
               onClick={() => setCurrentIndex(prevIndex)}
-              className="relative w-[20%] sm:w-[25%] h-[70%] rounded-xl overflow-hidden opacity-50 hover:opacity-70 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg"
+              className="relative w-[18%] sm:w-[22%] h-[65%] rounded-xl overflow-hidden opacity-40 hover:opacity-60 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg hidden sm:block"
             >
               <img
                 src={images[prevIndex]}
@@ -757,7 +988,7 @@ function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
             </button>
 
             {/* Imagem Central (Principal) */}
-            <div className="relative w-[55%] sm:w-[50%] h-full rounded-2xl overflow-hidden shadow-2xl z-10 ring-4 ring-white/20">
+            <div className="relative w-[90%] sm:w-[56%] h-full rounded-2xl overflow-hidden shadow-2xl z-10 ring-4 ring-white/20">
               <img
                 src={images[currentIndex]}
                 alt={`Galeria ${currentIndex + 1}`}
@@ -770,7 +1001,7 @@ function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
             {/* Imagem Direita */}
             <button
               onClick={() => setCurrentIndex(nextIndex)}
-              className="relative w-[20%] sm:w-[25%] h-[70%] rounded-xl overflow-hidden opacity-50 hover:opacity-70 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg"
+              className="relative w-[18%] sm:w-[22%] h-[65%] rounded-xl overflow-hidden opacity-40 hover:opacity-60 transition-all duration-500 transform scale-90 hover:scale-95 shadow-lg hidden sm:block"
             >
               <img
                 src={images[nextIndex]}
@@ -786,30 +1017,30 @@ function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
             <>
               <button
                 onClick={() => setCurrentIndex(prevIndex)}
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
+                className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
               >
-                <ChevronLeft size={24} />
+                <ChevronLeft size={14} className="sm:w-4 sm:h-4" />
               </button>
               <button
                 onClick={() => setCurrentIndex(nextIndex)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors"
               >
-                <ChevronRight size={24} />
+                <ChevronRight size={14} className="sm:w-4 sm:h-4" />
               </button>
             </>
           )}
 
           {/* Indicadores */}
           {images.length > 1 && (
-            <div className="flex justify-center gap-2 mt-6">
+            <div className="flex justify-center gap-[3px] sm:gap-1 mt-3 sm:mt-4">
               {images.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentIndex(index)}
                   className={`transition-all duration-300 rounded-full ${
                     index === currentIndex 
-                      ? 'bg-viva-yellow w-8 h-2' 
-                      : 'bg-white/30 hover:bg-white/50 w-2 h-2'
+                      ? 'bg-viva-yellow w-3 sm:w-5 h-1 sm:h-1.5' 
+                      : 'bg-white/30 hover:bg-white/50 w-1 sm:w-1.5 h-1 sm:h-1.5'
                   }`}
                 />
               ))}
