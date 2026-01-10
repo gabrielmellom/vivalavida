@@ -209,7 +209,7 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
   return (
     <>
       {/* Fixed Video Background - Fica fixo enquanto o conteúdo rola */}
-      <div className="fixed inset-0 w-full h-screen z-0">
+      <div className="fixed inset-0 w-screen max-w-[100vw] h-[100svh] overflow-hidden z-0">
         {/* Fallback gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-viva-blue-navy via-viva-blue-dark to-viva-teal" />
         
@@ -275,6 +275,12 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
                 <MessageCircle size={24} />
                 {t('hero.ctaWhatsapp')}
               </a>
+              <a
+                href={getWhatsAppLink(t('whatsapp.book'))}
+                className="bg-viva-yellow text-viva-blue-dark px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-viva-yellow/30 active:scale-95 transition-all hover:brightness-105"
+              >
+                {t('nav.bookNow')}
+              </a>
               <a 
                 href="#passeios"
                 className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
@@ -321,6 +327,9 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 
 // Features Section - Chamada para os roteiros (com dados dinâmicos)
 function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string; t: (key: string) => string }) {
+  const [showOptions, setShowOptions] = useState(false);
+  const [selectedTour, setSelectedTour] = useState<TourDetail | null>(null);
+
   // Encontrar passeios ou usar defaults
   const tourPanoramico = tours.find(t => t.type === 'panoramico');
   const tourDesembarque = tours.find(t => t.type === 'desembarque');
@@ -328,6 +337,43 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
   // Preços atuais
   const precoPanoramico = tourPanoramico?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.panoramico.currentPrice;
   const precoDesembarque = tourDesembarque?.pricing.find(p => p.isCurrent)?.adultPrice || DEFAULT_TOURS.desembarque.currentPrice;
+
+  const toDetail = (tour: TourConfig | null, fallback: 'panoramico' | 'desembarque'): TourDetail => {
+    const fb = DEFAULT_TOURS[fallback];
+    const currentPrice = tour?.pricing?.find(p => p.isCurrent && p.isActive) || tour?.pricing?.find(p => p.isActive);
+    const price = currentPrice?.adultPrice ?? fb.currentPrice;
+    const priceLabel = currentPrice?.label ?? 'A partir de';
+
+    const name =
+      fallback === 'panoramico'
+        ? tour?.name || 'Ilha do Campeche com Atividades (Sem Desembarque)'
+        : tour?.name || 'Passeio com Desembarque na Ilha do Campeche';
+
+    return {
+      id: tour?.id || `${fallback}-default`,
+      name,
+      subtitle: tour?.subtitle || 'Ilha do Campeche',
+      duration: tour?.duration || fb.duration,
+      images: tour?.images?.length ? tour.images : ['/panoramico1.jpeg', '/panoramico2.jpeg', '/panoramico3.jpeg', '/panoramico4.jpeg'],
+      description:
+        tour?.description ||
+        (fallback === 'panoramico'
+          ? 'Passeio até a Ilha do Campeche com atividades a bordo, comida e bebida inclusos. Sem desembarque na praia.'
+          : 'Desembarque na Ilha do Campeche e aproveite algumas horas em terra para explorar praias de areia branca e águas cristalinas.'),
+      price,
+      priceLabel,
+      emoji: tour?.emoji || (fallback === 'panoramico' ? '🚤' : '🏝️'),
+      features: tour?.features || [],
+      drinks: tour?.drinks || fb.drinks,
+      food: tour?.food || fb.food,
+      spots: tour?.spots || fb.spots,
+      isHighlight: !!tour?.isHighlighted,
+      whatsappMessage: tour?.whatsappMessage || `Olá! Quero reservar o passeio: ${name}`,
+    };
+  };
+
+  const campechePanoramico = toDetail(tourPanoramico || null, 'panoramico');
+  const campecheDesembarque = toDetail(tourDesembarque || null, 'desembarque');
 
   return (
     <section className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
@@ -340,81 +386,92 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
       </div>
       
       <div className="container mx-auto px-3 sm:px-4 relative z-20">
-        {/* Título grandioso */}
         <div className="text-center">
-          {/* Badge da ilha */}
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold px-4 sm:px-6 py-2 rounded-full text-sm sm:text-base mb-4 sm:mb-6">
             <span>🏝️</span>
-            <span>{t('features.badge')}</span>
+            <span>ILHA DO CAMPECHE</span>
           </div>
-          
-          {/* Título principal */}
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-4 sm:mb-6 leading-tight">
-            {t('features.title1')} <span className="text-viva-yellow">{t('features.title2')}</span><br/>
-            {t('features.title3')}
+
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4 leading-tight">
+            Quer ir para a <span className="text-viva-yellow">Ilha do Campeche</span>?
           </h2>
-          
-          {/* Subtítulo */}
+
           <p className="text-white/80 text-base sm:text-xl max-w-2xl mx-auto mb-6 sm:mb-8">
-            {tours.length > 0 ? `${tours.length} ${t('features.subtitle')}` : t('features.twoOptions')}
+            Temos <strong className="text-white">2 opções</strong> de passeio para a ilha. Escolha a ideal pra você:
           </p>
-          
-          {/* Cards dos roteiros - Dinâmico */}
-          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 max-w-3xl mx-auto mb-8 sm:mb-10">
-            {/* Tour Panorâmico */}
-            <div className="relative bg-white/20 backdrop-blur-sm border-2 border-white/40 rounded-2xl p-5 sm:p-6">
-              {tourPanoramico?.isHighlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-viva-orange text-white font-black text-xs px-3 py-1 rounded-full shadow-lg">
-                  ⭐ {t('routes.recommended').replace('⭐ ', '')}
-                </div>
-              )}
-              <span className="text-4xl sm:text-5xl block mb-3">{tourPanoramico?.emoji || '🚤'}</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourPanoramico?.name || t('features.panoramic')}</h3>
-              <p className="text-white/70 text-sm mb-3">{tourPanoramico?.duration || '5h'} {t('features.tripToIsland')}</p>
-              <p className="text-white/90 text-sm">{t('features.panoramicDesc')}</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">{t('features.fromPrice')} <span className="text-viva-yellow">R${precoPanoramico}</span></p>
-            </div>
-            
-            {/* Com Desembarque */}
-            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 sm:p-6">
-              <span className="text-4xl sm:text-5xl block mb-3">{tourDesembarque?.emoji || '🏝️'}</span>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-2">{tourDesembarque?.name || t('features.landing')}</h3>
-              <p className="text-white/70 text-sm mb-3">{t('features.landOnIsland')}</p>
-              <p className="text-white/90 text-sm">{t('features.landingDesc')}</p>
-              <p className="text-white font-black text-xl sm:text-2xl mt-3">{t('features.fromPrice')} <span className="text-viva-yellow">R${precoDesembarque}</span></p>
-            </div>
-          </div>
-          
-          {/* Tags de público */}
-          <p className="text-white/60 text-sm mb-3">{t('features.perfectFor')}</p>
-          <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
-            <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              {t('features.babies')}
-            </span>
-            <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              {t('features.children')}
-            </span>
-            <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              {t('features.families')}
-            </span>
-            <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              {t('features.seniors')}
-            </span>
-            <span className="bg-white/10 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium">
-              {t('features.groups')}
-            </span>
-          </div>
-          
-          {/* CTA */}
-          <a 
-            href="#passeios"
-            className="inline-flex items-center gap-2 bg-white text-viva-blue-dark font-black px-6 sm:px-10 py-3 sm:py-4 rounded-full text-base sm:text-xl shadow-2xl hover:scale-105 transition-transform"
+
+          <button
+            type="button"
+            onClick={() => setShowOptions((v) => !v)}
+            className="inline-flex items-center gap-3 bg-white text-viva-blue-dark font-black px-6 sm:px-10 py-3 sm:py-4 rounded-full text-base sm:text-xl shadow-2xl hover:scale-105 transition-transform"
           >
-            <span>👇</span>
-            {t('features.seeDetails')}
-          </a>
+            <span>✨</span>
+            {showOptions ? 'Ocultar opções' : 'Quero ir na Ilha do Campeche'}
+          </button>
+
+          {/* Opções (com animação) */}
+          <div
+            className={[
+              'w-full max-w-5xl mx-auto text-left overflow-hidden origin-top transition-all duration-500 ease-out',
+              showOptions
+                ? 'mt-8 sm:mt-10 opacity-100 translate-y-0 scale-100 max-h-[2000px]'
+                : 'mt-0 opacity-0 -translate-y-2 scale-[0.98] max-h-0 pointer-events-none',
+            ].join(' ')}
+          >
+            <div
+              className={[
+                'grid sm:grid-cols-2 gap-5 sm:gap-6',
+                showOptions ? 'delay-75' : '',
+              ].join(' ')}
+            >
+              {[
+                { tour: campechePanoramico, badge: 'SEM DESEMBARQUE', price: precoPanoramico },
+                { tour: campecheDesembarque, badge: 'COM DESEMBARQUE', price: precoDesembarque },
+              ].map(({ tour, badge, price }) => (
+                <div key={tour.id} className="bg-white rounded-2xl shadow-lg border border-white/20 overflow-hidden">
+                  <div className="relative aspect-square">
+                    <CardCarousel images={tour.images} altText={tour.name} />
+                    <div className="absolute top-3 left-3">
+                      <span className="inline-flex items-center gap-2 bg-viva-blue text-white font-black text-xs px-3 py-1.5 rounded-full shadow-lg">
+                        {tour.emoji} {badge}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 sm:p-5">
+                    <div className="inline-block w-full text-center py-2.5 px-4 rounded-lg font-bold text-white text-sm bg-viva-blue mb-3">
+                      {tour.name}
+                    </div>
+
+                    <div className="space-y-1.5 text-sm text-gray-700 mb-3">
+                      <p><strong className="text-viva-blue-dark">Saída:</strong> Barra da Lagoa</p>
+                      <p><strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}</p>
+                      <p className="font-black text-lg text-viva-blue">
+                        A partir de <span className="text-viva-blue-dark">R${price}</span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTour(tour)}
+                      className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-3 rounded-lg font-bold text-sm transition-colors"
+                    >
+                      Ver detalhes do passeio
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+
+      <TourDetailModal
+        tour={selectedTour}
+        isOpen={!!selectedTour}
+        onClose={() => setSelectedTour(null)}
+        getWhatsAppLink={getWhatsAppLink}
+      />
       
     </section>
   );
@@ -1104,12 +1161,12 @@ function Testimonials({ siteConfig, t }: SharedProps) {
           </h2>
         </div>
 
-        {/* Scroll horizontal no mobile */}
-        <div className="flex overflow-x-auto sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 sm:mb-12 -mx-4 px-4 sm:mx-0 sm:px-0 pb-4 sm:pb-0 snap-x snap-mandatory scrollbar-hide">
+        {/* Cards (sem scroll horizontal no mobile) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {testimonials.map((testimonial, index) => (
             <div 
               key={index}
-              className="shrink-0 w-[260px] sm:w-auto snap-center bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg"
+              className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg"
             >
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-viva-orange to-viva-yellow rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-lg">
@@ -1387,14 +1444,6 @@ function Footer({ siteConfig, getWhatsAppLink, t }: SharedProps) {
         </div>
       </div>
 
-      {/* Floating WhatsApp Button - MAIOR no mobile */}
-      <a 
-        href={getWhatsAppLink()}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 bg-green-500 text-white w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform pulse-ring"
-        aria-label="WhatsApp"
-      >
-        <MessageCircle size={28} className="sm:w-8 sm:h-8" />
-      </a>
     </footer>
   );
 }
@@ -1488,6 +1537,7 @@ export default function Home() {
         <FinalCTA {...sharedProps} />
         <Footer {...sharedProps} />
       </main>
+
     </>
   );
 }
