@@ -276,7 +276,7 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
                 {t('hero.ctaWhatsapp')}
               </a>
               <a
-                href={getWhatsAppLink(t('whatsapp.book'))}
+                href="#passeios"
                 className="bg-viva-yellow text-viva-blue-dark px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-viva-yellow/30 active:scale-95 transition-all hover:brightness-105"
               >
                 {t('nav.bookNow')}
@@ -327,7 +327,6 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 
 // Features Section - Chamada para os roteiros (com dados dinâmicos)
 function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string; t: (key: string) => string }) {
-  const [showOptions, setShowOptions] = useState(false);
   const [selectedTour, setSelectedTour] = useState<TourDetail | null>(null);
 
   // Encontrar passeios ou usar defaults
@@ -376,7 +375,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
   const campecheDesembarque = toDetail(tourDesembarque || null, 'desembarque');
 
   return (
-    <section className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
+    <section id="passeios" className="py-12 sm:py-20 bg-gradient-to-br from-viva-blue-dark via-viva-blue to-viva-blue-dark relative overflow-hidden z-10">
       {/* Background decorativo */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute top-10 left-10 text-8xl">⭐</div>
@@ -400,53 +399,32 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
             Temos <strong className="text-white">2 opções</strong> de passeio para a ilha. Escolha a ideal pra você:
           </p>
 
-          <button
-            type="button"
-            onClick={() => setShowOptions((v) => !v)}
-            className="inline-flex items-center gap-3 bg-white text-viva-blue-dark font-black px-6 sm:px-10 py-3 sm:py-4 rounded-full text-base sm:text-xl shadow-2xl hover:scale-105 transition-transform"
-          >
-            <span>✨</span>
-            {showOptions ? 'Ocultar opções' : 'Quero ir na Ilha do Campeche'}
-          </button>
-
-          {/* Opções (com animação) */}
-          <div
-            className={[
-              'w-full max-w-5xl mx-auto text-left overflow-hidden origin-top transition-all duration-500 ease-out',
-              showOptions
-                ? 'mt-8 sm:mt-10 opacity-100 translate-y-0 scale-100 max-h-[2000px]'
-                : 'mt-0 opacity-0 -translate-y-2 scale-[0.98] max-h-0 pointer-events-none',
-            ].join(' ')}
-          >
-            <div
-              className={[
-                'grid sm:grid-cols-2 gap-5 sm:gap-6',
-                showOptions ? 'delay-75' : '',
-              ].join(' ')}
-            >
+          {/* Opções sempre visíveis */}
+          <div className="w-full max-w-5xl mx-auto text-left mt-8 sm:mt-10">
+            <div className="grid grid-cols-2 gap-3 sm:gap-5 md:gap-6">
               {[
                 { tour: campechePanoramico, badge: 'SEM DESEMBARQUE', price: precoPanoramico },
                 { tour: campecheDesembarque, badge: 'COM DESEMBARQUE', price: precoDesembarque },
               ].map(({ tour, badge, price }) => (
-                <div key={tour.id} className="bg-white rounded-2xl shadow-lg border border-white/20 overflow-hidden">
+                <div key={tour.id} className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-white/20 overflow-hidden">
                   <div className="relative aspect-square">
                     <CardCarousel images={tour.images} altText={tour.name} />
-                    <div className="absolute top-3 left-3">
-                      <span className="inline-flex items-center gap-2 bg-viva-blue text-white font-black text-xs px-3 py-1.5 rounded-full shadow-lg">
-                        {tour.emoji} {badge}
+                    <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
+                      <span className="inline-flex items-center gap-1 sm:gap-2 bg-viva-blue text-white font-black text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-lg">
+                        <span className="hidden sm:inline">{tour.emoji}</span> {badge}
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-4 sm:p-5">
-                    <div className="inline-block w-full text-center py-2.5 px-4 rounded-lg font-bold text-white text-sm bg-viva-blue mb-3">
+                  <div className="p-2 sm:p-4 md:p-5">
+                    <div className="inline-block w-full text-center py-1.5 sm:py-2.5 px-2 sm:px-4 rounded-lg font-bold text-white text-xs sm:text-sm bg-viva-blue mb-2 sm:mb-3">
                       {tour.name}
                     </div>
 
-                    <div className="space-y-1.5 text-sm text-gray-700 mb-3">
-                      <p><strong className="text-viva-blue-dark">Saída:</strong> Barra da Lagoa</p>
-                      <p><strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}</p>
-                      <p className="font-black text-lg text-viva-blue">
+                    <div className="space-y-1 sm:space-y-1.5 text-xs sm:text-sm text-gray-700 mb-2 sm:mb-3">
+                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Saída:</strong> Barra da Lagoa</p>
+                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}</p>
+                      <p className="font-black text-sm sm:text-lg text-viva-blue">
                         A partir de <span className="text-viva-blue-dark">R${price}</span>
                       </p>
                     </div>
@@ -454,9 +432,9 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
                     <button
                       type="button"
                       onClick={() => setSelectedTour(tour)}
-                      className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-3 rounded-lg font-bold text-sm transition-colors"
+                      className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-2 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-colors"
                     >
-                      Ver detalhes do passeio
+                      Ver detalhes
                     </button>
                   </div>
                 </div>

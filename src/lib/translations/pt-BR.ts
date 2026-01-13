@@ -14,7 +14,7 @@ export const translations: Record<string, string> = {
   'hero.title1': 'Viva',
   'hero.title2': 'Momentos',
   'hero.title3': 'Inesquecíveis',
-  'hero.title4': 'em Florianópolis!',
+  'hero.title4': 'na Ilha do Campeche!',
   'hero.subtitle': 'Embarque no',
   'hero.boatName': 'Barco Viva La Vida',
   'hero.and': 'e conheça a',
