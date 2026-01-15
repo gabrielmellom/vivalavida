@@ -28,6 +28,7 @@ import {
   LogIn
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import PublicReservationModal from '@/components/PublicReservationModal';
 import LanguageSelector from '@/components/LanguageSelector';
 import { useSiteConfig, DEFAULT_SITE_CONFIG, DEFAULT_TOURS } from '@/lib/useSiteConfig';
@@ -403,10 +404,18 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
           <div className="w-full max-w-5xl mx-auto text-left mt-8 sm:mt-10">
             <div className="grid grid-cols-2 gap-3 sm:gap-5 md:gap-6">
               {[
-                { tour: campechePanoramico, badge: 'SEM DESEMBARQUE', price: precoPanoramico },
-                { tour: campecheDesembarque, badge: 'COM DESEMBARQUE', price: precoDesembarque },
-              ].map(({ tour, badge, price }) => (
-                <div key={tour.id} className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-white/20 overflow-hidden">
+                { tour: campechePanoramico, badge: 'SEM DESEMBARQUE', price: precoPanoramico, isRecommended: true },
+                { tour: campecheDesembarque, badge: 'COM DESEMBARQUE', price: precoDesembarque, isRecommended: false },
+              ].map(({ tour, badge, price, isRecommended }) => (
+                <div key={tour.id} className={`bg-white rounded-xl sm:rounded-2xl shadow-lg relative ${isRecommended ? 'ring-4 sm:ring-[6px] ring-yellow-400 ring-offset-2 sm:ring-offset-4 ring-offset-yellow-200 shadow-[0_0_20px_rgba(250,204,21,0.5)] overflow-visible' : 'border border-white/20 overflow-hidden'}`}>
+                  {/* Badge Super Recomendado - Topo Sobreposto na Borda */}
+                  {isRecommended && (
+                    <div className="absolute -top-5 sm:-top-6 left-1/2 -translate-x-1/2 z-30">
+                      <div className="bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 text-amber-900 font-black text-[10px] sm:text-sm px-3 sm:px-5 py-1.5 sm:py-2 rounded-full shadow-2xl animate-pulse border-2 border-white whitespace-nowrap">
+                        ⭐ MAIS VENDIDO ⭐
+                      </div>
+                    </div>
+                  )}
                   <div className="relative aspect-square">
                     <CardCarousel images={tour.images} altText={tour.name} />
                     <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
@@ -603,6 +612,11 @@ function TourDetailModal({
   getWhatsAppLink: (msg?: string) => string;
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!tour || tour.images.length <= 1) return;
@@ -622,15 +636,15 @@ function TourDetailModal({
     return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
 
-  if (!isOpen || !tour) return null;
+  if (!isOpen || !tour || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       
-      {/* Modal - Horizontal no desktop */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[70vh] sm:h-[65vh] overflow-hidden animate-scale-in flex flex-col lg:flex-row">
+      {/* Modal - layout vertical único (mobile-first) */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl sm:max-w-3xl md:max-w-4xl max-h-[90vh] overflow-y-auto animate-scale-in">
         {/* Botão Fechar */}
         <button
           onClick={onClose}
@@ -639,8 +653,8 @@ function TourDetailModal({
           ✕
         </button>
 
-        {/* Lado Esquerdo - Carrossel de Imagens */}
-        <div className="relative w-full lg:w-1/2 h-40 sm:h-52 lg:h-full overflow-hidden flex-shrink-0">
+        {/* Imagem principal */}
+        <div className="relative w-full h-52 sm:h-64 md:h-72 overflow-hidden rounded-t-2xl">
           {tour.images.map((img, idx) => (
             <img
               key={img}
@@ -651,7 +665,7 @@ function TourDetailModal({
               }`}
             />
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-transparent lg:to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           
           {/* Indicadores */}
           {tour.images.length > 1 && (
@@ -661,136 +675,130 @@ function TourDetailModal({
                   key={idx}
                   onClick={() => setCurrentImageIndex(idx)}
                   className={`rounded-full transition-all ${
-                    idx === currentImageIndex ? 'bg-white w-6 h-2' : 'bg-white/50 w-2 h-2'
+                    idx === currentImageIndex ? 'bg-white w-6 h-2' : 'bg-white/60 w-2 h-2'
                   }`}
                 />
               ))}
             </div>
           )}
 
-          {/* Badge do nome - só no mobile */}
-          <div className="absolute bottom-4 left-4 lg:hidden">
+          {/* Nome do passeio */}
+          <div className="absolute bottom-4 left-4">
             <span className="inline-block bg-viva-blue text-white font-bold px-3 py-1.5 rounded-lg shadow-lg text-sm">
               {tour.emoji} {tour.name}
             </span>
           </div>
         </div>
 
-        {/* Lado Direito - Conteúdo */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-5 sm:p-6">
-            {/* Título - só no desktop */}
-            <div className="hidden lg:block mb-4">
-              <span className="inline-block bg-viva-blue text-white font-bold px-4 py-2 rounded-lg text-lg">
-                {tour.emoji} {tour.name}
-              </span>
-            </div>
-
-            {/* Preço e Duração */}
-            <div className="flex items-center justify-between mb-4 pb-4 border-b">
+        {/* Conteúdo em coluna única */}
+        <div className="p-4 sm:p-6 space-y-4">
+          {/* Preço + duração + info rápida */}
+          <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-gradient-to-r from-viva-blue/5 to-white">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-xs text-gray-500">{tour.priceLabel}</p>
+                <p className="text-[11px] text-gray-500">{tour.priceLabel}</p>
                 <p className="text-2xl sm:text-3xl font-black text-viva-blue">
                   R$ {tour.price}<span className="text-sm font-normal text-gray-500">/pessoa</span>
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">Duração</p>
+                <p className="text-[11px] text-gray-500">Duração</p>
                 <p className="text-lg sm:text-xl font-bold text-viva-blue-dark">{tour.duration}</p>
               </div>
             </div>
-
-            {/* Info rápida */}
-            <div className="flex flex-wrap gap-3 mb-4 text-xs">
-              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-medium">
+            <div className="flex flex-wrap gap-2 mt-3 text-xs">
+              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
                 📍 Saída: Barra da Lagoa
               </span>
-              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-medium">
-                ⏱ Duração: {tour.duration}
+              <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
+                ⏱ {tour.duration}
               </span>
             </div>
+          </div>
 
-            {/* Descrição */}
-            <p className="text-gray-700 mb-4 leading-relaxed text-sm">{tour.description}</p>
+          {/* Descrição curta */}
+          <p className="text-gray-700 text-sm leading-relaxed">{tour.description}</p>
 
-            {/* Atividades Inclusas */}
-            {tour.features.length > 0 && (
-              <div className="bg-viva-blue/5 rounded-xl p-3 sm:p-4 mb-4">
-                <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
-                  🎯 Atividades Inclusas
-                </h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {tour.features.map((feature, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                      <span className="text-base">{feature.icon}</span>
-                      <span>{feature.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Alimentação e Bebidas */}
-            <div className="bg-viva-orange/10 rounded-xl p-3 sm:p-4 mb-4">
-              <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
-                🍽 Alimentação e Bebidas
+          {/* Atividades Inclusas */}
+          {tour.features.length > 0 && (
+            <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-blue/5">
+              <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
+                🎯 Atividades Inclusas
               </h4>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <span>🍹</span>
-                  <span>{tour.drinks}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <span>🍢</span>
-                  <span>{tour.food}</span>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                {tour.features.map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="text-base">{feature.icon}</span>
+                    <span>{feature.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
+          )}
 
-            {/* Roteiro */}
-            {tour.spots.length > 0 && (
-              <div className="bg-viva-green/10 rounded-xl p-3 sm:p-4 mb-4">
-                <h4 className="font-bold text-viva-blue-dark mb-3 text-sm">
-                  🗺️ Locais Visitados
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {tour.spots.map((spot, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
-                      <span className="w-4 h-4 bg-viva-green text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
-                      {spot}
-                    </div>
-                  ))}
-                </div>
+          {/* Alimentação e bebidas */}
+          <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-orange/10">
+            <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
+              🍽 Alimentação e Bebidas
+            </h4>
+            <div className="space-y-1.5 text-sm text-gray-700">
+              <div className="flex items-center gap-2">
+                <span>🍹</span>
+                <span>{tour.drinks}</span>
               </div>
-            )}
-
-            {/* Informações importantes */}
-            <div className="bg-amber-50 rounded-xl p-3 sm:p-4 mb-4">
-              <h4 className="font-bold text-amber-800 mb-2 text-sm">
-                ⚠️ Informações Importantes
-              </h4>
-              <ul className="text-xs text-amber-900 space-y-0.5">
-                <li>• Documento de identificação obrigatório</li>
-                <li>• Traga protetor solar e toalha</li>
-                <li>• Não é permitido animais de estimação</li>
-                <li>• Passeio sujeito às condições climáticas</li>
-              </ul>
+              <div className="flex items-center gap-2">
+                <span>🍢</span>
+                <span>{tour.food}</span>
+              </div>
             </div>
+          </div>
 
-            {/* Botão WhatsApp */}
-            <a
-              href={getWhatsAppLink(tour.whatsappMessage)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
-            >
-              <MessageCircle size={20} />
-              Reservar pelo WhatsApp
-            </a>
+          {/* Roteiro */}
+          {tour.spots.length > 0 && (
+            <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-green/10">
+              <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
+                🗺️ Locais Visitados
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {tour.spots.map((spot, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
+                    <span className="w-4 h-4 bg-viva-green text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                    {spot}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Informações importantes */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
+            <h4 className="font-bold text-amber-800 mb-2 text-sm flex items-center gap-2">
+              ⚠️ Informações Importantes
+            </h4>
+            <ul className="text-xs text-amber-900 space-y-1">
+              <li>• Documento de identificação obrigatório</li>
+              <li>• Traga protetor solar e toalha</li>
+              <li>• Não é permitido animais de estimação</li>
+              <li>• Passeio sujeito às condições climáticas</li>
+            </ul>
           </div>
         </div>
+
+        {/* CTA fixo no rodapé do modal */}
+        <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-100 p-3 sm:p-4 rounded-b-2xl">
+          <a
+            href={getWhatsAppLink(tour.whatsappMessage)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
+          >
+            <MessageCircle size={20} />
+            Reservar pelo WhatsApp
+          </a>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
