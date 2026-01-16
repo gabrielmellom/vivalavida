@@ -5,7 +5,7 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
-import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp } from 'lucide-react';
+import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -2271,6 +2271,40 @@ function BoatSeatsModal({
   const availableSeats = boat.seatsTotal - boat.seatsTaken;
   const occupancyPercent = Math.round((boat.seatsTaken / boat.seatsTotal) * 100);
 
+  // Função para baixar CSV
+  const downloadCSV = () => {
+    const headers = ['#', 'Nome', 'Telefone', 'WhatsApp', 'Email', 'Documento', 'Endereço', 'Valor Total', 'Pago', 'Pendente', 'Forma Pagamento', 'Tipo Passeio'];
+    const rows = sortedReservations.map((r, index) => [
+      index + 1,
+      r.customerName || '',
+      r.phone || '',
+      r.whatsapp || '',
+      r.email || '',
+      r.document || '',
+      r.address || '',
+      r.totalAmount.toFixed(2),
+      r.amountPaid.toFixed(2),
+      r.amountDue.toFixed(2),
+      r.paymentMethod.toUpperCase(),
+      r.escunaType === 'com-desembarque' ? 'Com Desembarque' : 'Sem Desembarque'
+    ]);
+    
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.join(';'))
+    ].join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `reservas_${boat.name}_${formatDate(boat.date)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Criar mapa de cores para grupos
   const groupColorMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -2385,17 +2419,29 @@ function BoatSeatsModal({
       {/* Header Fixo */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 shrink-0">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{boat.name}</h1>
-              <p className="text-sm text-gray-500">{formatDate(boat.date)} • {boat.seatsTaken}/{boat.seatsTotal} passageiros</p>
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900">{boat.name}</h1>
+              <p className="text-xs sm:text-sm text-gray-500">{formatDate(boat.date)} • {boat.seatsTaken}/{boat.seatsTotal} passageiros</p>
             </div>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-viva-blue text-white text-sm font-medium rounded-lg hover:bg-viva-blue-dark transition"
-            >
-              Fechar
-            </button>
+            <div className="flex gap-2">
+              {activeReservations.length > 0 && (
+                <button
+                  onClick={downloadCSV}
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-500 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-green-600 transition"
+                >
+                  <Download size={16} />
+                  <span className="hidden sm:inline">Baixar Lista</span>
+                  <span className="sm:hidden">CSV</span>
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="px-3 sm:px-4 py-2 bg-viva-blue text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-viva-blue-dark transition"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
           
           {/* Resumo Simples */}
@@ -2431,14 +2477,84 @@ function BoatSeatsModal({
                 </h2>
               </div>
               
-              {/* Tabela Simples */}
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {/* Versão Mobile - Cards */}
+              <div className="md:hidden space-y-3">
+                {sortedReservations.map((reservation, index) => {
+                  const groupSize = reservation.groupId ? groupCounts.get(reservation.groupId) || 0 : 0;
+                  const isGroupMember = groupSize > 1;
+                  const groupTagColor = getGroupTagColor(reservation.groupId);
+                  
+                  return (
+                    <div key={reservation.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-gray-400">#{index + 1}</span>
+                            <h3 className="text-base font-bold text-gray-900">{reservation.customerName || 'Sem nome'}</h3>
+                            {isGroupMember && (
+                              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-bold rounded-full ${groupTagColor}`}>
+                                G{groupSize}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">📞 {reservation.phone || '-'}</p>
+                          {reservation.email && (
+                            <p className="text-xs text-gray-500">✉️ {reservation.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-gray-50 rounded-lg p-2">
+                          <p className="text-xs text-gray-500 mb-0.5">Valor Total</p>
+                          <p className="text-sm font-bold text-gray-900">R$ {reservation.totalAmount.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-2">
+                          <p className="text-xs text-gray-500 mb-0.5">Status</p>
+                          {reservation.amountDue > 0 ? (
+                            <p className="text-sm font-bold text-amber-600">Falta R$ {reservation.amountDue.toFixed(2)}</p>
+                          ) : (
+                            <p className="text-sm font-bold text-green-600">✓ Pago</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setReservationToMove(reservation);
+                            setShowMoveModal(true);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                        >
+                          <Edit2 size={14} />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Cancelar reserva de ${reservation.customerName}?`)) {
+                              onCancelReservation(reservation.id);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                        >
+                          <Trash2 size={14} />
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Versão Desktop - Tabela */}
+              <div className="hidden md:block bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">#</th>
                       <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Passageiro</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 hidden sm:table-cell">Contato</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Contato</th>
                       <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Valor</th>
                       <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Status</th>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Ações</th>
@@ -2498,17 +2614,6 @@ function BoatSeatsModal({
                                 title="Editar"
                               >
                                 <Edit2 size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const link = `${window.location.origin}/confirmacao/${reservation.id}`;
-                                  navigator.clipboard.writeText(link);
-                                  alert('Link copiado!');
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition"
-                                title="Copiar link"
-                              >
-                                <FileText size={16} />
                               </button>
                               <button
                                 onClick={() => {

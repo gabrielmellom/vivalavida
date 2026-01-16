@@ -42,6 +42,7 @@ interface SharedProps {
   getWhatsAppLink: (message?: string) => string;
   getCurrentPrice: (tour: TourConfig) => { adult: number; child: number; label: string } | null;
   t: (key: string) => string;
+  openReservationModal?: (tourType?: 'panoramico' | 'desembarque') => void;
 }
 
 // Header Component
@@ -206,7 +207,7 @@ function Header({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 }
 
 // Hero Section with Fixed Video Background
-function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
+function Hero({ siteConfig, getWhatsAppLink, t, openReservationModal }: SharedProps & { openReservationModal?: (tourType?: 'panoramico' | 'desembarque') => void }) {
   return (
     <>
       {/* Fixed Video Background - Fica fixo enquanto o conteúdo rola */}
@@ -276,12 +277,12 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
                 <MessageCircle size={24} />
                 {t('hero.ctaWhatsapp')}
               </a>
-              <a
-                href="#passeios"
+              <button
+                onClick={() => openReservationModal?.()}
                 className="bg-viva-yellow text-viva-blue-dark px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-viva-yellow/30 active:scale-95 transition-all hover:brightness-105"
               >
                 {t('nav.bookNow')}
-              </a>
+              </button>
               <a 
                 href="#passeios"
                 className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
@@ -327,7 +328,7 @@ function Hero({ siteConfig, getWhatsAppLink, t }: SharedProps) {
 }
 
 // Features Section - Chamada para os roteiros (com dados dinâmicos)
-function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string; t: (key: string) => string }) {
+function Features({ tours, getWhatsAppLink, t, openReservationModal }: { tours: TourConfig[]; getWhatsAppLink: (msg?: string) => string; t: (key: string) => string; openReservationModal: (tourType?: 'panoramico' | 'desembarque') => void }) {
   const [selectedTour, setSelectedTour] = useState<TourDetail | null>(null);
 
   // Encontrar passeios ou usar defaults
@@ -441,7 +442,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
                     <button
                       type="button"
                       onClick={() => setSelectedTour(tour)}
-                      className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-2 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-colors"
+                      className="w-full bg-viva-yellow hover:bg-viva-yellow/90 text-viva-blue-dark py-2 sm:py-3 rounded-lg font-bold text-xs sm:text-sm transition-colors"
                     >
                       Ver detalhes
                     </button>
@@ -458,6 +459,7 @@ function Features({ tours, getWhatsAppLink, t }: { tours: TourConfig[]; getWhats
         isOpen={!!selectedTour}
         onClose={() => setSelectedTour(null)}
         getWhatsAppLink={getWhatsAppLink}
+        openReservationModal={openReservationModal}
       />
       
     </section>
@@ -604,12 +606,14 @@ function TourDetailModal({
   tour, 
   isOpen, 
   onClose, 
-  getWhatsAppLink 
+  getWhatsAppLink,
+  openReservationModal
 }: { 
   tour: TourDetail | null; 
   isOpen: boolean; 
   onClose: () => void;
   getWhatsAppLink: (msg?: string) => string;
+  openReservationModal?: (tourType?: 'panoramico' | 'desembarque') => void;
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -786,15 +790,28 @@ function TourDetailModal({
 
         {/* CTA fixo no rodapé do modal */}
         <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-100 p-3 sm:p-4 rounded-b-2xl">
-          <a
-            href={getWhatsAppLink(tour.whatsappMessage)}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => {
+              if (!openReservationModal) {
+                console.error('openReservationModal não está disponível');
+                return;
+              }
+              // Determinar tipo de passeio baseado no nome ou emoji
+              const tourType = tour.emoji === '🏝️' || tour.name.toLowerCase().includes('desembarque') 
+                ? 'desembarque' 
+                : 'panoramico';
+              // Primeiro abre o modal de reserva
+              openReservationModal(tourType);
+              // Depois fecha o modal de detalhes
+              setTimeout(() => {
+                onClose();
+              }, 50);
+            }}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
           >
             <MessageCircle size={20} />
-            Reservar pelo WhatsApp
-          </a>
+            Reservar agora
+          </button>
         </div>
       </div>
     </div>,
@@ -803,7 +820,7 @@ function TourDetailModal({
 }
 
 // Tours Section - ROTEIROS VIVA LA VIDA
-function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
+function Tours({ tours, getWhatsAppLink, getCurrentPrice, t, openReservationModal }: SharedProps) {
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [selectedTour, setSelectedTour] = useState<TourDetail | null>(null);
 
@@ -941,7 +958,7 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
               {/* Botão CTA */}
               <button
                 onClick={() => setSelectedTour(tour)}
-                className="w-full bg-viva-blue hover:bg-viva-blue-dark text-white py-3 rounded-lg font-bold text-sm transition-colors"
+                className="w-full bg-viva-yellow hover:bg-viva-yellow/90 text-viva-blue-dark py-3 rounded-lg font-bold text-sm transition-colors"
               >
                 Ver Passeio
               </button>
@@ -974,6 +991,7 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t }: SharedProps) {
         isOpen={!!selectedTour}
         onClose={() => setSelectedTour(null)}
         getWhatsAppLink={getWhatsAppLink}
+        openReservationModal={openReservationModal}
       />
     </section>
   );
@@ -1487,6 +1505,8 @@ function SplashScreen({ onComplete, t }: { onComplete: () => void; t: (key: stri
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
+  const [showReservationModal, setShowReservationModal] = useState(false);
+  const [preselectedTourType, setPreselectedTourType] = useState<'panoramico' | 'desembarque' | null>(null);
   
   // Carregar configurações dinâmicas do site
   const { tours, siteConfig, loading, getWhatsAppLink, getCurrentPrice } = useSiteConfig();
@@ -1500,6 +1520,11 @@ export default function Home() {
     setTimeout(() => setIsVisible(true), 100);
   };
 
+  const openReservationModal = (tourType?: 'panoramico' | 'desembarque') => {
+    setPreselectedTourType(tourType || null);
+    setShowReservationModal(true);
+  };
+
   // Props compartilhadas para todos os componentes
   const sharedProps = {
     tours,
@@ -1507,6 +1532,7 @@ export default function Home() {
     getWhatsAppLink,
     getCurrentPrice,
     t,
+    openReservationModal,
   };
 
   return (
@@ -1515,13 +1541,21 @@ export default function Home() {
       <main className={`transition-opacity duration-500 ${showSplash ? 'opacity-0' : 'opacity-100'}`}>
         <Header {...sharedProps} />
         <Hero {...sharedProps} />
-        <Features tours={tours} getWhatsAppLink={getWhatsAppLink} t={t} />
+        <Features tours={tours} getWhatsAppLink={getWhatsAppLink} t={t} openReservationModal={openReservationModal} />
         <Tours {...sharedProps} />
         <Routes {...sharedProps} />
         <Testimonials {...sharedProps} />
         <About {...sharedProps} />
         <FinalCTA {...sharedProps} />
         <Footer {...sharedProps} />
+        <PublicReservationModal
+          isOpen={showReservationModal}
+          onClose={() => {
+            setShowReservationModal(false);
+            setPreselectedTourType(null);
+          }}
+          preselectedTourType={preselectedTourType}
+        />
       </main>
 
     </>
