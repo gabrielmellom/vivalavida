@@ -277,14 +277,14 @@ function Hero({ siteConfig, getWhatsAppLink, t, openReservationModal }: SharedPr
                 <MessageCircle size={24} />
                 {t('hero.ctaWhatsapp')}
               </a>
-              <button
-                onClick={() => openReservationModal?.()}
+              <a
+                href="#passeios"
                 className="bg-viva-yellow text-viva-blue-dark px-6 sm:px-8 py-4 sm:py-5 rounded-2xl sm:rounded-full font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-viva-yellow/30 active:scale-95 transition-all hover:brightness-105"
               >
                 {t('nav.bookNow')}
-              </button>
+              </a>
               <a 
-                href="#passeios"
+                href="#detalhes"
                 className="bg-white/20 backdrop-blur-sm border-2 border-white text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-full font-bold text-base sm:text-lg flex items-center justify-center gap-2 active:bg-white active:text-viva-blue-dark transition-all"
               >
                 {t('hero.ctaTours')}
@@ -657,8 +657,8 @@ function TourDetailModal({
           ✕
         </button>
 
-        {/* Imagem principal */}
-        <div className="relative w-full h-52 sm:h-64 md:h-72 overflow-hidden rounded-t-2xl">
+        {/* Imagem principal - mais quadrada */}
+        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-t-2xl">
           {tour.images.map((img, idx) => (
             <img
               key={img}
@@ -788,8 +788,8 @@ function TourDetailModal({
           </div>
         </div>
 
-        {/* CTA fixo no rodapé do modal */}
-        <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-100 p-3 sm:p-4 rounded-b-2xl">
+        {/* CTAs fixos no rodapé do modal */}
+        <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-100 p-3 sm:p-4 rounded-b-2xl space-y-2">
           <button
             onClick={() => {
               if (!openReservationModal) {
@@ -807,11 +807,19 @@ function TourDetailModal({
                 onClose();
               }, 50);
             }}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
+          >
+            Reservar agora
+          </button>
+          <a
+            href={getWhatsAppLink(tour.whatsappMessage)}
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
           >
             <MessageCircle size={20} />
-            Reservar agora
-          </button>
+            Reservar pelo WhatsApp
+          </a>
         </div>
       </div>
     </div>,
@@ -888,7 +896,7 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t, openReservationModa
       ];
 
   return (
-    <section id="passeios" className="py-12 sm:py-20 relative z-10 overflow-hidden">
+    <section id="detalhes" className="py-12 sm:py-20 relative z-10 overflow-hidden">
       {/* Video de fundo */}
       <div className="absolute inset-0">
         <video 
