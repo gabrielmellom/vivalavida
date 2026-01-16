@@ -504,18 +504,18 @@ function ImageCarousel({ images: propImages, altText = 'Tour Panorâmico Viva La
       ))}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
       
-      {/* Indicadores - pequenos */}
+      {/* Indicadores - micro */}
       {images.length > 1 && (
-        <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
-          <div className="flex gap-[3px]">
+        <div className="absolute bottom-1 right-1">
+          <div className="flex gap-[1px] bg-black/50 rounded-full px-1 py-[2px]">
             {images.map((_, index) => (
               <span
                 key={index}
                 onClick={() => setCurrentIndex(index)}
                 className={`block rounded-full cursor-pointer ${
-                  index === currentIndex 
-                    ? 'bg-white w-3 sm:w-4 h-1 sm:h-1.5' 
-                    : 'bg-white/50 w-1 sm:w-1.5 h-1 sm:h-1.5'
+                  index === currentIndex
+                    ? 'bg-white w-[6px] h-[2px]'
+                    : 'bg-white/60 w-[2px] h-[2px]'
                 }`}
               />
             ))}
@@ -561,18 +561,18 @@ function CardCarousel({ images, altText = 'Passeio' }: { images: string[]; altTe
         />
       ))}
       
-      {/* Indicadores */}
+      {/* Indicadores - micro */}
       {images.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
-          <div className="flex gap-1">
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
+          <div className="flex gap-[1px] bg-black/50 rounded-full px-1 py-[2px]">
             {images.map((_, index) => (
               <span
                 key={index}
                 onClick={() => setCurrentIndex(index)}
                 className={`block rounded-full cursor-pointer transition-all ${
-                  index === currentIndex 
-                    ? 'bg-white w-4 h-1.5' 
-                    : 'bg-white/50 w-1.5 h-1.5'
+                  index === currentIndex
+                    ? 'bg-white w-[6px] h-[2px]'
+                    : 'bg-white/60 w-[2px] h-[2px]'
                 }`}
               />
             ))}
@@ -616,6 +616,9 @@ function TourDetailModal({
   openReservationModal?: (tourType?: 'panoramico' | 'desembarque') => void;
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [imageZoomed, setImageZoomed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -629,6 +632,20 @@ function TourDetailModal({
     }, 3500);
     return () => clearInterval(interval);
   }, [tour]);
+
+  const handleSwipe = () => {
+    if (touchStartX === null || touchEndX === null || !tour || tour.images.length <= 1) return;
+    const delta = touchStartX - touchEndX;
+    if (Math.abs(delta) < 40) return;
+    setCurrentImageIndex((prev) => {
+      if (delta > 0) {
+        return (prev + 1) % tour.images.length;
+      }
+      return (prev - 1 + tour.images.length) % tour.images.length;
+    });
+    setTouchStartX(null);
+    setTouchEndX(null);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -657,29 +674,38 @@ function TourDetailModal({
           ✕
         </button>
 
-        {/* Imagem principal - mais quadrada */}
-        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-t-2xl">
+        {/* Imagem principal - mais quadrada e clicável */}
+        <div
+          className="relative w-full aspect-[4/3] overflow-hidden rounded-t-2xl"
+          onTouchStart={(e) => setTouchStartX(e.touches[0]?.clientX ?? null)}
+          onTouchMove={(e) => setTouchEndX(e.touches[0]?.clientX ?? null)}
+          onTouchEnd={handleSwipe}
+        >
           {tour.images.map((img, idx) => (
             <img
               key={img}
               src={img}
               alt={`${tour.name} ${idx + 1}`}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+              onClick={() => setImageZoomed(true)}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 cursor-zoom-in ${
                 idx === currentImageIndex ? 'opacity-100' : 'opacity-0'
               }`}
             />
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
           
-          {/* Indicadores */}
+          {/* Indicadores - pequenos */}
           {tour.images.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+            <div className="absolute bottom-2 right-2 flex gap-[2px] bg-black/50 rounded-full px-2 py-1 backdrop-blur-sm">
               {tour.images.map((_, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setCurrentImageIndex(idx)}
-                  className={`rounded-full transition-all ${
-                    idx === currentImageIndex ? 'bg-white w-6 h-2' : 'bg-white/60 w-2 h-2'
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentImageIndex(idx);
+                  }}
+                  className={`rounded-full transition-all !min-w-0 !min-h-0 p-0 ${
+                    idx === currentImageIndex ? 'bg-white w-[10px] h-[3px]' : 'bg-white/60 w-[4px] h-[4px]'
                   }`}
                 />
               ))}
@@ -687,12 +713,53 @@ function TourDetailModal({
           )}
 
           {/* Nome do passeio */}
-          <div className="absolute bottom-4 left-4">
-            <span className="inline-block bg-viva-blue text-white font-bold px-3 py-1.5 rounded-lg shadow-lg text-sm">
+          <div className="absolute bottom-2 left-2">
+            <span className="inline-block bg-viva-blue text-white font-bold px-2.5 py-1 rounded-lg shadow-lg text-xs">
               {tour.emoji} {tour.name}
             </span>
           </div>
         </div>
+
+        {/* Modal de Imagem Ampliada */}
+        {imageZoomed && (
+          <div
+            className="fixed inset-0 z-[10000] bg-black/95 flex items-center justify-center p-4"
+            onClick={() => setImageZoomed(false)}
+            onTouchStart={(e) => setTouchStartX(e.touches[0]?.clientX ?? null)}
+            onTouchMove={(e) => setTouchEndX(e.touches[0]?.clientX ?? null)}
+            onTouchEnd={handleSwipe}
+          >
+            <button
+              onClick={() => setImageZoomed(false)}
+              className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors text-xl"
+            >
+              ✕
+            </button>
+            <img
+              src={tour.images[currentImageIndex]}
+              alt={`${tour.name} ampliada`}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Indicadores na imagem ampliada - pequenos */}
+            {tour.images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-[2px] bg-black/50 rounded-full px-2 py-1 backdrop-blur-sm">
+                {tour.images.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentImageIndex(idx);
+                    }}
+                    className={`rounded-full transition-all !min-w-0 !min-h-0 p-0 ${
+                      idx === currentImageIndex ? 'bg-white w-[10px] h-[3px]' : 'bg-white/60 w-[4px] h-[4px]'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Conteúdo em coluna única */}
         <div className="p-4 sm:p-6 space-y-4">
