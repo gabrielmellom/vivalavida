@@ -432,8 +432,8 @@ function Features({ tours, getWhatsAppLink, t, openReservationModal }: { tours: 
                     </div>
 
                     <div className="space-y-1 sm:space-y-1.5 text-xs sm:text-sm text-gray-700 mb-2 sm:mb-3">
-                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Saída:</strong> Barra da Lagoa</p>
-                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}</p>
+                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Destino:</strong> Ilha do Campeche</p>
+                      <p className="text-[11px] sm:text-sm"><strong className="text-viva-blue-dark">Duração total:</strong> 6h</p>
                       <p className="font-black text-sm sm:text-lg text-viva-blue">
                         A partir de <span className="text-viva-blue-dark">R${price}</span>
                       </p>
@@ -779,7 +779,7 @@ function TourDetailModal({
             </div>
             <div className="flex flex-wrap gap-2 mt-3 text-xs">
               <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
-                📍 Saída: Barra da Lagoa
+                📍 Destino: Ilha do Campeche
               </span>
               <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
                 ⏱ {tour.duration}

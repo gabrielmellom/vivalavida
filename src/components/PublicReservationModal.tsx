@@ -6,7 +6,7 @@ import { collection, query, where, getDocs, addDoc, onSnapshot, Timestamp, order
 import { db } from '@/lib/firebase';
 import { Boat, Reservation, PaymentMethod } from '@/types';
 import { Calendar, Users, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useSiteConfig } from '@/lib/useSiteConfig';
+import { useSiteConfig, DEFAULT_TOURS } from '@/lib/useSiteConfig';
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
@@ -40,7 +40,7 @@ interface PersonData {
 }
 
 export default function PublicReservationModal({ isOpen, onClose, preselectedTourType }: PublicReservationModalProps) {
-  const { siteConfig, getWhatsAppLink } = useSiteConfig();
+  const { siteConfig, getWhatsAppLink, tours, getCurrentPrice } = useSiteConfig();
   const [boats, setBoats] = useState<Boat[]>([]);
   
   // Estados do wizard
@@ -55,6 +55,27 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const getPriceByType = (type: 'panoramico' | 'desembarque') => {
+    const tour = tours.find(t => t.type === type);
+    const current = tour ? getCurrentPrice(tour) : null;
+    if (current?.adult) return current.adult;
+    const fallback = type === 'desembarque'
+      ? DEFAULT_TOURS.desembarque.currentPrice
+      : DEFAULT_TOURS.panoramico.currentPrice;
+    return fallback;
+  };
+
+  const getBasePriceForBoat = (boat: Boat | null) => {
+    if (!boat) return 0;
+    if (boat.boatType === 'escuna') {
+      const type = escunaType === 'com-desembarque' ? 'desembarque' : 'panoramico';
+      return getPriceByType(type);
+    }
+    return boat.ticketPrice || getPriceByType('panoramico');
+  };
+
+  const getBasePrice = () => getBasePriceForBoat(selectedBoat);
 
   // Calcular total de passos: 1 (data) + 1 (qtd pessoas) + numberOfPeople (dados) + 1 (resumo)
   const totalSteps = 3 + numberOfPeople;
@@ -144,7 +165,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
     if (!selectedBoat) return;
     
     const newPeople: PersonData[] = [];
-    const base = selectedBoat.ticketPrice || 200;
+    const base = getBasePrice();
     for (let i = 0; i < numberOfPeople; i++) {
       // Manter dados existentes se já foram preenchidos
       newPeople.push(people[i] || {
@@ -168,7 +189,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
   // Atualizar valores quando mudar barco ou tipo de passeio (apenas se já tiver pessoas)
   useEffect(() => {
     if (selectedBoat && people.length > 0) {
-      const base = selectedBoat.ticketPrice || 200;
+      const base = getBasePrice();
       setPeople(prev => prev.map(p => ({
         ...p,
         amount: p.isChild || p.isHalfPrice ? base / 2 : base,
@@ -643,7 +664,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                 )}
                                 
                                 <p className="text-xs sm:text-sm text-viva-blue-dark font-semibold mt-1">
-                                  R$ {(boat.ticketPrice || 200).toFixed(2)} por pessoa
+                                  R$ {getBasePriceForBoat(boat).toFixed(2)} por pessoa
                                 </p>
                               </div>
                               <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center ml-3 ${
@@ -870,11 +891,11 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                   address: '',
                   isChild: false,
                   isHalfPrice: false,
-                  amount: selectedBoat?.ticketPrice || 200,
+                  amount: getBasePrice(),
                   paymentMethod: 'pix',
                   amountPaid: 0,
                 };
-                const base = selectedBoat?.ticketPrice || 200;
+                const base = getBasePrice();
 
                 return (
                   <>
