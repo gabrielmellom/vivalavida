@@ -27,11 +27,11 @@ if (!getApps().length) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, name, role } = await request.json();
+    const { uid, name, password } = await request.json();
 
-    if (!email || !password || !role) {
+    if (!uid) {
       return NextResponse.json(
-        { error: 'Email, senha e role são obrigatórios' },
+        { error: 'UID é obrigatório' },
         { status: 400 }
       );
     }
@@ -39,40 +39,52 @@ export async function POST(request: NextRequest) {
     const auth = getAuth();
     const db = getFirestore();
 
-    // Criar usuário usando Admin SDK (não faz login automático)
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: name || email,
-    });
+    // Preparar dados para atualizar
+    const updateData: any = {};
+    const firestoreUpdateData: any = {};
 
-    const uid = userRecord.uid;
+    // Atualizar nome se fornecido
+    if (name) {
+      updateData.displayName = name;
+      firestoreUpdateData.name = name;
+    }
 
-    // Criar documento de role (incluindo senha para exibição)
-    await db.collection('roles').doc(uid).set({
-      uid,
-      email,
-      role,
-      name: name || email,
-      password: password, // Armazenar senha para exibição no admin
-      createdAt: new Date(),
-    });
+    // Atualizar senha se fornecida
+    if (password) {
+      if (password.length < 6) {
+        return NextResponse.json(
+          { error: 'A senha deve ter pelo menos 6 caracteres' },
+          { status: 400 }
+        );
+      }
+      updateData.password = password;
+      firestoreUpdateData.password = password; // Salvar no Firestore para exibição
+    }
+
+    // Atualizar usuário no Firebase Auth
+    if (Object.keys(updateData).length > 0) {
+      await auth.updateUser(uid, updateData);
+    }
+
+    // Atualizar documento de role no Firestore
+    if (Object.keys(firestoreUpdateData).length > 0) {
+      firestoreUpdateData.updatedAt = new Date();
+      await db.collection('roles').doc(uid).update(firestoreUpdateData);
+    }
 
     return NextResponse.json({
       success: true,
       uid,
-      email: userRecord.email,
+      message: 'Usuário atualizado com sucesso',
     });
   } catch (error: any) {
-    console.error('Erro ao criar usuário:', error);
+    console.error('Erro ao atualizar usuário:', error);
     
-    let errorMessage = 'Erro ao criar usuário';
-    if (error.code === 'auth/email-already-exists') {
-      errorMessage = 'Este email já está em uso';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Email inválido';
-    } else if (error.code === 'auth/weak-password') {
-      errorMessage = 'Senha muito fraca. Use pelo menos 6 caracteres';
+    let errorMessage = 'Erro ao atualizar usuário';
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'Usuário não encontrado';
+    } else if (error.code === 'auth/invalid-password') {
+      errorMessage = 'Senha inválida';
     } else if (error.message) {
       errorMessage = error.message;
     }
@@ -83,4 +95,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

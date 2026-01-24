@@ -72,6 +72,7 @@ export interface UserRole {
   email: string;
   role: 'admin' | 'vendor' | 'post_sale';
   name?: string;
+  password?: string; // Para exibição no admin (não é seguro, mas útil para gerenciamento)
   createdAt: Date;
 }
 

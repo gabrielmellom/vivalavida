@@ -7,15 +7,24 @@ import { db } from '@/lib/firebase';
 import { Boat, Reservation, PaymentMethod } from '@/types';
 import { Calendar, Users, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSiteConfig, DEFAULT_TOURS } from '@/lib/useSiteConfig';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Formatar data sem problemas de timezone
-const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
+const formatDateForDisplay = (dateString: string, locale: string, options?: Intl.DateTimeFormatOptions) => {
   if (!dateString) return '';
   const datePart = dateString.split('T')[0];
   const [year, month, day] = datePart.split('-').map(Number);
   if (!year || !month || !day) return dateString;
   const date = new Date(year, month - 1, day, 12, 0, 0);
-  return date.toLocaleDateString('pt-BR', options);
+  return date.toLocaleDateString(locale, options);
+};
+
+const getLocaleFromLanguage = (language: string) => {
+  if (language === 'pt-BR') return 'pt-BR';
+  if (language === 'es') return 'es-ES';
+  if (language === 'de') return 'de-DE';
+  if (language === 'fr') return 'fr-FR';
+  return 'en-US';
 };
 
 interface PublicReservationModalProps {
@@ -41,6 +50,15 @@ interface PersonData {
 
 export default function PublicReservationModal({ isOpen, onClose, preselectedTourType }: PublicReservationModalProps) {
   const { siteConfig, getWhatsAppLink, tours, getCurrentPrice } = useSiteConfig();
+  const { t, language } = useLanguage();
+  const tr = (key: string, vars?: Record<string, string | number>) => {
+    if (!vars) return t(key);
+    return Object.entries(vars).reduce(
+      (acc, [varKey, value]) => acc.replaceAll(`{${varKey}}`, String(value)),
+      t(key)
+    );
+  };
+  const locale = getLocaleFromLanguage(language);
   const [boats, setBoats] = useState<Boat[]>([]);
   
   // Estados do wizard
@@ -68,11 +86,17 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
   const getBasePriceForBoat = (boat: Boat | null) => {
     if (!boat) return 0;
+    // SEMPRE usar o ticketPrice do barco específico
+    // Se não tiver, buscar dos tours configurados como fallback
+    if (boat.ticketPrice) {
+      return boat.ticketPrice;
+    }
+    // Fallback para tours configurados (apenas se o barco não tiver preço)
     if (boat.boatType === 'escuna') {
       const type = escunaType === 'com-desembarque' ? 'desembarque' : 'panoramico';
       return getPriceByType(type);
     }
-    return boat.ticketPrice || getPriceByType('panoramico');
+    return getPriceByType('panoramico');
   };
 
   const getBasePrice = () => getBasePriceForBoat(selectedBoat);
@@ -233,7 +257,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
     };
   };
 
-  const calendarMonthName = calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const calendarMonthName = calendarMonth.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 
   // Calcular totais
   const totalAmount = people.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -297,7 +321,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
   const handleSubmit = async () => {
     if (!selectedBoat) {
-      setError('Selecione um barco');
+      setError(t('reservation.errorSelectBoat'));
       return;
     }
 
@@ -305,16 +329,16 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
     const limiteVagas = getLimiteVagas();
     if (numberOfPeople > limiteVagas) {
       const tipoTexto = selectedBoat.boatType === 'escuna' && selectedBoat.seatsWithLanding !== undefined
-        ? (escunaType === 'com-desembarque' ? 'com desembarque' : 'sem desembarque')
+        ? (escunaType === 'com-desembarque' ? t('reservation.withLandingLower') : t('reservation.withoutLandingLower'))
         : '';
-      setError(`Não há vagas suficientes${tipoTexto ? ` para ${tipoTexto}` : ''}. Disponíveis: ${limiteVagas}`);
+      setError(tr('reservation.errorNoSeats', { typeText: tipoTexto ? ` ${tipoTexto}` : '', available: limiteVagas }));
       return;
     }
 
     // Verificar se todos os dados estão preenchidos
     const missingData = people.findIndex(p => !p.name?.trim() || !p.document?.trim() || !(p.whatsapp?.trim() || p.phone?.trim()) || !p.birthDate?.trim() || !p.address?.trim());
     if (missingData !== -1) {
-      setError(`Por favor, preencha todos os dados obrigatórios da pessoa ${missingData + 1}`);
+      setError(tr('reservation.errorMissingData', { number: missingData + 1 }));
       return;
     }
 
@@ -366,18 +390,20 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
       // Montar mensagem para WhatsApp (sem emojis problemáticos, usando texto simples)
       const peopleInfo = people.map((person, index) => {
         const whatsapp = person.whatsapp || person.phone || '';
-        return `Pessoa ${index + 1}: ${person.name}${person.isChild ? ' (Criança)' : ''}\n` +
-               `  WhatsApp: ${whatsapp}${person.email ? `\n  Email: ${person.email}` : ''}\n` +
-               `  Valor: R$ ${person.amount.toFixed(2)}`;
+        const childSuffix = person.isChild ? t('reservation.childSuffix') : '';
+        const emailLine = person.email ? `\n${tr('reservation.whatsappEmail', { email: person.email })}` : '';
+        return `${tr('reservation.whatsappPersonLine', { number: index + 1, name: person.name, child: childSuffix })}\n` +
+               `${tr('reservation.whatsappWhatsapp', { phone: whatsapp })}${emailLine}\n` +
+               `${tr('reservation.whatsappValue', { amount: person.amount.toFixed(2) })}`;
       }).join('\n\n');
 
-      const whatsappMessage = `Olá! Gostaria de efetuar o pagamento da minha reserva:\n\n` +
-        `Data do Passeio: ${formatDateForDisplay(selectedBoat.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n` +
-        `Barco: ${selectedBoat.name}\n\n` +
-        `Passageiros (${numberOfPeople}):\n${peopleInfo}\n\n` +
-        `Valor Total: R$ ${totalAmount.toFixed(2)}\n` +
-        `Forma de Pagamento Preferida: ${people[0]?.paymentMethod.toUpperCase() || 'PIX'}\n\n` +
-        `Reserva já criada e aguardando aprovação.`;
+      const whatsappMessage = `${t('reservation.whatsappIntro')}\n\n` +
+        `${tr('reservation.whatsappDate', { date: formatDateForDisplay(selectedBoat.date, locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) })}\n` +
+        `${tr('reservation.whatsappBoat', { boat: selectedBoat.name })}\n\n` +
+        `${tr('reservation.whatsappPassengers', { count: numberOfPeople })}\n${peopleInfo}\n\n` +
+        `${tr('reservation.whatsappTotal', { total: totalAmount.toFixed(2) })}\n` +
+        `${tr('reservation.whatsappPaymentMethod', { method: people[0]?.paymentMethod.toUpperCase() || 'PIX' })}\n\n` +
+        `${t('reservation.whatsappPending')}`;
 
       // Redirecionar para WhatsApp
       window.open(getWhatsAppLink(whatsappMessage), '_blank');
@@ -385,7 +411,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
       // Fechar modal e resetar
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar reservas. Tente novamente.');
+      setError(err.message || t('reservation.errorCreateReservation'));
     } finally {
       setLoading(false);
     }
@@ -393,17 +419,22 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
   // Formatar data para exibição
   const formatDisplayDate = (dateString: string) => {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    return `${weekdays[date.getDay()]}, ${day} de ${months[month - 1]} de ${year}`;
+    return formatDateForDisplay(dateString, locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   };
 
   // Renderizar indicador de progresso
   const renderProgressBar = () => {
-    const stepLabels = ['Data', 'Pessoas', ...Array.from({ length: numberOfPeople }, (_, i) => `Pessoa ${i + 1}`), 'Resumo'];
+    const stepLabels = [
+      t('reservation.stepDate'),
+      t('reservation.stepPeople'),
+      ...Array.from({ length: numberOfPeople }, (_, i) => tr('reservation.stepPerson', { number: i + 1 })),
+      t('reservation.stepSummary'),
+    ];
     const displaySteps = stepLabels.slice(0, totalSteps);
     
     return (
@@ -454,9 +485,11 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-viva-blue-dark">
-              Nova Reserva
+              {t('reservation.title')}
             </h2>
-            <p className="text-gray-500 text-xs sm:text-sm">Passo {currentStep} de {totalSteps}</p>
+            <p className="text-gray-500 text-xs sm:text-sm">
+              {tr('reservation.stepCount', { current: currentStep, total: totalSteps })}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -478,8 +511,8 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                 <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-viva-blue/10 rounded-full mb-3">
                   <Calendar className="w-6 h-6 sm:w-7 sm:h-7 text-viva-blue" />
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-gray-800">Quando será o passeio?</h3>
-                <p className="text-gray-500 text-xs sm:text-sm">Selecione a data no calendário</p>
+                <h3 className="text-base sm:text-lg font-bold text-gray-800">{t('reservation.whenTitle')}</h3>
+                <p className="text-gray-500 text-xs sm:text-sm">{t('reservation.whenSubtitle')}</p>
               </div>
 
               {/* Calendário Visual */}
@@ -513,7 +546,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
                 {/* Dias da Semana */}
                 <div className="grid grid-cols-7 gap-1 mb-2">
-                  {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, i) => (
+                  {t('reservation.weekdaysShort').split(',').map((day, i) => (
                     <div key={i} className="text-center text-[10px] sm:text-xs font-semibold text-gray-400 py-1">
                       {day}
                     </div>
@@ -561,11 +594,11 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                 <div className="flex items-center justify-center gap-3 sm:gap-4 mt-3 sm:mt-4 pt-3 border-t border-gray-200">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-100 border border-green-300"></div>
-                    <span className="text-[10px] sm:text-xs text-gray-500">Disponível</span>
+                    <span className="text-[10px] sm:text-xs text-gray-500">{t('reservation.calendarAvailable')}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-viva-blue"></div>
-                    <span className="text-[10px] sm:text-xs text-gray-500">Selecionado</span>
+                    <span className="text-[10px] sm:text-xs text-gray-500">{t('reservation.calendarSelected')}</span>
                   </div>
                 </div>
               </div>
@@ -582,12 +615,12 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
               {selectedDate && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    🚢 Selecione o Barco
+                    🚢 {t('reservation.selectBoat')}
                   </label>
                   {filteredBoatsForDate.length === 0 ? (
                     <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
-                      <p className="text-orange-700 font-medium">Nenhum barco disponível para esta data</p>
-                      <p className="text-orange-600 text-sm">Tente selecionar outra data</p>
+                      <p className="text-orange-700 font-medium">{t('reservation.noBoatsTitle')}</p>
+                      <p className="text-orange-600 text-sm">{t('reservation.noBoatsSubtitle')}</p>
                     </div>
                   ) : (
                     <div className="grid gap-3">
@@ -634,37 +667,37 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                       ? 'bg-viva-blue/20 text-viva-blue-dark' 
                                       : 'bg-purple-100 text-purple-700'
                                   }`}>
-                                    {boat.boatType === 'escuna' ? 'Escuna' : 'Lancha'}
+                                    {boat.boatType === 'escuna' ? t('reservation.boatTypeEscuna') : t('reservation.boatTypeLancha')}
                                   </span>
                                 </div>
                                 <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                                  <strong>{availableCount}</strong> vagas totais disponíveis de {boat.seatsTotal}
+                                  {tr('reservation.totalSeatsAvailable', { available: availableCount, total: boat.seatsTotal })}
                                 </p>
                                 
                                 {/* Vagas por tipo de serviço - apenas para escunas */}
                                 {boat.boatType === 'escuna' && boat.seatsWithLanding !== undefined && (
                                   <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className="text-gray-600">Com Desembarque:</span>
+                                      <span className="text-gray-600">{t('reservation.withLanding')}:</span>
                                       <span className={`font-bold ${
                                         vagasComDesembarque <= 0 ? 'text-red-600' : 'text-green-600'
                                       }`}>
-                                        {vagasComDesembarque} livres / {boat.seatsWithLanding}
+                                        {tr('reservation.freeSlots', { free: vagasComDesembarque, total: boat.seatsWithLanding })}
                                       </span>
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className="text-gray-600">Sem Desembarque (Panorâmico):</span>
+                                      <span className="text-gray-600">{t('reservation.withoutLandingPanoramic')}:</span>
                                       <span className={`font-bold ${
                                         vagasPanoramico <= 0 ? 'text-red-600' : 'text-blue-600'
                                       }`}>
-                                        {vagasPanoramico} livres / {boat.seatsWithoutLanding}
+                                        {tr('reservation.freeSlots', { free: vagasPanoramico, total: boat.seatsWithoutLanding })}
                                       </span>
                                     </div>
                                   </div>
                                 )}
                                 
                                 <p className="text-xs sm:text-sm text-viva-blue-dark font-semibold mt-1">
-                                  R$ {getBasePriceForBoat(boat).toFixed(2)} por pessoa
+                                  {tr('reservation.pricePerPerson', { price: getBasePriceForBoat(boat).toFixed(2) })}
                                 </p>
                               </div>
                               <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center ml-3 ${
@@ -684,7 +717,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
               {/* Tipo de passeio para Escuna */}
               {selectedBoat?.boatType === 'escuna' && selectedBoat.seatsWithLanding !== undefined && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Tipo de Passeio</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">{t('reservation.tripType')}</label>
                   <div className="grid grid-cols-2 gap-3">
                     {(() => {
                       const vagasPanoramico = (selectedBoat.seatsWithoutLanding || 0) - (selectedBoat.seatsWithoutLandingTaken || 0);
@@ -707,8 +740,8 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             } ${vagasPanoramico <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            Sem Desembarque
-                            {vagasPanoramico <= 0 && <span className="block text-xs mt-1 text-red-600">Sem vagas</span>}
+                            {t('reservation.withoutLanding')}
+                            {vagasPanoramico <= 0 && <span className="block text-xs mt-1 text-red-600">{t('reservation.noVacancies')}</span>}
                           </button>
                           <button
                             type="button"
@@ -725,8 +758,8 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             } ${vagasComDesembarque <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            Com Desembarque
-                            {vagasComDesembarque <= 0 && <span className="block text-xs mt-1 text-red-600">Sem vagas</span>}
+                            {t('reservation.withLanding')}
+                            {vagasComDesembarque <= 0 && <span className="block text-xs mt-1 text-red-600">{t('reservation.noVacancies')}</span>}
                           </button>
                         </>
                       );
@@ -744,8 +777,8 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                 <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-viva-orange/10 rounded-full mb-4">
                   <Users className="w-7 h-7 sm:w-8 sm:h-8 text-viva-orange" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Quantas pessoas vão no passeio?</h3>
-                <p className="text-gray-500 text-sm">Selecione a quantidade de passageiros</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">{t('reservation.peopleTitle')}</h3>
+                <p className="text-gray-500 text-sm">{t('reservation.peopleSubtitle')}</p>
               </div>
 
               {/* Vagas disponíveis */}
@@ -768,7 +801,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                   <>
                     <div className="bg-viva-blue/10 border border-viva-blue/20 rounded-xl p-4 text-center">
                       <p className="text-viva-blue-dark text-base sm:text-lg">
-                        <strong>{vagasDisponiveis}</strong> vagas totais disponíveis de <strong>{selectedBoat.seatsTotal}</strong>
+                        {tr('reservation.totalSeatsAvailable', { available: vagasDisponiveis, total: selectedBoat.seatsTotal })}
                       </p>
                     </div>
 
@@ -781,16 +814,16 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             : 'bg-gray-50 border-gray-200'
                         }`}>
                           <div className="text-center">
-                            <p className="text-sm font-semibold text-gray-700 mt-1">Com Desembarque</p>
+                            <p className="text-sm font-semibold text-gray-700 mt-1">{t('reservation.withLanding')}</p>
                             <p className={`text-2xl font-black ${
                               vagasComDesembarque <= 0 ? 'text-red-600' : 'text-green-600'
                             }`}>
                               {vagasComDesembarque}
                             </p>
-                            <p className="text-xs text-gray-500">vagas livres de {selectedBoat.seatsWithLanding}</p>
+                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithLanding })}</p>
                             {escunaType === 'com-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">
-                                ✓ Selecionado
+                                ✓ {t('reservation.selectedTag')}
                               </span>
                             )}
                           </div>
@@ -801,16 +834,16 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             : 'bg-gray-50 border-gray-200'
                         }`}>
                           <div className="text-center">
-                            <p className="text-sm font-semibold text-gray-700 mt-1">Sem Desembarque</p>
+                            <p className="text-sm font-semibold text-gray-700 mt-1">{t('reservation.withoutLanding')}</p>
                             <p className={`text-2xl font-black ${
                               vagasPanoramico <= 0 ? 'text-red-600' : 'text-blue-600'
                             }`}>
                               {vagasPanoramico}
                             </p>
-                            <p className="text-xs text-gray-500">vagas livres de {selectedBoat.seatsWithoutLanding}</p>
+                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithoutLanding })}</p>
                             {escunaType === 'sem-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-blue-500 text-white text-xs font-bold rounded-full">
-                                ✓ Selecionado
+                                ✓ {t('reservation.selectedTag')}
                               </span>
                             )}
                           </div>
@@ -831,7 +864,9 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                       </button>
                       <div className="text-center px-4 sm:px-6">
                         <span className="text-5xl sm:text-7xl font-black text-viva-blue">{numberOfPeople}</span>
-                        <p className="text-gray-500 mt-2 text-base sm:text-lg">{numberOfPeople === 1 ? 'pessoa' : 'pessoas'}</p>
+                        <p className="text-gray-500 mt-2 text-base sm:text-lg">
+                          {numberOfPeople === 1 ? t('reservation.personSingular') : t('reservation.personPlural')}
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -849,10 +884,13 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                     {numberOfPeople > 0 && (
                       <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                         <p className="text-green-800 font-medium text-sm sm:text-lg">
-                          {numberOfPeople} {numberOfPeople === 1 ? 'vaga será reservada' : 'vagas serão reservadas'}
+                          {numberOfPeople}{' '}
+                          {numberOfPeople === 1
+                            ? t('reservation.seatReservedSingular')
+                            : t('reservation.seatsReservedPlural')}
                           {selectedBoat.boatType === 'escuna' && selectedBoat.seatsWithLanding !== undefined && (
                             <span className="block text-sm mt-1">
-                              ({escunaType === 'com-desembarque' ? 'Com Desembarque' : 'Sem Desembarque'})
+                              ({escunaType === 'com-desembarque' ? t('reservation.withLanding') : t('reservation.withoutLanding')})
                             </span>
                           )}
                         </p>
@@ -863,10 +901,12 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                     {selectedBoat.boatType === 'escuna' && selectedBoat.seatsWithLanding !== undefined && limiteVagas <= 0 && (
                       <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
                         <p className="text-red-700 font-medium">
-                          Não há vagas disponíveis para {escunaType === 'com-desembarque' ? 'Com Desembarque' : 'Sem Desembarque'}
+                          {tr('reservation.noSeatsForType', {
+                            type: escunaType === 'com-desembarque' ? t('reservation.withLanding') : t('reservation.withoutLanding')
+                          })}
                         </p>
                         <p className="text-red-600 text-sm mt-1">
-                          Volte e selecione outro tipo de passeio
+                          {t('reservation.chooseAnotherType')}
                         </p>
                       </div>
                     )}
@@ -904,15 +944,15 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                         <Users className="w-6 h-6 sm:w-7 sm:h-7 text-viva-green" />
                       </div>
                       <h3 className="text-lg sm:text-xl font-bold text-gray-800">
-                        Dados da Pessoa {personIndex + 1}
+                        {tr('reservation.personDataTitle', { number: personIndex + 1 })}
                       </h3>
-                      <p className="text-gray-500 text-sm">Preencha as informações do passageiro</p>
+                      <p className="text-gray-500 text-sm">{t('reservation.personDataSubtitle')}</p>
                     </div>
 
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Nome Completo *
+                          {t('reservation.fullName')} *
                         </label>
                         <input
                           type="text"
@@ -924,14 +964,14 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                           }}
                           required
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-                          placeholder="Nome completo do passageiro"
+                          placeholder={t('reservation.fullNamePlaceholder')}
                         />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Documento *
+                            {t('reservation.document')} *
                           </label>
                           <input
                             type="text"
@@ -943,17 +983,17 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             }}
                             required
                             className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-                            placeholder="CPF, RG, Passaporte..."
+                            placeholder={t('reservation.documentPlaceholder')}
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Data de Nascimento *
+                            {t('reservation.birthDate')} *
                           </label>
                           <input
                             type="text"
                             inputMode="numeric"
-                            placeholder="DD/MM/AAAA"
+                            placeholder={t('reservation.birthDatePlaceholder')}
                             maxLength={10}
                             value={person.birthDate}
                             onChange={(e) => {
@@ -973,7 +1013,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          WhatsApp *
+                          {t('reservation.whatsapp')} *
                         </label>
                         <input
                           type="tel"
@@ -989,13 +1029,13 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                           }}
                           required
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-                          placeholder="(48) 99999-9999 ou +55 48 99999-9999"
+                          placeholder={t('reservation.whatsappPlaceholder')}
                         />
                       </div>
 
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Email (opcional)
+                          {t('reservation.emailOptional')}
                         </label>
                         <input
                           type="email"
@@ -1006,13 +1046,13 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             setPeople(newPeople);
                           }}
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-                          placeholder="cliente@email.com"
+                          placeholder={t('reservation.emailPlaceholder')}
                         />
                       </div>
 
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Endereço Completo *
+                          {t('reservation.address')} *
                         </label>
                         <textarea
                           value={person.address}
@@ -1024,7 +1064,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                           required
                           rows={2}
                           className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none"
-                          placeholder="Rua, número, bairro, cidade..."
+                          placeholder={t('reservation.addressPlaceholder')}
                         />
                       </div>
 
@@ -1048,14 +1088,14 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                           className="w-5 h-5 text-viva-blue border-gray-300 rounded focus:ring-viva-blue"
                         />
                         <label htmlFor={`child-${personIndex}`} className="text-sm font-semibold text-viva-orange cursor-pointer flex-1">
-                          👶 Menor de 7 anos (meia entrada - R$ {(base / 2).toFixed(2)})
+                          {tr('reservation.childHalfPrice', { price: (base / 2).toFixed(2) })}
                         </label>
                       </div>
 
                       {/* Valor */}
                       <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <p className="text-sm text-green-800">
-                          <span className="font-semibold">Valor:</span> R$ {person.amount.toFixed(2)} ({person.isChild || person.isHalfPrice ? 'meia entrada' : 'inteira'})
+                          <span className="font-semibold">{t('reservation.valueLabel')}</span> R$ {person.amount.toFixed(2)} ({person.isChild || person.isHalfPrice ? t('reservation.halfPriceLabel') : t('reservation.fullPriceLabel')})
                         </p>
                       </div>
                     </div>
@@ -1072,34 +1112,34 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                 <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-green-100 rounded-full mb-3">
                   <span className="text-2xl">💰</span>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Resumo da Reserva</h3>
-                <p className="text-gray-500 text-sm">Revise os dados antes de finalizar</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">{t('reservation.summaryTitle')}</h3>
+                <p className="text-gray-500 text-sm">{t('reservation.summarySubtitle')}</p>
               </div>
 
               {/* Resumo */}
               <div className="bg-gray-50 rounded-xl p-4 sm:p-6 space-y-4">
                 <div>
-                  <h4 className="font-bold text-gray-800 mb-2">📅 Data do Passeio</h4>
+                  <h4 className="font-bold text-gray-800 mb-2">📅 {t('reservation.summaryDate')}</h4>
                   <p className="text-gray-700">{formatDisplayDate(selectedBoat?.date || '')}</p>
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-gray-800 mb-2">🚢 Barco</h4>
+                  <h4 className="font-bold text-gray-800 mb-2">🚢 {t('reservation.summaryBoat')}</h4>
                   <p className="text-gray-700">{selectedBoat?.name}</p>
                   {selectedBoat?.boatType === 'escuna' && (
                     <p className="text-sm text-gray-600 mt-1">
-                      Tipo: {escunaType === 'com-desembarque' ? 'Com Desembarque' : 'Sem Desembarque'}
+                      {t('reservation.summaryType')}: {escunaType === 'com-desembarque' ? t('reservation.withLanding') : t('reservation.withoutLanding')}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-gray-800 mb-2">👥 Passageiros ({numberOfPeople})</h4>
+                  <h4 className="font-bold text-gray-800 mb-2">👥 {tr('reservation.summaryPassengers', { count: numberOfPeople })}</h4>
                   <div className="space-y-2">
                     {people.map((person, index) => (
                       <div key={index} className="bg-white rounded-lg p-3 border border-gray-200">
                         <p className="font-semibold text-gray-800">
-                          {index + 1}. {person.name} {person.isChild ? '(Criança)' : ''}
+                          {index + 1}. {person.name} {person.isChild ? `(${t('reservation.childLabel')})` : ''}
                         </p>
                         <p className="text-xs text-gray-600 mt-1">
                           📞 {person.phone} | 💰 R$ {person.amount.toFixed(2)}
@@ -1111,7 +1151,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
                 <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold text-gray-800 text-lg">Valor Total:</span>
+                    <span className="font-bold text-gray-800 text-lg">{t('reservation.totalValue')}</span>
                     <span className="text-2xl sm:text-3xl font-black text-green-700">R$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
@@ -1136,7 +1176,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
               disabled={loading}
               className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition disabled:opacity-50"
             >
-              Voltar
+              {t('reservation.back')}
             </button>
           )}
           {currentStep < totalSteps ? (
@@ -1146,7 +1186,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
               disabled={!canProceed() || loading}
               className="flex-1 px-4 py-3 bg-viva-blue text-white rounded-xl font-bold hover:bg-viva-blue-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Próximo
+              {t('reservation.next')}
             </button>
           ) : (
             <button
@@ -1155,7 +1195,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
               disabled={loading || !canProceed()}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50"
             >
-              {loading ? 'Criando reserva...' : 'Efetuar pagamento'}
+              {loading ? t('reservation.creatingReservation') : t('reservation.payNow')}
             </button>
           )}
         </div>

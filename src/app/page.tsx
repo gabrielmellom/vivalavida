@@ -620,6 +620,7 @@ function TourDetailModal({
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
   const [imageZoomed, setImageZoomed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
@@ -737,7 +738,7 @@ function TourDetailModal({
             </button>
             <img
               src={tour.images[currentImageIndex]}
-              alt={`${tour.name} ampliada`}
+              alt={t('tourDetails.imageAltZoomed').replace('{name}', tour.name)}
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}
             />
@@ -769,17 +770,17 @@ function TourDetailModal({
               <div>
                 <p className="text-[11px] text-gray-500">{tour.priceLabel}</p>
                 <p className="text-2xl sm:text-3xl font-black text-viva-blue">
-                  R$ {tour.price}<span className="text-sm font-normal text-gray-500">/pessoa</span>
+                  R$ {tour.price}<span className="text-sm font-normal text-gray-500"> {t('tourDetails.perPerson')}</span>
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[11px] text-gray-500">Duração</p>
+                <p className="text-[11px] text-gray-500">{t('tourDetails.durationLabel')}</p>
                 <p className="text-lg sm:text-xl font-bold text-viva-blue-dark">{tour.duration}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-3 text-xs">
               <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
-                📍 Destino: Ilha do Campeche
+                📍 {t('tourDetails.destinationLabel')}: {t('tourDetails.destinationValue')}
               </span>
               <span className="bg-viva-blue/10 text-viva-blue-dark px-3 py-1.5 rounded-full font-semibold">
                 ⏱ {tour.duration}
@@ -794,7 +795,7 @@ function TourDetailModal({
           {tour.features.length > 0 && (
             <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-blue/5">
               <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
-                🎯 Atividades Inclusas
+                🎯 {t('tourDetails.includedActivities')}
               </h4>
               <div className="grid grid-cols-2 gap-2">
                 {tour.features.map((feature, idx) => (
@@ -810,7 +811,7 @@ function TourDetailModal({
           {/* Alimentação e bebidas */}
           <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-orange/10">
             <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
-              🍽 Alimentação e Bebidas
+              🍽 {t('tourDetails.foodAndDrinks')}
             </h4>
             <div className="space-y-1.5 text-sm text-gray-700">
               <div className="flex items-center gap-2">
@@ -828,7 +829,7 @@ function TourDetailModal({
           {tour.spots.length > 0 && (
             <div className="rounded-xl border border-gray-100 p-3 sm:p-4 bg-viva-green/10">
               <h4 className="font-bold text-viva-blue-dark mb-2 text-sm flex items-center gap-2">
-                🗺️ Locais Visitados
+                🗺️ {t('tourDetails.visitedPlaces')}
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {tour.spots.map((spot, idx) => (
@@ -844,13 +845,13 @@ function TourDetailModal({
           {/* Informações importantes */}
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
             <h4 className="font-bold text-amber-800 mb-2 text-sm flex items-center gap-2">
-              ⚠️ Informações Importantes
+              ⚠️ {t('tourDetails.importantInfo')}
             </h4>
             <ul className="text-xs text-amber-900 space-y-1">
-              <li>• Documento de identificação obrigatório</li>
-              <li>• Traga protetor solar e toalha</li>
-              <li>• Não é permitido animais de estimação</li>
-              <li>• Passeio sujeito às condições climáticas</li>
+              <li>• {t('tourDetails.infoDoc')}</li>
+              <li>• {t('tourDetails.infoBring')}</li>
+              <li>• {t('tourDetails.infoNoPets')}</li>
+              <li>• {t('tourDetails.infoWeather')}</li>
             </ul>
           </div>
         </div>
@@ -876,7 +877,7 @@ function TourDetailModal({
             }}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
           >
-            Reservar agora
+            {t('tourDetails.bookNow')}
           </button>
           <a
             href={getWhatsAppLink(tour.whatsappMessage)}
@@ -885,7 +886,7 @@ function TourDetailModal({
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all"
           >
             <MessageCircle size={20} />
-            Reservar pelo WhatsApp
+            {t('tourDetails.bookWhatsapp')}
           </a>
         </div>
       </div>
@@ -981,13 +982,13 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t, openReservationModa
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12">
           <span className="inline-block bg-viva-blue/90 backdrop-blur-sm text-white font-bold px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm mb-3 sm:mb-4 shadow-lg">
-            ✨ DETALHES COMPLETOS
+            {t('tours.badge')}
           </span>
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-3 sm:mb-4 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-            Escolha seu <span className="text-viva-yellow drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">Roteiro</span>
+            {t('tours.title')} <span className="text-viva-yellow drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{t('tours.titleHighlight')}</span>
           </h2>
           <p className="text-white text-sm sm:text-lg px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-            Confira todos os detalhes e escolha a experiência ideal para você!
+            {t('tours.subtitle')}
           </p>
         </div>
 
@@ -1010,13 +1011,13 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t, openReservationModa
               {/* Informações */}
               <div className="space-y-2 text-sm text-center mb-4">
                 <p className="text-gray-700">
-                  <span className="text-viva-blue">⏱</span> <strong className="text-viva-blue-dark">Duração:</strong> {tour.duration}
+                  <span className="text-viva-blue">⏱</span> <strong className="text-viva-blue-dark">{t('tours.cardDurationLabel')}:</strong> {tour.duration}
                 </p>
                 <p className="text-gray-700">
-                  <span className="text-viva-orange">🍹</span> <strong className="text-viva-blue-dark">Bebidas:</strong> {tour.drinks}
+                  <span className="text-viva-orange">🍹</span> <strong className="text-viva-blue-dark">{t('tours.cardDrinksLabel')}:</strong> {tour.drinks}
                 </p>
                 <p className="text-gray-700">
-                  <span className="text-viva-orange">🍽</span> <strong className="text-viva-blue-dark">Alimentação:</strong> {tour.food}
+                  <span className="text-viva-orange">🍽</span> <strong className="text-viva-blue-dark">{t('tours.cardFoodLabel')}:</strong> {tour.food}
                 </p>
               </div>
 
@@ -1035,7 +1036,7 @@ function Tours({ tours, getWhatsAppLink, getCurrentPrice, t, openReservationModa
                 onClick={() => setSelectedTour(tour)}
                 className="w-full bg-viva-yellow hover:bg-viva-yellow/90 text-viva-blue-dark py-3 rounded-lg font-bold text-sm transition-colors"
               >
-                Ver Passeio
+                {t('tours.viewTour')}
               </button>
             </div>
           ))}
@@ -1101,9 +1102,9 @@ function Routes({ siteConfig, getWhatsAppLink, t }: SharedProps) {
         {/* Título */}
         <div className="text-center mb-8">
           <h2 className="text-2xl sm:text-4xl font-black text-white mb-2">
-            Galeria de <span className="text-viva-yellow">Fotos</span>
+            {t('gallery.title')} <span className="text-viva-yellow">{t('gallery.titleHighlight')}</span>
           </h2>
-          <p className="text-white/70 text-sm sm:text-base">Momentos inesquecíveis dos nossos passeios</p>
+          <p className="text-white/70 text-sm sm:text-base">{t('gallery.subtitle')}</p>
         </div>
 
         {/* Carrossel 3D */}

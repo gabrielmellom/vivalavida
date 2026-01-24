@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { UserRole } from '@/types';
-import { Plus, Trash2, UserPlus, ArrowLeft, Headphones, Users } from 'lucide-react';
+import { Plus, Trash2, UserPlus, ArrowLeft, Headphones, Users, Eye, EyeOff, Edit2 } from 'lucide-react';
 import Link from 'next/link';
 
 type UserType = 'vendor' | 'post_sale';
@@ -19,6 +19,12 @@ export default function GerenciarVendedores() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<UserRole | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     loadUsuarios();
@@ -109,6 +115,66 @@ export default function GerenciarVendedores() {
     }
   };
 
+  const togglePasswordVisibility = (uid: string) => {
+    setVisiblePasswords(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(uid)) {
+        newSet.delete(uid);
+      } else {
+        newSet.add(uid);
+      }
+      return newSet;
+    });
+  };
+
+  const openEditModal = (user: UserRole) => {
+    setUserToEdit(user);
+    setEditName(user.name || '');
+    setEditPassword('');
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const handleEditUsuario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToEdit) return;
+
+    setEditError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/update-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uid: userToEdit.uid,
+          name: editName,
+          password: editPassword || undefined, // Só atualiza se foi preenchida
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao atualizar usuário');
+      }
+
+      setShowEditModal(false);
+      setUserToEdit(null);
+      setEditName('');
+      setEditPassword('');
+      loadUsuarios();
+      alert('Usuário atualizado com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao atualizar usuário:', err);
+      setEditError(err.message || 'Erro ao atualizar usuário');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openTypeSelector = () => {
     setShowTypeSelector(true);
   };
@@ -165,6 +231,7 @@ export default function GerenciarVendedores() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Senha</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data Cadastro</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ações</th>
                 </tr>
@@ -174,16 +241,42 @@ export default function GerenciarVendedores() {
                   <tr key={vendedor.uid} className="hover:bg-gray-50">
                     <td className="px-6 py-4 font-semibold text-gray-900">{vendedor.name || vendedor.email}</td>
                     <td className="px-6 py-4 text-gray-600">{vendedor.email}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm text-gray-600">
+                          {visiblePasswords.has(vendedor.uid) 
+                            ? (vendedor.password || '******') 
+                            : '••••••••'}
+                        </span>
+                        <button
+                          onClick={() => togglePasswordVisibility(vendedor.uid)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-500 hover:text-gray-700"
+                          title={visiblePasswords.has(vendedor.uid) ? 'Ocultar senha' : 'Mostrar senha'}
+                        >
+                          {visiblePasswords.has(vendedor.uid) ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {vendedor.createdAt ? new Date(vendedor.createdAt).toLocaleDateString('pt-BR') : '-'}
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleDeleteUsuario(vendedor.uid, 'vendor')}
-                        className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(vendedor)}
+                          className="text-viva-blue hover:text-viva-blue-dark p-2 hover:bg-viva-blue/10 rounded-lg transition"
+                          title="Editar usuário"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUsuario(vendedor.uid, 'vendor')}
+                          className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition"
+                          title="Remover usuário"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -212,6 +305,7 @@ export default function GerenciarVendedores() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Senha</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Data Cadastro</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Ações</th>
                 </tr>
@@ -221,16 +315,42 @@ export default function GerenciarVendedores() {
                   <tr key={atendente.uid} className="hover:bg-purple-50">
                     <td className="px-6 py-4 font-semibold text-gray-900">{atendente.name || atendente.email}</td>
                     <td className="px-6 py-4 text-gray-600">{atendente.email}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm text-gray-600">
+                          {visiblePasswords.has(atendente.uid) 
+                            ? (atendente.password || '******') 
+                            : '••••••••'}
+                        </span>
+                        <button
+                          onClick={() => togglePasswordVisibility(atendente.uid)}
+                          className="p-1.5 hover:bg-purple-100 rounded-lg transition text-gray-500 hover:text-purple-700"
+                          title={visiblePasswords.has(atendente.uid) ? 'Ocultar senha' : 'Mostrar senha'}
+                        >
+                          {visiblePasswords.has(atendente.uid) ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {atendente.createdAt ? new Date(atendente.createdAt).toLocaleDateString('pt-BR') : '-'}
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleDeleteUsuario(atendente.uid, 'post_sale')}
-                        className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(atendente)}
+                          className="text-purple-600 hover:text-purple-700 p-2 hover:bg-purple-100 rounded-lg transition"
+                          title="Editar usuário"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUsuario(atendente.uid, 'post_sale')}
+                          className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition"
+                          title="Remover usuário"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -393,6 +513,102 @@ export default function GerenciarVendedores() {
                   }`}
                 >
                   {loading ? 'Criando...' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Usuário */}
+      {showEditModal && userToEdit && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                userToEdit.role === 'post_sale' 
+                  ? 'bg-gradient-to-br from-purple-500 to-purple-700' 
+                  : 'bg-gradient-to-br from-viva-blue to-viva-blue-dark'
+              }`}>
+                {userToEdit.role === 'post_sale' ? (
+                  <Headphones className="text-white" size={24} />
+                ) : (
+                  <Users className="text-white" size={24} />
+                )}
+              </div>
+              <div>
+                <h2 className={`text-2xl font-black ${
+                  userToEdit.role === 'post_sale' ? 'text-purple-800' : 'text-viva-blue-dark'
+                }`}>
+                  Editar {userToEdit.role === 'post_sale' ? 'Atendente' : 'Vendedor'}
+                </h2>
+                <p className="text-gray-500 text-sm">{userToEdit.email}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditUsuario} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Nome</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:border-transparent outline-none ${
+                    userToEdit.role === 'post_sale' ? 'focus:ring-purple-500' : 'focus:ring-viva-blue'
+                  }`}
+                  placeholder="Nome do usuário"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nova Senha (opcional)
+                </label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  minLength={6}
+                  className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:border-transparent outline-none ${
+                    userToEdit.role === 'post_sale' ? 'focus:ring-purple-500' : 'focus:ring-viva-blue'
+                  }`}
+                  placeholder="Deixe vazio para manter a senha atual"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Mínimo 6 caracteres. Deixe vazio se não quiser alterar.
+                </p>
+              </div>
+
+              {editError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setUserToEdit(null);
+                    setEditName('');
+                    setEditPassword('');
+                    setEditError('');
+                  }}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`flex-1 px-6 py-3 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50 ${
+                    userToEdit.role === 'post_sale'
+                      ? 'bg-gradient-to-r from-purple-500 to-purple-700'
+                      : 'bg-gradient-to-r from-viva-blue to-viva-blue-dark'
+                  }`}
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
             </form>

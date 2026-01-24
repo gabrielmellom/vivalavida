@@ -52,6 +52,9 @@ export default function AdminDashboard() {
   const [boatToEdit, setBoatToEdit] = useState<Boat | null>(null);
   const [showDeleteBoatModal, setShowDeleteBoatModal] = useState(false);
   const [boatToDelete, setBoatToDelete] = useState<Boat | null>(null);
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [boatToEditPrice, setBoatToEditPrice] = useState<Boat | null>(null);
+  const [newTicketPrice, setNewTicketPrice] = useState('');
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
   const [newOrderAlert, setNewOrderAlert] = useState(false);
@@ -585,6 +588,42 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Erro ao alterar status do barco:', error);
       alert('Erro ao alterar status do barco');
+    }
+  };
+
+  const handleEditPrice = (boat: Boat) => {
+    setBoatToEditPrice(boat);
+    setNewTicketPrice(boat.ticketPrice.toString());
+    setShowEditPriceModal(true);
+  };
+
+  const handleUpdateBoatPrice = async () => {
+    if (!boatToEditPrice) return;
+
+    const priceValue = parseFloat(newTicketPrice);
+    if (isNaN(priceValue) || priceValue <= 0) {
+      alert('Por favor, insira um valor válido');
+      return;
+    }
+
+    try {
+      const boatRef = doc(db, 'boats', boatToEditPrice.id);
+      
+      // Atualizar preço do barco
+      await updateDoc(boatRef, {
+        ticketPrice: priceValue,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Fechar modal e limpar estados
+      setShowEditPriceModal(false);
+      setBoatToEditPrice(null);
+      setNewTicketPrice('');
+
+      alert('Valor atualizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao atualizar valor do barco:', error);
+      alert('Erro ao atualizar valor do barco');
     }
   };
 
@@ -1628,6 +1667,14 @@ export default function AdminDashboard() {
                     Ver Reservas
                   </button>
                   <button
+                    onClick={() => handleEditPrice(boat)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-viva-yellow/10 text-viva-orange border border-viva-orange/30 rounded-lg hover:bg-viva-yellow/20 transition text-sm font-medium"
+                    title="Editar Valor do Barco"
+                  >
+                    <DollarSign size={16} />
+                    Editar Valor (R${boat.ticketPrice})
+                  </button>
+                  <button
                     onClick={() => handleToggleBoatStatus(boat)}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
                     title="Desativar Barco"
@@ -2121,6 +2168,80 @@ export default function AdminDashboard() {
           boats={boats}
           onClose={() => setShowReservationWizard(false)}
         />
+      )}
+
+      {/* Modal de Editar Valor do Barco */}
+      {showEditPriceModal && boatToEditPrice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-black text-viva-blue-dark mb-4 flex items-center gap-2">
+              <DollarSign className="text-viva-orange" size={28} />
+              Editar Valor do Barco
+            </h2>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-800 mb-2">
+                <strong>Barco:</strong> {boatToEditPrice.name}
+              </p>
+              <p className="text-sm text-blue-800 mb-2">
+                <strong>Data:</strong> {formatDate(boatToEditPrice.date)}
+              </p>
+              <p className="text-sm text-blue-800">
+                <strong>Valor atual:</strong> R$ {boatToEditPrice.ticketPrice.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                💰 Novo Valor por Pessoa (Adulto)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                <input
+                  type="number"
+                  value={newTicketPrice}
+                  onChange={(e) => setNewTicketPrice(e.target.value)}
+                  placeholder="Ex: 200.00"
+                  min="0"
+                  step="0.01"
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-orange focus:border-viva-orange outline-none text-lg font-bold"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                ℹ️ Este valor será atualizado em todos os lugares do sistema automaticamente
+              </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-yellow-800">
+                <strong className="flex items-center gap-1 mb-1">
+                  <span className="text-yellow-600">⚠</span>
+                  Atenção:
+                </strong>
+                O novo valor será aplicado para novas reservas. As reservas já existentes manterão o valor original.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowEditPriceModal(false);
+                  setBoatToEditPrice(null);
+                  setNewTicketPrice('');
+                }}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdateBoatPrice}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-viva-orange to-viva-yellow text-white rounded-lg font-bold hover:shadow-lg transition"
+              >
+                Atualizar Valor
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
