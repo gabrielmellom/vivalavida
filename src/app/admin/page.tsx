@@ -59,6 +59,9 @@ export default function AdminDashboard() {
   const [newTicketPrice, setNewTicketPrice] = useState('');
   const [newPriceWithLanding, setNewPriceWithLanding] = useState('');
   const [newPriceWithoutLanding, setNewPriceWithoutLanding] = useState('');
+  const [newSeatsWithLanding, setNewSeatsWithLanding] = useState('');
+  const [newSeatsWithoutLanding, setNewSeatsWithoutLanding] = useState('');
+  const [hasApprovedReservations, setHasApprovedReservations] = useState(false);
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
   const [newOrderAlert, setNewOrderAlert] = useState(false);
@@ -603,11 +606,28 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleEditPrice = (boat: Boat) => {
+  const handleEditPrice = async (boat: Boat) => {
     setBoatToEditPrice(boat);
+    
+    // Verificar se tem reservas aprovadas
+    try {
+      const approvedQuery = query(
+        collection(db, 'reservations'),
+        where('boatId', '==', boat.id),
+        where('status', '==', 'approved')
+      );
+      const approvedSnapshot = await getDocs(approvedQuery);
+      setHasApprovedReservations(!approvedSnapshot.empty);
+    } catch (error) {
+      console.error('Erro ao verificar reservas:', error);
+      setHasApprovedReservations(false);
+    }
+    
     if (boat.boatType === 'escuna') {
       setNewPriceWithLanding((boat.priceWithLanding || boat.ticketPrice).toString());
       setNewPriceWithoutLanding((boat.priceWithoutLanding || boat.ticketPrice).toString());
+      setNewSeatsWithLanding((boat.seatsWithLanding || 0).toString());
+      setNewSeatsWithoutLanding((boat.seatsWithoutLanding || 0).toString());
     } else {
       setNewTicketPrice(boat.ticketPrice.toString());
     }
@@ -624,16 +644,67 @@ export default function AdminDashboard() {
         // Validar ambos os preços para escunas
         const priceWith = parseFloat(newPriceWithLanding);
         const priceWithout = parseFloat(newPriceWithoutLanding);
+        const seatsWithLanding = parseInt(newSeatsWithLanding);
+        const seatsWithoutLanding = parseInt(newSeatsWithoutLanding);
         
         if (isNaN(priceWith) || priceWith <= 0 || isNaN(priceWithout) || priceWithout <= 0) {
           alert('Por favor, insira valores válidos para ambos os preços');
           return;
         }
         
-        // Atualizar ambos os preços
+        if (isNaN(seatsWithLanding) || seatsWithLanding < 0 || isNaN(seatsWithoutLanding) || seatsWithoutLanding < 0) {
+          alert('Por favor, insira quantidades válidas de vagas');
+          return;
+        }
+        
+        // REGRA CRÍTICA: Verificar se já existem reservas APROVADAS/CONFIRMADAS
+        const approvedReservationsQuery = query(
+          collection(db, 'reservations'),
+          where('boatId', '==', boatToEditPrice.id),
+          where('status', '==', 'approved')
+        );
+        const approvedSnapshot = await getDocs(approvedReservationsQuery);
+        const hasApprovedReservations = !approvedSnapshot.empty;
+        
+        // Se já tem reservas aprovadas, NÃO PODE mudar as vagas
+        if (hasApprovedReservations) {
+          const currentSeatsWithLanding = boatToEditPrice.seatsWithLanding || 0;
+          const currentSeatsWithoutLanding = boatToEditPrice.seatsWithoutLanding || 0;
+          
+          // Verificar se tentou mudar as vagas
+          if (seatsWithLanding !== currentSeatsWithLanding || seatsWithoutLanding !== currentSeatsWithoutLanding) {
+            alert('⚠️ ATENÇÃO: Não é possível alterar a distribuição de vagas porque já existem reservas APROVADAS neste barco!\n\nVocê pode apenas alterar os VALORES (preços), mas as vagas devem permanecer:\n🏝️ COM Desembarque: ' + currentSeatsWithLanding + ' vagas\n🚤 SEM Desembarque: ' + currentSeatsWithoutLanding + ' vagas');
+            return;
+          }
+        }
+        
+        // Validar se a soma das vagas é igual ao total
+        const novasSomaDasVagas = seatsWithLanding + seatsWithoutLanding;
+        if (novasSomaDasVagas !== boatToEditPrice.seatsTotal) {
+          alert(`A soma das vagas (${seatsWithLanding} + ${seatsWithoutLanding} = ${novasSomaDasVagas}) deve ser igual ao total de vagas do barco (${boatToEditPrice.seatsTotal})`);
+          return;
+        }
+        
+        // Validar se as vagas ocupadas cabem nas novas configurações (incluindo reservas pendentes)
+        const seatsWithLandingTaken = boatToEditPrice.seatsWithLandingTaken || 0;
+        const seatsWithoutLandingTaken = boatToEditPrice.seatsWithoutLandingTaken || 0;
+        
+        if (seatsWithLandingTaken > seatsWithLanding) {
+          alert(`Erro: Já existem ${seatsWithLandingTaken} reservas COM desembarque (aprovadas + pendentes), mas você está tentando reduzir para ${seatsWithLanding} vagas!`);
+          return;
+        }
+        
+        if (seatsWithoutLandingTaken > seatsWithoutLanding) {
+          alert(`Erro: Já existem ${seatsWithoutLandingTaken} reservas SEM desembarque (aprovadas + pendentes), mas você está tentando reduzir para ${seatsWithoutLanding} vagas!`);
+          return;
+        }
+        
+        // Atualizar preços e vagas
         await updateDoc(boatRef, {
           priceWithLanding: priceWith,
           priceWithoutLanding: priceWithout,
+          seatsWithLanding: seatsWithLanding,
+          seatsWithoutLanding: seatsWithoutLanding,
           ticketPrice: priceWithout, // Manter ticketPrice como fallback
           updatedAt: Timestamp.now(),
         });
@@ -657,11 +728,14 @@ export default function AdminDashboard() {
       setNewTicketPrice('');
       setNewPriceWithLanding('');
       setNewPriceWithoutLanding('');
+      setNewSeatsWithLanding('');
+      setNewSeatsWithoutLanding('');
+      setHasApprovedReservations(false);
 
-      alert('Valor(es) atualizado(s) com sucesso!');
+      alert('Barco atualizado com sucesso!');
     } catch (error) {
-      console.error('Erro ao atualizar valor do barco:', error);
-      alert('Erro ao atualizar valor do barco');
+      console.error('Erro ao atualizar barco:', error);
+      alert('Erro ao atualizar barco');
     }
   };
 
@@ -1649,7 +1723,12 @@ export default function AdminDashboard() {
                   {boat.boatType === 'escuna' && boat.seatsWithLanding !== undefined && (
                     <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600">🏝️ Com Desembarque:</span>
+                        <span className="text-gray-600 flex items-center gap-1">
+                          🏝️ Com Desembarque
+                          {boat.priceWithLanding && (
+                            <span className="text-green-700 font-bold">R${boat.priceWithLanding}</span>
+                          )}
+                        </span>
                         <span className={`font-bold ${
                           (boat.seatsWithLandingTaken || 0) >= (boat.seatsWithLanding || 0) 
                             ? 'text-red-600' 
@@ -1662,7 +1741,12 @@ export default function AdminDashboard() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600">🚤 Panorâmico:</span>
+                        <span className="text-gray-600 flex items-center gap-1">
+                          🚤 Panorâmico
+                          {boat.priceWithoutLanding && (
+                            <span className="text-blue-700 font-bold">R${boat.priceWithoutLanding}</span>
+                          )}
+                        </span>
                         <span className={`font-bold ${
                           (boat.seatsWithoutLandingTaken || 0) >= (boat.seatsWithoutLanding || 0) 
                             ? 'text-red-600' 
@@ -1684,11 +1768,21 @@ export default function AdminDashboard() {
                     </p>
                   )}
                   
-                  {/* Vagas disponíveis geral */}
+                  {/* Vagas disponíveis e preço para lanchas */}
                   {boat.boatType !== 'escuna' && (
-                    <p className="text-xs text-gray-500 mt-1.5">
-                      {boat.seatsTotal - boat.seatsTaken} vagas disponíveis
-                    </p>
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">
+                          💰 Valor por pessoa:
+                        </span>
+                        <span className="font-bold text-viva-blue-dark">
+                          R$ {boat.ticketPrice.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        {boat.seatsTotal - boat.seatsTaken} vagas disponíveis
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -1707,10 +1801,16 @@ export default function AdminDashboard() {
                   <button
                     onClick={() => handleEditPrice(boat)}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-viva-yellow/10 text-viva-orange border border-viva-orange/30 rounded-lg hover:bg-viva-yellow/20 transition text-sm font-medium"
-                    title="Editar Valor do Barco"
+                    title={boat.boatType === 'escuna' ? 'Editar Valores e Vagas' : 'Editar Valor do Barco'}
                   >
                     <DollarSign size={16} />
-                    Editar Valor (R${boat.ticketPrice})
+                    {boat.boatType === 'escuna' ? (
+                      <span className="text-xs">
+                        Editar Valores & Vagas
+                      </span>
+                    ) : (
+                      `Editar Valor (R$${boat.ticketPrice})`
+                    )}
                   </button>
                   <button
                     onClick={() => handleToggleBoatStatus(boat)}
@@ -2259,10 +2359,10 @@ export default function AdminDashboard() {
       {/* Modal de Editar Valor do Barco */}
       {showEditPriceModal && boatToEditPrice && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-3xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-black text-viva-blue-dark mb-4 flex items-center gap-2">
               <DollarSign className="text-viva-orange" size={28} />
-              Editar Valor do Barco
+              {boatToEditPrice.boatType === 'escuna' ? 'Editar Valores e Vagas' : 'Editar Valor do Barco'}
             </h2>
             
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -2289,49 +2389,130 @@ export default function AdminDashboard() {
             </div>
 
             {boatToEditPrice.boatType === 'escuna' ? (
-              /* Dois campos para escunas */
+              /* Campos para escunas - Preços e Vagas */
               <>
-                <div className="mb-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    🏝️ Novo Valor COM Desembarque (R$)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
-                    <input
-                      type="number"
-                      value={newPriceWithLanding}
-                      onChange={(e) => setNewPriceWithLanding(e.target.value)}
-                      placeholder="Ex: 250.00"
-                      min="0"
-                      step="0.01"
-                      className="w-full pl-10 pr-4 py-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold"
-                    />
+                {/* Aviso se tiver reservas aprovadas */}
+                {hasApprovedReservations && (
+                  <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-red-800 font-semibold mb-2 flex items-center gap-2">
+                      <span className="text-xl">🔒</span>
+                      <span>Vagas BLOQUEADAS para Edição</span>
+                    </p>
+                    <p className="text-xs text-red-700">
+                      Este barco já possui <strong>reservas APROVADAS/CONFIRMADAS</strong>. 
+                      Por segurança, você pode apenas alterar os <strong>valores (preços)</strong>, 
+                      mas NÃO pode alterar a distribuição de vagas entre COM e SEM desembarque.
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Passageiros que desembarcam na ilha
-                  </p>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  {/* COM Desembarque */}
+                  <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
+                    <h3 className="font-bold text-green-800 mb-3 flex items-center gap-2">
+                      🏝️ COM Desembarque
+                    </h3>
+                    
+                    <div className="mb-3">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Valor (R$)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">R$</span>
+                        <input
+                          type="number"
+                          value={newPriceWithLanding}
+                          onChange={(e) => setNewPriceWithLanding(e.target.value)}
+                          placeholder="250.00"
+                          min="0"
+                          step="0.01"
+                          className="w-full pl-8 pr-3 py-2.5 border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-base font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                        Vagas Totais
+                        {hasApprovedReservations && <span className="text-red-600">🔒</span>}
+                      </label>
+                      <input
+                        type="number"
+                        value={newSeatsWithLanding}
+                        onChange={(e) => setNewSeatsWithLanding(e.target.value)}
+                        placeholder="10"
+                        min="0"
+                        disabled={hasApprovedReservations}
+                        className="w-full px-3 py-2.5 border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-base font-bold disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        Ocupadas: {boatToEditPrice.seatsWithLandingTaken || 0}
+                        {hasApprovedReservations && <span className="text-red-600 ml-1">(Bloqueado)</span>}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* SEM Desembarque */}
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4">
+                    <h3 className="font-bold text-blue-800 mb-3 flex items-center gap-2">
+                      🚤 SEM Desembarque
+                    </h3>
+                    
+                    <div className="mb-3">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Valor (R$)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">R$</span>
+                        <input
+                          type="number"
+                          value={newPriceWithoutLanding}
+                          onChange={(e) => setNewPriceWithoutLanding(e.target.value)}
+                          placeholder="200.00"
+                          min="0"
+                          step="0.01"
+                          className="w-full pl-8 pr-3 py-2.5 border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                        Vagas Totais
+                        {hasApprovedReservations && <span className="text-red-600">🔒</span>}
+                      </label>
+                      <input
+                        type="number"
+                        value={newSeatsWithoutLanding}
+                        onChange={(e) => setNewSeatsWithoutLanding(e.target.value)}
+                        placeholder="37"
+                        min="0"
+                        disabled={hasApprovedReservations}
+                        className="w-full px-3 py-2.5 border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base font-bold disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        Ocupadas: {boatToEditPrice.seatsWithoutLandingTaken || 0}
+                        {hasApprovedReservations && <span className="text-red-600 ml-1">(Bloqueado)</span>}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mb-6">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    🚤 Novo Valor SEM Desembarque / Panorâmico (R$)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
-                    <input
-                      type="number"
-                      value={newPriceWithoutLanding}
-                      onChange={(e) => setNewPriceWithoutLanding(e.target.value)}
-                      placeholder="Ex: 200.00"
-                      min="0"
-                      step="0.01"
-                      className="w-full pl-10 pr-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-bold"
-                    />
+                {/* Info sobre total de vagas - apenas se não estiver bloqueado */}
+                {!hasApprovedReservations && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Total do Barco:</strong> {boatToEditPrice.seatsTotal} vagas
+                      <br />
+                      <strong>Nova distribuição:</strong> {(parseInt(newSeatsWithLanding) || 0) + (parseInt(newSeatsWithoutLanding) || 0)} vagas
+                      {(parseInt(newSeatsWithLanding) || 0) + (parseInt(newSeatsWithoutLanding) || 0) === boatToEditPrice.seatsTotal ? (
+                        <span className="text-green-600 ml-2">✓ OK</span>
+                      ) : (
+                        <span className="text-red-600 ml-2">✗ Deve somar {boatToEditPrice.seatsTotal}</span>
+                      )}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Passageiros que ficam apenas no barco
-                  </p>
-                </div>
+                )}
               </>
             ) : (
               /* Um campo para lanchas */
@@ -2364,7 +2545,9 @@ export default function AdminDashboard() {
                   Atenção:
                 </strong>
                 {boatToEditPrice.boatType === 'escuna' 
-                  ? 'Os novos valores serão aplicados para novas reservas. As reservas já existentes manterão os valores originais.'
+                  ? hasApprovedReservations
+                    ? '🔒 Como já existem reservas CONFIRMADAS, você só pode alterar os VALORES (preços). A distribuição de vagas está bloqueada para proteger as reservas confirmadas.'
+                    : '✅ Você pode alterar valores E redistribuir as vagas. As reservas já existentes manterão os valores originais, mas você não pode reduzir vagas abaixo das já ocupadas (incluindo pendentes).'
                   : 'O novo valor será aplicado para novas reservas. As reservas já existentes manterão o valor original.'}
               </p>
             </div>
@@ -2377,6 +2560,9 @@ export default function AdminDashboard() {
                   setNewTicketPrice('');
                   setNewPriceWithLanding('');
                   setNewPriceWithoutLanding('');
+                  setNewSeatsWithLanding('');
+                  setNewSeatsWithoutLanding('');
+                  setHasApprovedReservations(false);
                 }}
                 className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
               >
@@ -2386,7 +2572,7 @@ export default function AdminDashboard() {
                 onClick={handleUpdateBoatPrice}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-viva-orange to-viva-yellow text-white rounded-lg font-bold hover:shadow-lg transition"
               >
-                Atualizar {boatToEditPrice.boatType === 'escuna' ? 'Valores' : 'Valor'}
+                Atualizar {boatToEditPrice.boatType === 'escuna' ? 'Barco' : 'Valor'}
               </button>
             </div>
           </div>
