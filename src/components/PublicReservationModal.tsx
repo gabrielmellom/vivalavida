@@ -682,7 +682,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                       <span className={`font-bold ${
                                         vagasComDesembarque <= 0 ? 'text-red-600' : 'text-green-600'
                                       }`}>
-                                        {tr('reservation.freeSlots', { free: vagasComDesembarque, total: boat.seatsWithLanding })}
+                                        {tr('reservation.freeSlots', { free: vagasComDesembarque, total: boat.seatsWithLanding || 0 })}
                                       </span>
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
@@ -690,7 +690,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                       <span className={`font-bold ${
                                         vagasPanoramico <= 0 ? 'text-red-600' : 'text-blue-600'
                                       }`}>
-                                        {tr('reservation.freeSlots', { free: vagasPanoramico, total: boat.seatsWithoutLanding })}
+                                        {tr('reservation.freeSlots', { free: vagasPanoramico, total: boat.seatsWithoutLanding || 0 })}
                                       </span>
                                     </div>
                                   </div>
@@ -820,7 +820,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             }`}>
                               {vagasComDesembarque}
                             </p>
-                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithLanding })}</p>
+                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithLanding || 0 })}</p>
                             {escunaType === 'com-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">
                                 ✓ {t('reservation.selectedTag')}
@@ -840,7 +840,7 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                             }`}>
                               {vagasPanoramico}
                             </p>
-                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithoutLanding })}</p>
+                            <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithoutLanding || 0 })}</p>
                             {escunaType === 'sem-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-blue-500 text-white text-xs font-bold rounded-full">
                                 ✓ {t('reservation.selectedTag')}
