@@ -374,7 +374,6 @@ export const translations: Record<string, string> = {
   'terms.clearSignature': 'Clear Signature',
   'terms.submit': 'Submit Acceptance',
   'terms.thankYou': 'Thank you!',
-  'terms.accepted': 'Terms accepted successfully',
   'terms.groupNote': 'You are signing for the following participants:',
 };
 
