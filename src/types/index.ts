@@ -12,7 +12,9 @@ export interface Boat {
   seatsWithLandingTaken?: number; // Vagas com desembarque ocupadas
   seatsWithoutLanding?: number; // Vagas sem desembarque (panorâmico)
   seatsWithoutLandingTaken?: number; // Vagas sem desembarque ocupadas
-  ticketPrice: number; // Preço do ingresso por pessoa (adulto)
+  ticketPrice: number; // Preço do ingresso por pessoa (adulto) - usado para lanchas ou como fallback
+  priceWithLanding?: number; // Preço COM desembarque (apenas para escunas)
+  priceWithoutLanding?: number; // Preço SEM desembarque/Panorâmico (apenas para escunas)
   createdBy: string; // admin uid
   createdAt: Date;
   updatedAt: Date;

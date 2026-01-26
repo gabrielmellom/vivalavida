@@ -86,16 +86,26 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
 
   const getBasePriceForBoat = (boat: Boat | null) => {
     if (!boat) return 0;
-    // SEMPRE usar o ticketPrice do barco específico
-    // Se não tiver, buscar dos tours configurados como fallback
-    if (boat.ticketPrice) {
-      return boat.ticketPrice;
-    }
-    // Fallback para tours configurados (apenas se o barco não tiver preço)
+    
+    // Para ESCUNAS: usar preços específicos por tipo
     if (boat.boatType === 'escuna') {
+      if (escunaType === 'com-desembarque' && boat.priceWithLanding) {
+        return boat.priceWithLanding;
+      }
+      if (escunaType === 'sem-desembarque' && boat.priceWithoutLanding) {
+        return boat.priceWithoutLanding;
+      }
+      // Fallback para tours configurados se não tiver preços específicos
       const type = escunaType === 'com-desembarque' ? 'desembarque' : 'panoramico';
       return getPriceByType(type);
     }
+    
+    // Para LANCHAS: usar ticketPrice
+    if (boat.ticketPrice) {
+      return boat.ticketPrice;
+    }
+    
+    // Fallback final
     return getPriceByType('panoramico');
   };
 
@@ -696,9 +706,21 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                   </div>
                                 )}
                                 
-                                <p className="text-xs sm:text-sm text-viva-blue-dark font-semibold mt-1">
-                                  {tr('reservation.pricePerPerson', { price: getBasePriceForBoat(boat).toFixed(2) })}
-                                </p>
+                                {/* Mostrar preços - diferente para escuna e lancha */}
+                                {boat.boatType === 'escuna' && boat.priceWithLanding && boat.priceWithoutLanding ? (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-xs text-green-700 font-semibold">
+                                      🏝️ COM Desembarque: R$ {boat.priceWithLanding.toFixed(2)}
+                                    </p>
+                                    <p className="text-xs text-blue-700 font-semibold">
+                                      🚤 SEM Desembarque: R$ {boat.priceWithoutLanding.toFixed(2)}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs sm:text-sm text-viva-blue-dark font-semibold mt-1">
+                                    {tr('reservation.pricePerPerson', { price: (boat.ticketPrice || getBasePriceForBoat(boat)).toFixed(2) })}
+                                  </p>
+                                )}
                               </div>
                               <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center ml-3 ${
                                 isSelected ? 'border-viva-blue bg-viva-blue' : 'border-gray-300'
@@ -740,7 +762,12 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             } ${vagasPanoramico <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            {t('reservation.withoutLanding')}
+                            <span className="block">{t('reservation.withoutLanding')}</span>
+                            {selectedBoat.priceWithoutLanding && (
+                              <span className={`block text-xs mt-1 font-bold ${escunaType === 'sem-desembarque' ? 'text-white/90' : 'text-blue-600'}`}>
+                                R$ {selectedBoat.priceWithoutLanding.toFixed(2)}
+                              </span>
+                            )}
                             {vagasPanoramico <= 0 && <span className="block text-xs mt-1 text-red-600">{t('reservation.noVacancies')}</span>}
                           </button>
                           <button
@@ -758,7 +785,12 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             } ${vagasComDesembarque <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            {t('reservation.withLanding')}
+                            <span className="block">{t('reservation.withLanding')}</span>
+                            {selectedBoat.priceWithLanding && (
+                              <span className={`block text-xs mt-1 font-bold ${escunaType === 'com-desembarque' ? 'text-white/90' : 'text-green-600'}`}>
+                                R$ {selectedBoat.priceWithLanding.toFixed(2)}
+                              </span>
+                            )}
                             {vagasComDesembarque <= 0 && <span className="block text-xs mt-1 text-red-600">{t('reservation.noVacancies')}</span>}
                           </button>
                         </>
@@ -821,6 +853,11 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                               {vagasComDesembarque}
                             </p>
                             <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithLanding || 0 })}</p>
+                            {selectedBoat.priceWithLanding && (
+                              <p className="text-sm font-bold text-green-700 mt-2">
+                                R$ {selectedBoat.priceWithLanding.toFixed(2)}
+                              </p>
+                            )}
                             {escunaType === 'com-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">
                                 ✓ {t('reservation.selectedTag')}
@@ -841,6 +878,11 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
                               {vagasPanoramico}
                             </p>
                             <p className="text-xs text-gray-500">{tr('reservation.freeSlotsOf', { total: selectedBoat.seatsWithoutLanding || 0 })}</p>
+                            {selectedBoat.priceWithoutLanding && (
+                              <p className="text-sm font-bold text-blue-700 mt-2">
+                                R$ {selectedBoat.priceWithoutLanding.toFixed(2)}
+                              </p>
+                            )}
                             {escunaType === 'sem-desembarque' && (
                               <span className="inline-block mt-2 px-2 py-0.5 bg-blue-500 text-white text-xs font-bold rounded-full">
                                 ✓ {t('reservation.selectedTag')}

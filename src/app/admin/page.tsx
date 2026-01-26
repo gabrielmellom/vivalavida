@@ -43,6 +43,8 @@ export default function AdminDashboard() {
   const [seatsWithLanding, setSeatsWithLanding] = useState(10); // Vagas com desembarque
   const [seatsWithoutLanding, setSeatsWithoutLanding] = useState(30); // Vagas sem desembarque
   const [ticketPrice, setTicketPrice] = useState('200');
+  const [priceWithLanding, setPriceWithLanding] = useState('250'); // Preço COM desembarque
+  const [priceWithoutLanding, setPriceWithoutLanding] = useState('200'); // Preço SEM desembarque
   const [boatType, setBoatType] = useState<'escuna' | 'lancha'>('escuna');
   const [createBulk, setCreateBulk] = useState(false);
   const [bulkMonth, setBulkMonth] = useState('');
@@ -55,6 +57,8 @@ export default function AdminDashboard() {
   const [showEditPriceModal, setShowEditPriceModal] = useState(false);
   const [boatToEditPrice, setBoatToEditPrice] = useState<Boat | null>(null);
   const [newTicketPrice, setNewTicketPrice] = useState('');
+  const [newPriceWithLanding, setNewPriceWithLanding] = useState('');
+  const [newPriceWithoutLanding, setNewPriceWithoutLanding] = useState('');
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
   const [newOrderAlert, setNewOrderAlert] = useState(false);
@@ -361,7 +365,10 @@ export default function AdminDashboard() {
             seatsWithLandingTaken: boatType === 'escuna' ? 0 : undefined,
             seatsWithoutLanding: boatType === 'escuna' ? seatsWithoutLanding : undefined,
             seatsWithoutLandingTaken: boatType === 'escuna' ? 0 : undefined,
-            ticketPrice: parseFloat(ticketPrice) || 200,
+            // Preços
+            ticketPrice: boatType === 'lancha' ? (parseFloat(ticketPrice) || 200) : (parseFloat(priceWithoutLanding) || 200), // Para lanchas ou fallback
+            priceWithLanding: boatType === 'escuna' ? (parseFloat(priceWithLanding) || 250) : undefined,
+            priceWithoutLanding: boatType === 'escuna' ? (parseFloat(priceWithoutLanding) || 200) : undefined,
             createdBy: user.uid,
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now(),
@@ -394,7 +401,10 @@ export default function AdminDashboard() {
           seatsWithLandingTaken: boatType === 'escuna' ? 0 : undefined,
           seatsWithoutLanding: boatType === 'escuna' ? seatsWithoutLanding : undefined,
           seatsWithoutLandingTaken: boatType === 'escuna' ? 0 : undefined,
-          ticketPrice: parseFloat(ticketPrice) || 200,
+          // Preços
+          ticketPrice: boatType === 'lancha' ? (parseFloat(ticketPrice) || 200) : (parseFloat(priceWithoutLanding) || 200), // Para lanchas ou fallback
+          priceWithLanding: boatType === 'escuna' ? (parseFloat(priceWithLanding) || 250) : undefined,
+          priceWithoutLanding: boatType === 'escuna' ? (parseFloat(priceWithoutLanding) || 200) : undefined,
           createdBy: user.uid,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
@@ -409,6 +419,8 @@ export default function AdminDashboard() {
       setSeatsWithLanding(10);
       setSeatsWithoutLanding(30);
       setTicketPrice('200');
+      setPriceWithLanding('250');
+      setPriceWithoutLanding('200');
       setBoatType('escuna');
       setCreateBulk(false);
       setBulkMonth('');
@@ -593,34 +605,60 @@ export default function AdminDashboard() {
 
   const handleEditPrice = (boat: Boat) => {
     setBoatToEditPrice(boat);
-    setNewTicketPrice(boat.ticketPrice.toString());
+    if (boat.boatType === 'escuna') {
+      setNewPriceWithLanding((boat.priceWithLanding || boat.ticketPrice).toString());
+      setNewPriceWithoutLanding((boat.priceWithoutLanding || boat.ticketPrice).toString());
+    } else {
+      setNewTicketPrice(boat.ticketPrice.toString());
+    }
     setShowEditPriceModal(true);
   };
 
   const handleUpdateBoatPrice = async () => {
     if (!boatToEditPrice) return;
 
-    const priceValue = parseFloat(newTicketPrice);
-    if (isNaN(priceValue) || priceValue <= 0) {
-      alert('Por favor, insira um valor válido');
-      return;
-    }
-
     try {
       const boatRef = doc(db, 'boats', boatToEditPrice.id);
       
-      // Atualizar preço do barco
-      await updateDoc(boatRef, {
-        ticketPrice: priceValue,
-        updatedAt: Timestamp.now(),
-      });
+      if (boatToEditPrice.boatType === 'escuna') {
+        // Validar ambos os preços para escunas
+        const priceWith = parseFloat(newPriceWithLanding);
+        const priceWithout = parseFloat(newPriceWithoutLanding);
+        
+        if (isNaN(priceWith) || priceWith <= 0 || isNaN(priceWithout) || priceWithout <= 0) {
+          alert('Por favor, insira valores válidos para ambos os preços');
+          return;
+        }
+        
+        // Atualizar ambos os preços
+        await updateDoc(boatRef, {
+          priceWithLanding: priceWith,
+          priceWithoutLanding: priceWithout,
+          ticketPrice: priceWithout, // Manter ticketPrice como fallback
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        // Atualizar preço único para lanchas
+        const priceValue = parseFloat(newTicketPrice);
+        if (isNaN(priceValue) || priceValue <= 0) {
+          alert('Por favor, insira um valor válido');
+          return;
+        }
+        
+        await updateDoc(boatRef, {
+          ticketPrice: priceValue,
+          updatedAt: Timestamp.now(),
+        });
+      }
 
       // Fechar modal e limpar estados
       setShowEditPriceModal(false);
       setBoatToEditPrice(null);
       setNewTicketPrice('');
+      setNewPriceWithLanding('');
+      setNewPriceWithoutLanding('');
 
-      alert('Valor atualizado com sucesso!');
+      alert('Valor(es) atualizado(s) com sucesso!');
     } catch (error) {
       console.error('Erro ao atualizar valor do barco:', error);
       alert('Erro ao atualizar valor do barco');
@@ -2063,23 +2101,71 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                  <DollarSign size={16} className="text-gray-500" />
-                  Preço do Ingresso por Pessoa (R$) *
-                </label>
-                <input
-                  type="number"
-                  value={ticketPrice}
-                  onChange={(e) => setTicketPrice(e.target.value)}
-                  required
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
-                  placeholder="200.00"
-                />
-                <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade deste valor</p>
-              </div>
+              {/* Preços - Diferente para Escuna e Lancha */}
+              {boatType === 'escuna' ? (
+                <>
+                  {/* Preço COM Desembarque */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                      <DollarSign size={16} className="text-green-600" />
+                      💰 Preço COM Desembarque (R$) *
+                    </label>
+                    <input
+                      type="number"
+                      value={priceWithLanding}
+                      onChange={(e) => setPriceWithLanding(e.target.value)}
+                      required
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-base font-bold"
+                      placeholder="250.00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">🏝️ Passageiros que desembarcam na ilha</p>
+                  </div>
+
+                  {/* Preço SEM Desembarque */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                      <DollarSign size={16} className="text-blue-600" />
+                      💰 Preço SEM Desembarque / Panorâmico (R$) *
+                    </label>
+                    <input
+                      type="number"
+                      value={priceWithoutLanding}
+                      onChange={(e) => setPriceWithoutLanding(e.target.value)}
+                      required
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base font-bold"
+                      placeholder="200.00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">🚤 Passageiros que ficam apenas no barco</p>
+                  </div>
+                </>
+              ) : (
+                /* Preço único para Lanchas */
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                    <DollarSign size={16} className="text-gray-500" />
+                    Preço do Ingresso por Pessoa (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    value={ticketPrice}
+                    onChange={(e) => setTicketPrice(e.target.value)}
+                    required
+                    step="0.01"
+                    min="0"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-blue focus:border-viva-blue outline-none text-base"
+                    placeholder="200.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Crianças menores de 7 anos pagam metade deste valor</p>
+                </div>
+              )}
+              
+              <p className="text-xs text-gray-500 bg-orange-50 border border-orange-200 rounded-lg p-3">
+                ℹ️ <strong>Importante:</strong> Crianças menores de 7 anos pagam metade do valor
+              </p>
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-4">
                 <button
                   type="button"
@@ -2181,36 +2267,95 @@ export default function AdminDashboard() {
             
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800 mb-2">
-                <strong>Barco:</strong> {boatToEditPrice.name}
+                <strong>Barco:</strong> {boatToEditPrice.name} ({boatToEditPrice.boatType === 'escuna' ? 'Escuna' : 'Lancha'})
               </p>
               <p className="text-sm text-blue-800 mb-2">
                 <strong>Data:</strong> {formatDate(boatToEditPrice.date)}
               </p>
-              <p className="text-sm text-blue-800">
-                <strong>Valor atual:</strong> R$ {boatToEditPrice.ticketPrice.toFixed(2)}
-              </p>
+              {boatToEditPrice.boatType === 'escuna' ? (
+                <>
+                  <p className="text-sm text-green-700 mb-1">
+                    <strong>🏝️ COM Desembarque:</strong> R$ {(boatToEditPrice.priceWithLanding || boatToEditPrice.ticketPrice).toFixed(2)}
+                  </p>
+                  <p className="text-sm text-blue-700">
+                    <strong>🚤 SEM Desembarque:</strong> R$ {(boatToEditPrice.priceWithoutLanding || boatToEditPrice.ticketPrice).toFixed(2)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-blue-800">
+                  <strong>Valor atual:</strong> R$ {boatToEditPrice.ticketPrice.toFixed(2)}
+                </p>
+              )}
             </div>
 
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                💰 Novo Valor por Pessoa (Adulto)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
-                <input
-                  type="number"
-                  value={newTicketPrice}
-                  onChange={(e) => setNewTicketPrice(e.target.value)}
-                  placeholder="Ex: 200.00"
-                  min="0"
-                  step="0.01"
-                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-orange focus:border-viva-orange outline-none text-lg font-bold"
-                />
+            {boatToEditPrice.boatType === 'escuna' ? (
+              /* Dois campos para escunas */
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    🏝️ Novo Valor COM Desembarque (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                    <input
+                      type="number"
+                      value={newPriceWithLanding}
+                      onChange={(e) => setNewPriceWithLanding(e.target.value)}
+                      placeholder="Ex: 250.00"
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-10 pr-4 py-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Passageiros que desembarcam na ilha
+                  </p>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    🚤 Novo Valor SEM Desembarque / Panorâmico (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                    <input
+                      type="number"
+                      value={newPriceWithoutLanding}
+                      onChange={(e) => setNewPriceWithoutLanding(e.target.value)}
+                      placeholder="Ex: 200.00"
+                      min="0"
+                      step="0.01"
+                      className="w-full pl-10 pr-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-bold"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Passageiros que ficam apenas no barco
+                  </p>
+                </div>
+              </>
+            ) : (
+              /* Um campo para lanchas */
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  💰 Novo Valor por Pessoa (Adulto)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                  <input
+                    type="number"
+                    value={newTicketPrice}
+                    onChange={(e) => setNewTicketPrice(e.target.value)}
+                    placeholder="Ex: 200.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-viva-orange focus:border-viva-orange outline-none text-lg font-bold"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  ℹ️ Este valor será atualizado em todos os lugares do sistema automaticamente
+                </p>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                ℹ️ Este valor será atualizado em todos os lugares do sistema automaticamente
-              </p>
-            </div>
+            )}
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-yellow-800">
@@ -2218,7 +2363,9 @@ export default function AdminDashboard() {
                   <span className="text-yellow-600">⚠</span>
                   Atenção:
                 </strong>
-                O novo valor será aplicado para novas reservas. As reservas já existentes manterão o valor original.
+                {boatToEditPrice.boatType === 'escuna' 
+                  ? 'Os novos valores serão aplicados para novas reservas. As reservas já existentes manterão os valores originais.'
+                  : 'O novo valor será aplicado para novas reservas. As reservas já existentes manterão o valor original.'}
               </p>
             </div>
 
@@ -2228,6 +2375,8 @@ export default function AdminDashboard() {
                   setShowEditPriceModal(false);
                   setBoatToEditPrice(null);
                   setNewTicketPrice('');
+                  setNewPriceWithLanding('');
+                  setNewPriceWithoutLanding('');
                 }}
                 className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
               >
@@ -2237,7 +2386,7 @@ export default function AdminDashboard() {
                 onClick={handleUpdateBoatPrice}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-viva-orange to-viva-yellow text-white rounded-lg font-bold hover:shadow-lg transition"
               >
-                Atualizar Valor
+                Atualizar {boatToEditPrice.boatType === 'escuna' ? 'Valores' : 'Valor'}
               </button>
             </div>
           </div>
