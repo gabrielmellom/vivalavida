@@ -596,8 +596,8 @@ export default function AdminDashboard() {
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      console.error('Erro ao fazer check-in:', error);
-      alert('Erro ao fazer check-in');
+      console.error('Erro ao registrar embarque:', error);
+      alert('Erro ao registrar embarque');
     }
   };
 
@@ -1031,17 +1031,17 @@ export default function AdminDashboard() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-          <Link href="/admin/vendedores" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
-            <Users size={18} />
-            <span>Equipe</span>
+          <Link href="/admin/vouchers" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <QrCode size={18} />
+            <span>Confirmações de reserva</span>
           </Link>
           <Link href="/admin/checkin" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
             <CheckCircle size={18} />
-            <span>Check-in</span>
+            <span>Área de embarque</span>
           </Link>
-          <Link href="/admin/vouchers" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
-            <QrCode size={18} />
-            <span>Vouchers</span>
+          <Link href="/admin/vendedores" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <Users size={18} />
+            <span>Equipe</span>
           </Link>
           <Link href="/admin/relatorios" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
             <BarChart3 size={18} />
@@ -1113,12 +1113,12 @@ export default function AdminDashboard() {
             {/* Links de Navegação */}
             <nav className="space-y-2">
               <Link
-                href="/admin/vendedores"
+                href="/admin/vouchers"
                 onClick={() => setShowSideMenu(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
               >
-                <Users size={20} />
-                <span className="font-medium">Gerenciar Equipe</span>
+                <QrCode size={20} />
+                <span className="font-medium">Confirmações de reserva</span>
               </Link>
               <Link
                 href="/admin/checkin"
@@ -1126,15 +1126,15 @@ export default function AdminDashboard() {
                 className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
               >
                 <CheckCircle size={20} />
-                <span className="font-medium">Check-in</span>
+                <span className="font-medium">Área de embarque</span>
               </Link>
               <Link
-                href="/admin/vouchers"
+                href="/admin/vendedores"
                 onClick={() => setShowSideMenu(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-100 transition text-slate-700"
               >
-                <QrCode size={20} />
-                <span className="font-medium">Gerar Vouchers</span>
+                <Users size={20} />
+                <span className="font-medium">Gerenciar Equipe</span>
               </Link>
               <Link
                 href="/admin/relatorios"

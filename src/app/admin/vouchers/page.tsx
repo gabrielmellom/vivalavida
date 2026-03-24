@@ -656,8 +656,8 @@ Obrigado e ate breve!`;
               <ArrowLeft size={20} />
             </Link>
             <div>
-              <h1 className="text-lg sm:text-2xl font-bold text-viva-blue-dark">Gerenciar Vouchers</h1>
-              <p className="text-gray-500 text-xs sm:text-sm">Recibo → Aceite → Confirmação → Voucher</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-viva-blue-dark">Confirmações de reserva</h1>
+              <p className="text-gray-500 text-xs sm:text-sm">Recibo → Confirmação → Aceite → Voucher PDF</p>
             </div>
           </div>
         </div>

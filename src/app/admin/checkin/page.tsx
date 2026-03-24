@@ -327,8 +327,8 @@ function CheckInPageContent() {
           updatedAt: Timestamp.now(),
         });
       } catch (error) {
-        console.error('Erro ao atualizar check-in:', error);
-        alert('Erro ao atualizar check-in. Tente novamente.');
+        console.error('Erro ao atualizar embarque:', error);
+        alert('Erro ao atualizar embarque. Tente novamente.');
       }
       return;
     }
@@ -363,8 +363,8 @@ function CheckInPageContent() {
           });
         }
       } catch (error) {
-        console.error('Erro ao atualizar check-in:', error);
-        alert('Erro ao atualizar check-in. Tente novamente.');
+        console.error('Erro ao atualizar embarque:', error);
+        alert('Erro ao atualizar embarque. Tente novamente.');
       }
     }
   };
@@ -485,8 +485,8 @@ function CheckInPageContent() {
       setDiscountReason('');
       setSelectedBank('');
     } catch (error) {
-      console.error('Erro ao atualizar check-in:', error);
-      alert('Erro ao atualizar check-in. Tente novamente.');
+      console.error('Erro ao atualizar embarque:', error);
+      alert('Erro ao atualizar embarque. Tente novamente.');
     }
   };
 
@@ -516,8 +516,8 @@ function CheckInPageContent() {
       setReservationToCheckIn(null);
       setGroupReservationsToCheckIn([]);
     } catch (error) {
-      console.error('Erro ao atualizar check-in:', error);
-      alert('Erro ao atualizar check-in. Tente novamente.');
+      console.error('Erro ao atualizar embarque:', error);
+      alert('Erro ao atualizar embarque. Tente novamente.');
     }
   };
 
@@ -539,8 +539,8 @@ function CheckInPageContent() {
       setDiscountAmount('');
       setDiscountReason('');
     } catch (error) {
-      console.error('Erro ao atualizar check-in:', error);
-      alert('Erro ao atualizar check-in. Tente novamente.');
+      console.error('Erro ao atualizar embarque:', error);
+      alert('Erro ao atualizar embarque. Tente novamente.');
     }
   };
 
@@ -742,7 +742,7 @@ function CheckInPageContent() {
               <ArrowLeft size={20} />
             </Link>
               <div>
-                <h1 className="text-lg sm:text-2xl font-black text-viva-blue-dark">Check-in</h1>
+                <h1 className="text-lg sm:text-2xl font-black text-viva-blue-dark">Área de embarque</h1>
                 <p className="text-gray-600 text-xs sm:text-sm">Gerenciar embarque</p>
               </div>
           </div>
@@ -865,7 +865,7 @@ function CheckInPageContent() {
               <div className="bg-green-50 rounded-lg p-3 sm:p-4 shadow-sm text-center border border-green-200">
                 <p className="flex items-center justify-center gap-1 text-green-700 text-xs sm:text-sm mb-1">
                   <CheckCircle size={14} className="text-green-600" />
-                  Check-in
+                  Embarcados
                 </p>
                 <p className="text-xl sm:text-2xl font-black text-green-600">{checkedInCount}</p>
               </div>
@@ -995,7 +995,7 @@ function CheckInPageContent() {
 
                       {/* Botões de Ações */}
                       <div className="space-y-2">
-                        {/* Botão de Check-in Grande */}
+                        {/* Botão de embarque */}
                         {(() => {
                           // Verificar quantos do grupo ainda não fizeram check-in
                           const pendingInGroup = reservation.groupId 
@@ -1017,17 +1017,17 @@ function CheckInPageContent() {
                               {reservation.checkedIn ? (
                                 <>
                                   <CheckCircle size={20} />
-                                  Check-in Feito ✓
+                                  Embarque feito ✓
                                 </>
                               ) : pendingInGroup > 1 ? (
                                 <>
                                   <Users size={20} />
-                                  Check-in Grupo ({pendingInGroup})
+                                  Embarque em grupo ({pendingInGroup})
                                 </>
                               ) : (
                                 <>
                                   <User size={20} />
-                                  Fazer Check-in
+                                  Confirmar embarque
                                 </>
                               )}
                             </button>
@@ -1078,7 +1078,7 @@ function CheckInPageContent() {
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Contato</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Check-in</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Embarque</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -1188,7 +1188,7 @@ function CheckInPageContent() {
                                   ) : (
                                     <>
                                       <XCircle size={18} />
-                                      Check-in
+                                      Confirmar embarque
                                     </>
                                   )}
                                 </button>
@@ -1221,7 +1221,7 @@ function CheckInPageContent() {
                   <DollarSign className="text-orange-600" size={28} />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {groupReservationsToCheckIn.length > 1 ? 'Check-in do Grupo' : 'Pagamento Pendente'}
+                  {groupReservationsToCheckIn.length > 1 ? 'Embarque do grupo' : 'Pagamento Pendente'}
                 </h2>
                 {groupReservationsToCheckIn.length > 1 && (
                   <p className="text-sm text-gray-600 mt-1">
@@ -1513,8 +1513,8 @@ function CheckInPageContent() {
                 >
                   <CheckCircle size={20} />
                   {groupReservationsToCheckIn.length > 1 
-                    ? `Pagar e Check-in (${groupReservationsToCheckIn.length} pessoas)`
-                    : 'Registrar Pagamento e Fazer Check-in'
+                    ? `Pagar e confirmar embarque (${groupReservationsToCheckIn.length} pessoas)`
+                    : 'Registrar pagamento e confirmar embarque'
                   }
                 </button>
 
@@ -1536,7 +1536,7 @@ function CheckInPageContent() {
                   <CheckCircle size={20} />
                   {groupReservationsToCheckIn.length > 1 
                     ? `Não Cobrar (${groupReservationsToCheckIn.length} pessoas)`
-                    : 'Não Cobrar - Fazer Check-in'
+                    : 'Não cobrar — confirmar embarque'
                   }
                 </button>
 

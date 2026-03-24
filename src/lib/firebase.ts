@@ -47,7 +47,10 @@ if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
   initFirebase();
 }
 
-/** Retorna o Firestore, inicializando se necessário (útil quando o módulo carrega antes do cliente) */
+/**
+ * Retorna o Firestore, inicializando se necessário (ex.: módulo carregou antes do cliente estar pronto).
+ * Prefira isto em páginas como /aceite onde o primeiro acesso pode ser tardio.
+ */
 export function getDb(): Firestore {
   if (typeof window === 'undefined') {
     throw new Error('Firebase Firestore só pode ser usado no navegador');
@@ -60,32 +63,15 @@ export function getDb(): Firestore {
 }
 
 /**
- * Proxy tipado como Firestore para o build TypeScript e APIs como collection(db, ...).
- * Encaminha para a instância real na primeira propriedade acessada.
+ * Instância real do Firestore (obrigatória para collection()/doc() — o SDK não aceita Proxy).
+ * No bundle do navegador, preenchida pelo initFirebase() acima. Em RSC/SSR não use.
  */
-export const db: Firestore = new Proxy({} as Firestore, {
-  get(_target, prop) {
-    const real = getDb();
-    const value = Reflect.get(real, prop, real);
-    return typeof value === 'function' ? value.bind(real) : value;
-  },
-}) as Firestore;
+export const db = firestoreInstance as Firestore;
 
-export function getStorageClient(): FirebaseStorage {
-  getDb();
-  if (!storageInstance) {
-    throw new Error('Firebase Storage não inicializado');
-  }
-  return storageInstance;
-}
-
-export const storage: FirebaseStorage = new Proxy({} as FirebaseStorage, {
-  get(_target, prop) {
-    const real = getStorageClient();
-    const value = Reflect.get(real, prop, real);
-    return typeof value === 'function' ? value.bind(real) : value;
-  },
-}) as FirebaseStorage;
+/**
+ * Storage real (ref(storage, ...) também exige instância nativa).
+ */
+export const storage = storageInstance as FirebaseStorage;
 
 export { app, auth };
 

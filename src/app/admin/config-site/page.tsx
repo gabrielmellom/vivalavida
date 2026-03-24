@@ -579,7 +579,7 @@ export default function ConfigSitePage() {
                   Bancos / Contas para Recebimento
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">
-                  Configure os bancos/contas onde você recebe pagamentos. Isso permitirá selecionar o banco ao registrar pagamentos no check-in.
+                  Configure os bancos/contas onde você recebe pagamentos. Isso permitirá selecionar o banco ao registrar pagamentos na área de embarque.
                 </p>
                 
                 {/* Lista de bancos */}
@@ -1207,7 +1207,7 @@ function TourEditModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Check-in</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Horário de embarque</label>
               <input
                 type="text"
                 value={formData.checkInTime}
