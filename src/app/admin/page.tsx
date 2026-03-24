@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
 import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp, Download, Receipt, Globe } from 'lucide-react';
 import { generateReceiptPDF, ReceiptData, type ReceiptLanguage } from '@/lib/receiptGenerator';
+import { useSiteConfig, DEFAULT_TOURS } from '@/lib/useSiteConfig';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -1446,7 +1447,7 @@ export default function AdminDashboard() {
           </div>
           <button onClick={() => setShowReservationWizard(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg transition shadow-sm">
             <Plus size={18} />
-            Novo Passeio
+            Criar uma nova reserva
           </button>
           <button onClick={() => setShowBoatModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-50 transition">
             <Ship size={18} />
@@ -4468,6 +4469,8 @@ function AdminReservationWizard({
   boats: Boat[];
   onClose: () => void;
 }) {
+  const { tours, getCurrentPrice } = useSiteConfig();
+
   // Estados do wizard
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -4482,7 +4485,30 @@ function AdminReservationWizard({
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [escunaType, setEscunaType] = useState<'sem-desembarque' | 'com-desembarque'>('sem-desembarque');
-  const [baseTicketPrice, setBaseTicketPrice] = useState(200); // Preço base do ingresso
+
+  const getPriceByType = (type: 'panoramico' | 'desembarque') => {
+    const tour = tours.find((t) => t.type === type);
+    const current = tour ? getCurrentPrice(tour) : null;
+    if (current?.adult) return current.adult;
+    return type === 'desembarque'
+      ? DEFAULT_TOURS.desembarque.currentPrice
+      : DEFAULT_TOURS.panoramico.currentPrice;
+  };
+
+  /** Preço por pessoa conforme Config do site (aba Passeios) + tipo escuna/lancha */
+  const getBasePriceForBoat = (boat: Boat | null): number => {
+    if (!boat) return getPriceByType('panoramico');
+    if (boat.boatType === 'escuna') {
+      const type = escunaType === 'com-desembarque' ? 'desembarque' : 'panoramico';
+      return getPriceByType(type);
+    }
+    const lanchaTour = tours.find((t) => t.type === 'lancha');
+    if (lanchaTour) {
+      const p = getCurrentPrice(lanchaTour);
+      if (p?.adult) return p.adult;
+    }
+    return getPriceByType('panoramico');
+  };
 
   // Calcular total de passos: 1 (data/vendedor) + 1 (qtd pessoas) + numberOfPeople (dados) + 1 (pagamento)
   const totalSteps = 3 + numberOfPeople;
@@ -4555,37 +4581,46 @@ function AdminReservationWizard({
     return unsubscribe;
   }, [selectedBoat]);
 
-  // Atualizar preço base quando barco é selecionado
+  // Inicializar array de pessoas quando mudar a quantidade ou o barco (preço vem dos passeios em Config)
   useEffect(() => {
-    if (selectedBoat?.ticketPrice) {
-      setBaseTicketPrice(selectedBoat.ticketPrice);
-    }
-  }, [selectedBoat]);
-
-  // Inicializar array de pessoas quando mudar a quantidade
-  useEffect(() => {
-    const price = selectedBoat?.ticketPrice || baseTicketPrice;
+    if (!selectedBoat) return;
+    const price = getBasePriceForBoat(selectedBoat);
     const newPeople: PersonData[] = [];
     for (let i = 0; i < numberOfPeople; i++) {
-      newPeople.push(people[i] || {
-        name: '',
-        document: '',
-        phone: '',
-        birthDate: '',
-        email: '',
-        address: '',
-        isChild: false,
-        isHalfPrice: false,
-        amount: price,
-        originalAmount: price,
-        paymentMethod: 'pix',
-        amountPaid: 0,
-        bankId: '',
-        bankName: '',
-      });
+      newPeople.push(
+        people[i] || {
+          name: '',
+          document: '',
+          phone: '',
+          birthDate: '',
+          email: '',
+          address: '',
+          isChild: false,
+          isHalfPrice: false,
+          amount: price,
+          originalAmount: price,
+          paymentMethod: 'pix',
+          amountPaid: 0,
+          bankId: '',
+          bankName: '',
+        }
+      );
     }
     setPeople(newPeople);
-  }, [numberOfPeople, baseTicketPrice]);
+  }, [numberOfPeople, selectedBoat]);
+
+  // Atualizar valores quando mudar barco, tipo de escuna ou preços carregados do site
+  useEffect(() => {
+    if (!selectedBoat || people.length === 0) return;
+    const base = getBasePriceForBoat(selectedBoat);
+    setPeople((prev) =>
+      prev.map((p) => ({
+        ...p,
+        amount: p.isChild || p.isHalfPrice ? base / 2 : base,
+        originalAmount: base,
+      }))
+    );
+  }, [selectedBoat, escunaType, tours]);
 
   // Selecionar automaticamente os assentos quando a quantidade muda
   useEffect(() => {
@@ -5046,6 +5081,9 @@ function AdminReservationWizard({
             <div className="space-y-5 animate-fadeIn">
               {(() => {
                 const personIndex = currentStep - 3;
+                const defaultBase = selectedBoat
+                  ? getBasePriceForBoat(selectedBoat)
+                  : getPriceByType('panoramico');
                 const person = people[personIndex] || {
                   name: '',
                   document: '',
@@ -5055,9 +5093,12 @@ function AdminReservationWizard({
                   address: '',
                   isChild: false,
                   isHalfPrice: false,
-                  amount: 200,
+                  amount: defaultBase,
+                  originalAmount: defaultBase,
                   paymentMethod: 'pix',
                   amountPaid: 0,
+                  bankId: '',
+                  bankName: '',
                 };
                 const seatNumber = selectedSeats[personIndex];
 
@@ -5214,7 +5255,7 @@ function AdminReservationWizard({
                         step="0.01"
                         required
                         className="w-full px-4 py-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-lg font-bold bg-white"
-                        placeholder="200.00"
+                        placeholder={selectedBoat ? getBasePriceForBoat(selectedBoat).toFixed(2) : getPriceByType('panoramico').toFixed(2)}
                       />
                     </div>
 
@@ -5228,7 +5269,7 @@ function AdminReservationWizard({
                           onChange={(e) => {
                             const newPeople = [...people];
                             const isChild = e.target.checked;
-                            const price = selectedBoat?.ticketPrice || baseTicketPrice;
+                            const price = selectedBoat ? getBasePriceForBoat(selectedBoat) : getPriceByType('panoramico');
                             // Criança (menor de 7) paga metade
                             const newAmount = isChild ? price / 2 : (person.isHalfPrice ? price / 2 : price);
                             newPeople[personIndex] = { 
@@ -5253,7 +5294,7 @@ function AdminReservationWizard({
                           onChange={(e) => {
                             const newPeople = [...people];
                             const isHalfPrice = e.target.checked;
-                            const price = selectedBoat?.ticketPrice || baseTicketPrice;
+                            const price = selectedBoat ? getBasePriceForBoat(selectedBoat) : getPriceByType('panoramico');
                             // Meia entrada = metade do valor (exceto se já é criança que já paga metade)
                             const newAmount = (isHalfPrice || person.isChild) ? price / 2 : price;
                             newPeople[personIndex] = { 
@@ -5273,7 +5314,7 @@ function AdminReservationWizard({
                       {(person.isChild || person.isHalfPrice) && (
                         <div className="mt-3 pt-3 border-t border-yellow-300 text-sm">
                           <p className="text-yellow-800">
-                            💰 Valor original: <span className="line-through">R$ {(selectedBoat?.ticketPrice || baseTicketPrice).toFixed(2)}</span>
+                            💰 Valor original: <span className="line-through">R$ {(selectedBoat ? getBasePriceForBoat(selectedBoat) : getPriceByType('panoramico')).toFixed(2)}</span>
                             <span className="text-green-700 font-bold ml-2">→ R$ {person.amount.toFixed(2)}</span>
                           </p>
                         </div>
