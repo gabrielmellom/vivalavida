@@ -24,12 +24,12 @@ if (typeof window !== 'undefined' && !firebaseConfig.apiKey && process.env.NODE_
 
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
-let db: Firestore | undefined;
-let storage: FirebaseStorage | undefined;
+let firestoreInstance: Firestore | undefined;
+let storageInstance: FirebaseStorage | undefined;
 
-function initFirebase() {
+function initFirebase(): Firestore | undefined {
   if (typeof window === 'undefined') return;
-  if (db) return db;
+  if (firestoreInstance) return firestoreInstance;
   if (!firebaseConfig.apiKey) return;
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
@@ -38,9 +38,9 @@ function initFirebase() {
   }
   auth = getAuth(app);
   setPersistence(auth, browserLocalPersistence).catch(() => {});
-  db = getFirestore(app);
-  storage = getStorage(app);
-  return db;
+  firestoreInstance = getFirestore(app);
+  storageInstance = getStorage(app);
+  return firestoreInstance;
 }
 
 if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
@@ -48,7 +48,7 @@ if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
 }
 
 /** Retorna o Firestore, inicializando se necessário (útil quando o módulo carrega antes do cliente) */
-function getDb(): Firestore {
+export function getDb(): Firestore {
   if (typeof window === 'undefined') {
     throw new Error('Firebase Firestore só pode ser usado no navegador');
   }
@@ -59,5 +59,33 @@ function getDb(): Firestore {
   return instance;
 }
 
-export { app, auth, db, storage, getDb };
+/**
+ * Proxy tipado como Firestore para o build TypeScript e APIs como collection(db, ...).
+ * Encaminha para a instância real na primeira propriedade acessada.
+ */
+export const db: Firestore = new Proxy({} as Firestore, {
+  get(_target, prop) {
+    const real = getDb();
+    const value = Reflect.get(real, prop, real);
+    return typeof value === 'function' ? value.bind(real) : value;
+  },
+}) as Firestore;
+
+export function getStorageClient(): FirebaseStorage {
+  getDb();
+  if (!storageInstance) {
+    throw new Error('Firebase Storage não inicializado');
+  }
+  return storageInstance;
+}
+
+export const storage: FirebaseStorage = new Proxy({} as FirebaseStorage, {
+  get(_target, prop) {
+    const real = getStorageClient();
+    const value = Reflect.get(real, prop, real);
+    return typeof value === 'function' ? value.bind(real) : value;
+  },
+}) as FirebaseStorage;
+
+export { app, auth };
 

@@ -1,31 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-
-// Inicializar Admin SDK
-if (!getApps().length) {
-  const serviceAccount = {
-    type: "service_account",
-    project_id: "vivalavida-4a5c3",
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    token_uri: "https://oauth2.googleapis.com/token",
-    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-    client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
-    universe_domain: "googleapis.com"
-  };
-
-  initializeApp({
-    credential: cert(serviceAccount as any),
-    projectId: "vivalavida-4a5c3",
-  });
-}
+import { getFirebaseAdminInitError } from '@/lib/firebase-admin-init';
 
 export async function POST(request: NextRequest) {
+  const adminError = getFirebaseAdminInitError();
+  if (adminError) {
+    return NextResponse.json({ error: adminError }, { status: 500 });
+  }
+
   try {
     const { uid, name, password } = await request.json();
 
@@ -40,8 +25,8 @@ export async function POST(request: NextRequest) {
     const db = getFirestore();
 
     // Preparar dados para atualizar
-    const updateData: any = {};
-    const firestoreUpdateData: any = {};
+    const updateData: Record<string, unknown> = {};
+    const firestoreUpdateData: Record<string, unknown> = {};
 
     // Atualizar nome se fornecido
     if (name) {
@@ -63,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Atualizar usuário no Firebase Auth
     if (Object.keys(updateData).length > 0) {
-      await auth.updateUser(uid, updateData);
+      await auth.updateUser(uid, updateData as { displayName?: string; password?: string });
     }
 
     // Atualizar documento de role no Firestore
@@ -77,20 +62,21 @@ export async function POST(request: NextRequest) {
       uid,
       message: 'Usuário atualizado com sucesso',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao atualizar usuário:', error);
-    
+
+    const err = error as { code?: string; message?: string };
     let errorMessage = 'Erro ao atualizar usuário';
-    if (error.code === 'auth/user-not-found') {
+    if (err.code === 'auth/user-not-found') {
       errorMessage = 'Usuário não encontrado';
-    } else if (error.code === 'auth/invalid-password') {
+    } else if (err.code === 'auth/invalid-password') {
       errorMessage = 'Senha inválida';
-    } else if (error.message) {
-      errorMessage = error.message;
+    } else if (err.message) {
+      errorMessage = err.message;
     }
 
     return NextResponse.json(
-      { error: errorMessage, code: error.code },
+      { error: errorMessage, code: err.code },
       { status: 400 }
     );
   }

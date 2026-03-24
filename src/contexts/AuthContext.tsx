@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth || !db) {
+    if (!auth) {
       setLoading(false);
       return;
     }
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) {
         setUser(user);
         try {
-          const roleDoc = await getDoc(doc(db!, 'roles', user.uid));
+          const roleDoc = await getDoc(doc(db, 'roles', user.uid));
           if (isMounted) {
             if (roleDoc.exists()) {
               setUserRole(roleDoc.data() as UserRole);
