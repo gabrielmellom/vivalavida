@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { doc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getDb } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { Loader2, CheckCircle, AlertCircle, Ship, Camera, FileText, Calendar, User, Phone, Globe } from 'lucide-react';
 
@@ -359,6 +359,7 @@ export default function AceitePage() {
       }
 
       try {
+        const db = getDb();
         // Buscar reserva
         const reservationDoc = await getDoc(doc(db, 'reservations', reservationId));
         
@@ -447,6 +448,7 @@ export default function AceitePage() {
       }
 
       const now = Timestamp.now();
+      const db = getDb();
       
       // Atualizar reserva com os aceites
       const updateData: Record<string, unknown> = {

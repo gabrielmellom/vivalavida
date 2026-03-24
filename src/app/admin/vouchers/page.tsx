@@ -9,7 +9,7 @@ import { Calendar, Users, QrCode, ArrowLeft, Search, MessageCircle, FileCheck, F
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { generateVoucherPDF, SupportedLanguage } from '@/lib/voucherGenerator';
-import { generateReceiptPDF, ReceiptData } from '@/lib/receiptGenerator';
+import { generateReceiptPDF, ReceiptData, type ReceiptLanguage } from '@/lib/receiptGenerator';
 import { updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { Globe } from 'lucide-react';
 
@@ -20,6 +20,13 @@ const LANGUAGES: { code: SupportedLanguage; name: string; flag: string }[] = [
   { code: 'es', name: 'Español', flag: '🇪🇸' },
   { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
+];
+
+// Idiomas para recibo (primeiro passo)
+const RECEIPT_LANGUAGES: { code: ReceiptLanguage; name: string; flag: string }[] = [
+  { code: 'pt-BR', name: 'Português', flag: '🇧🇷' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
 ];
 
 // Idiomas para confirmação pós-compra
@@ -46,6 +53,7 @@ export default function VouchersPage() {
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showLanguageDropdown, setShowLanguageDropdown] = useState<string | null>(null);
+  const [showReceiptLanguageDropdown, setShowReceiptLanguageDropdown] = useState<string | null>(null);
   const [showConfirmationDropdown, setShowConfirmationDropdown] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [vendorNames, setVendorNames] = useState<Map<string, string>>(new Map());
@@ -195,7 +203,7 @@ export default function VouchersPage() {
     }
   };
 
-  const handleGenerateReceipt = async (reservation: Reservation) => {
+  const handleGenerateReceipt = async (reservation: Reservation, language: ReceiptLanguage = 'pt-BR') => {
     if (!selectedBoat) return;
     
     const vendorName = vendorNames.get(reservation.vendorId) || 'Vendedor';
@@ -249,10 +257,12 @@ export default function VouchersPage() {
       valorRestante: totalGroupDue,
       formaPagamento: reservation.paymentMethod,
       groupMembers: groupMembersList,
+      language,
     };
     
     try {
       await generateReceiptPDF(receiptData);
+      setShowReceiptLanguageDropdown(null);
       
       await updateDoc(doc(db, 'reservations', reservation.id), {
         receiptSent: true,
@@ -260,7 +270,7 @@ export default function VouchersPage() {
         updatedAt: Timestamp.now(),
       });
       
-      setStepForCard(reservation.id, 'terms');
+      setStepForCard(reservation.id, 'confirmation');
     } catch (error) {
       console.error('Erro ao gerar recibo:', error);
       alert('Erro ao gerar recibo. Tente novamente.');
@@ -417,7 +427,7 @@ Nao esqueca o protetor solar!
         updatedAt: Timestamp.now(),
       });
       
-      setStepForCard(reservation.id, 'voucher');
+      setStepForCard(reservation.id, 'terms');
     } catch (error) {
       console.error('Erro ao atualizar status da confirmação:', error);
     }
@@ -487,9 +497,9 @@ Obrigado e ate breve!`;
 
   const getCurrentStep = (reservation: Reservation): FlowStep => {
     if (reservation.voucherSent) return 'voucher';
-    if (reservation.confirmationSent) return 'voucher';
-    if (reservation.acceptedTerms) return 'confirmation';
-    if (reservation.receiptSent) return 'terms';
+    if (reservation.acceptedTerms) return 'voucher';
+    if (reservation.confirmationSent) return 'terms';
+    if (reservation.receiptSent) return 'confirmation';
     return 'receipt';
   };
 
@@ -604,12 +614,12 @@ Obrigado e ate breve!`;
         if (reservation.receiptSent) return 'done';
         return 'current';
       case 2:
-        if (reservation.acceptedTerms) return 'done';
-        if (reservation.termsLinkSent || reservation.receiptSent) return 'current';
+        if (reservation.confirmationSent) return 'done';
+        if (reservation.receiptSent) return 'current';
         return 'pending';
       case 3:
-        if (reservation.confirmationSent) return 'done';
-        if (reservation.acceptedTerms) return 'current';
+        if (reservation.acceptedTerms) return 'done';
+        if (reservation.confirmationSent || reservation.termsLinkSent) return 'current';
         return 'pending';
       case 4:
         if (reservation.voucherSent) return 'done';
@@ -954,8 +964,8 @@ Obrigado e ate breve!`;
                             <div className="flex bg-white mx-4 mt-3 rounded-lg border border-gray-200 overflow-hidden">
                               {[
                                 { key: 'receipt' as FlowStep, label: 'Recibo', icon: Receipt, done: leader.receiptSent },
-                                { key: 'terms' as FlowStep, label: 'Aceite', icon: FileText, done: leader.acceptedTerms },
                                 { key: 'confirmation' as FlowStep, label: 'Confirm.', icon: Mail, done: leader.confirmationSent },
+                                { key: 'terms' as FlowStep, label: 'Aceite', icon: FileText, done: leader.acceptedTerms },
                                 { key: 'voucher' as FlowStep, label: 'Voucher', icon: Ticket, done: leader.voucherSent },
                               ].map((tab, idx) => (
                                 <button
@@ -994,17 +1004,87 @@ Obrigado e ate breve!`;
                                     )}
                                   </div>
 
-                                  <button
-                                    onClick={() => handleGenerateReceipt(leader)}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-viva-blue text-white rounded-lg font-medium text-sm hover:bg-viva-blue-dark transition"
-                                  >
-                                    <Receipt size={16} />
-                                    {leader.receiptSent ? 'Gerar Novamente' : 'Gerar Recibo PDF'}
-                                  </button>
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setShowReceiptLanguageDropdown(showReceiptLanguageDropdown === leader.id ? null : leader.id)}
+                                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-viva-blue text-white rounded-lg font-medium text-sm hover:bg-viva-blue-dark transition"
+                                    >
+                                      <Receipt size={16} />
+                                      {leader.receiptSent ? 'Gerar Novamente' : 'Gerar Recibo PDF'}
+                                      <Globe size={14} />
+                                    </button>
+                                    
+                                    {showReceiptLanguageDropdown === leader.id && (
+                                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                        <div className="p-2">
+                                          <p className="text-xs text-gray-500 mb-2 text-center">Idioma do recibo</p>
+                                          <div className="grid grid-cols-3 gap-1">
+                                            {RECEIPT_LANGUAGES.map((lang) => (
+                                              <button
+                                                key={lang.code}
+                                                onClick={() => handleGenerateReceipt(leader, lang.code)}
+                                                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                              >
+                                                <span>{lang.flag}</span>
+                                                <span>{lang.name}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
 
-                              {/* ETAPA 2: ACEITE */}
+                              {/* ETAPA 2: CONFIRMAÇÃO */}
+                              {selectedStep === 'confirmation' && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                      <Mail size={16} className="text-viva-blue" />
+                                    </div>
+                                    <div>
+                                      <h4 className="font-semibold text-gray-900 text-sm">Confirmação Pós-Compra</h4>
+                                      <p className="text-xs text-gray-500">Envie detalhes do passeio</p>
+                                    </div>
+                                    {leader.confirmationSent && (
+                                      <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-medium">✓ Enviada</span>
+                                    )}
+                                  </div>
+
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setShowConfirmationDropdown(showConfirmationDropdown === leader.id ? null : leader.id)}
+                                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-viva-blue text-white rounded-lg font-medium text-sm hover:bg-viva-blue-dark transition"
+                                    >
+                                      <MessageCircle size={16} />
+                                      {leader.confirmationSent ? 'Enviar Novamente' : 'Enviar Confirmação'}
+                                    </button>
+                                    {showConfirmationDropdown === leader.id && (
+                                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                        <div className="p-2">
+                                          <p className="text-xs text-gray-500 mb-2 text-center">Idioma</p>
+                                          <div className="grid grid-cols-2 gap-1">
+                                            {CONFIRMATION_LANGUAGES.map((lang) => (
+                                              <button
+                                                key={lang.code}
+                                                onClick={() => handleSendConfirmation(leader, lang.code)}
+                                                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                                              >
+                                                <span>{lang.flag}</span>
+                                                <span>{lang.name}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* ETAPA 3: ACEITE */}
                               {selectedStep === 'terms' && (
                                 <div className="space-y-3">
                                   <div className="flex items-center gap-3">
@@ -1034,6 +1114,11 @@ Obrigado e ate breve!`;
                                         {isGroup ? 'Responsável aceitou os termos para todo o grupo!' : 'Cliente aceitou os termos!'}
                                       </p>
                                     </div>
+                                  ) : !leader.confirmationSent ? (
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                                      <AlertCircle size={20} className="text-yellow-600 mx-auto mb-1" />
+                                      <p className="text-yellow-700 text-sm">Envie a confirmação (passo 2) antes de enviar o link de termos</p>
+                                    </div>
                                   ) : (
                                     <>
                                       {leader.termsLinkSent && (
@@ -1050,61 +1135,6 @@ Obrigado e ate breve!`;
                                         {isGroup && <span className="text-xs opacity-75">(para {groupTotals?.count} pessoas)</span>}
                                       </button>
                                     </>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* ETAPA 3: CONFIRMAÇÃO */}
-                              {selectedStep === 'confirmation' && (
-                                <div className="space-y-3">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                      <Mail size={16} className="text-viva-blue" />
-                                    </div>
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900 text-sm">Confirmação Pós-Compra</h4>
-                                      <p className="text-xs text-gray-500">Envie detalhes do passeio</p>
-                                    </div>
-                                    {leader.confirmationSent && (
-                                      <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-medium">✓ Enviada</span>
-                                    )}
-                                  </div>
-
-                                  {!leader.acceptedTerms ? (
-                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                                      <AlertCircle size={20} className="text-yellow-600 mx-auto mb-1" />
-                                      <p className="text-yellow-700 text-sm">Aguardando aceite dos termos</p>
-                                    </div>
-                                  ) : (
-                                    <div className="relative">
-                                      <button
-                                        onClick={() => setShowConfirmationDropdown(showConfirmationDropdown === leader.id ? null : leader.id)}
-                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-viva-blue text-white rounded-lg font-medium text-sm hover:bg-viva-blue-dark transition"
-                                      >
-                                        <MessageCircle size={16} />
-                                        {leader.confirmationSent ? 'Enviar Novamente' : 'Enviar Confirmação'}
-                                      </button>
-                                      
-                                      {showConfirmationDropdown === leader.id && (
-                                        <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                                          <div className="p-2">
-                                            <p className="text-xs text-gray-500 mb-2 text-center">Idioma</p>
-                                            <div className="grid grid-cols-2 gap-1">
-                                              {CONFIRMATION_LANGUAGES.map((lang) => (
-                                                <button
-                                                  key={lang.code}
-                                                  onClick={() => handleSendConfirmation(leader, lang.code)}
-                                                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
-                                                >
-                                                  <span>{lang.flag}</span>
-                                                  <span>{lang.name}</span>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
                                   )}
                                 </div>
                               )}

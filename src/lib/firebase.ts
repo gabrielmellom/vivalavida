@@ -12,25 +12,52 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+// Debug: aviso quando API_KEY está faltando (apenas em dev)
+if (typeof window !== 'undefined' && !firebaseConfig.apiKey && process.env.NODE_ENV === 'development') {
+  console.warn(
+    '[Firebase] NEXT_PUBLIC_FIREBASE_API_KEY não encontrada. Verifique:\n' +
+    '1. O arquivo .env.local está na raiz do projeto?\n' +
+    '2. O nome da variável é exatamente NEXT_PUBLIC_FIREBASE_API_KEY?\n' +
+    '3. Reinicie o servidor (Ctrl+C e npm run dev) após alterar o .env.local'
+  );
+}
 
-if (typeof window !== 'undefined') {
+let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
+let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
+
+function initFirebase() {
+  if (typeof window === 'undefined') return;
+  if (db) return db;
+  if (!firebaseConfig.apiKey) return;
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
   } else {
-    app = getApps()[0];
+    app = getApps()[0] as FirebaseApp;
   }
   auth = getAuth(app);
-  
-  // Garantir persistência local para manter login entre abas
-  setPersistence(auth, browserLocalPersistence).catch(console.error);
-  
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
   db = getFirestore(app);
   storage = getStorage(app);
+  return db;
 }
 
-export { app, auth, db, storage };
+if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
+  initFirebase();
+}
+
+/** Retorna o Firestore, inicializando se necessário (útil quando o módulo carrega antes do cliente) */
+function getDb(): Firestore {
+  if (typeof window === 'undefined') {
+    throw new Error('Firebase Firestore só pode ser usado no navegador');
+  }
+  const instance = initFirebase();
+  if (!instance) {
+    throw new Error('Firebase não configurado. Verifique NEXT_PUBLIC_FIREBASE_API_KEY no .env.local');
+  }
+  return instance;
+}
+
+export { app, auth, db, storage, getDb };
 

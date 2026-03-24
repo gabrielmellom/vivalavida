@@ -1,4 +1,7 @@
 import { Reservation, Boat } from '@/types';
+import { receiptTranslations, receiptDateLocales, type ReceiptLanguage } from './receiptTranslations';
+
+export type { ReceiptLanguage } from './receiptTranslations';
 
 export interface GroupMember {
   name: string;
@@ -18,7 +21,11 @@ export interface ReceiptData {
   valorRestante: number;
   formaPagamento: string;
   groupMembers?: GroupMember[];
+  language?: ReceiptLanguage;
 }
+
+const t = (key: string, lang: ReceiptLanguage) =>
+  receiptTranslations[lang]?.[key] || receiptTranslations['pt-BR']?.[key] || key;
 
 export const generateReceiptPDF = async (data: ReceiptData) => {
   try {
@@ -28,7 +35,8 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
 
     const { default: jsPDF } = await import('jspdf');
 
-    const { reservation, boat, vendorName, pagantes, cortesias, valorPorPessoa, valorReserva, valorRestante, formaPagamento, groupMembers } = data;
+    const { reservation, boat, vendorName, pagantes, cortesias, valorPorPessoa, valorReserva, valorRestante, formaPagamento, groupMembers, language = 'pt-BR' } = data;
+    const tr = (key: string) => t(key, language);
 
     const pdf = new jsPDF({
       orientation: 'portrait',
@@ -61,7 +69,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('Comprovante de Reserva', pageWidth / 2, 27, { align: 'center' });
+    pdf.text(tr('title'), pageWidth / 2, 27, { align: 'center' });
 
     // ==========================================
     // DADOS DO PASSAGEIRO
@@ -72,7 +80,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('PASSAGEIRO RESPONSÁVEL', margin, currentY);
+    pdf.text(tr('responsiblePassenger'), margin, currentY);
     
     currentY += 6;
     pdf.setFontSize(14);
@@ -90,7 +98,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
       pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('MEMBROS DO GRUPO', margin, currentY);
+      pdf.text(tr('groupMembers'), margin, currentY);
       
       currentY += 5;
       pdf.setFontSize(8);
@@ -98,12 +106,12 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
       
       groupMembers.forEach((member, index) => {
         pdf.setTextColor(60, 60, 60);
-        const memberInfo = `${index + 1}. ${member.name}${member.isChild ? ' (Crianca)' : ''}`;
+        const memberInfo = `${index + 1}. ${member.name}${member.isChild ? ` ${tr('child')}` : ''}`;
         pdf.text(memberInfo, margin, currentY);
         
         // Valor ao lado direito
         pdf.setTextColor(100, 100, 100);
-        const valorText = member.amount === 0 ? 'Cortesia' : `R$ ${member.amount.toFixed(2).replace('.', ',')}`;
+        const valorText = member.amount === 0 ? tr('free') : `R$ ${member.amount.toFixed(2).replace('.', ',')}`;
         pdf.text(valorText, pageWidth - margin - 25, currentY);
         
         currentY += 4;
@@ -125,7 +133,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('DETALHES DO PASSEIO', margin, currentY);
+    pdf.text(tr('tourDetails'), margin, currentY);
     
     currentY += 7;
     
@@ -134,7 +142,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
       const datePart = dateString.split('T')[0];
       const [year, month, day] = datePart.split('-').map(Number);
       const date = new Date(year, month - 1, day, 12, 0, 0);
-      const dias = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+      const dias = tr('dayNames').split(',');
       return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year} (${dias[date.getDay()]})`;
     };
 
@@ -150,14 +158,14 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     // Linha 1: Destino + Data
     pdf.setFontSize(labelSize);
     pdf.setTextColor(120, 120, 120);
-    pdf.text('Destino', col1X, currentY);
-    pdf.text('Data do Passeio', col2X, currentY);
+    pdf.text(tr('destination'), col1X, currentY);
+    pdf.text(tr('tourDate'), col2X, currentY);
     
     currentY += 4;
     pdf.setFontSize(valueSize);
     pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Ilha do Campeche', col1X, currentY);
+    pdf.text(tr('destinationValue'), col1X, currentY);
     pdf.text(rideDate, col2X, currentY);
     
     currentY += lineHeight;
@@ -167,14 +175,14 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(120, 120, 120);
     pdf.text('Check-in', col1X, currentY);
-    pdf.text('Local de Embarque', col2X, currentY);
+    pdf.text(tr('boardingLocation'), col2X, currentY);
     
     currentY += 4;
     pdf.setFontSize(valueSize);
     pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'bold');
     pdf.text('08:00h', col1X, currentY);
-    pdf.text('Trapiche Barra da Lagoa', col2X, currentY);
+    pdf.text(tr('boardingValue'), col2X, currentY);
     
     currentY += lineHeight;
     
@@ -182,18 +190,18 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setFontSize(labelSize);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(120, 120, 120);
-    pdf.text('Passageiros', col1X, currentY);
+    pdf.text(tr('passengers'), col1X, currentY);
     if (cortesias > 0) {
-      pdf.text('Cortesias', col2X, currentY);
+      pdf.text(tr('freeTickets'), col2X, currentY);
     }
     
     currentY += 4;
     pdf.setFontSize(valueSize);
     pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`${pagantes} pagante${pagantes !== 1 ? 's' : ''}`, col1X, currentY);
+    pdf.text(`${pagantes} ${pagantes !== 1 ? tr('payingPlural') : tr('payingSingular')}`, col1X, currentY);
     if (cortesias > 0) {
-      pdf.text(`${cortesias} cortesia${cortesias !== 1 ? 's' : ''}`, col2X, currentY);
+      pdf.text(`${cortesias} ${cortesias !== 1 ? tr('freePlural') : tr('freeSingular')}`, col2X, currentY);
     }
 
     // Linha separadora
@@ -210,7 +218,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('VALORES', margin, currentY);
+    pdf.text(tr('values'), margin, currentY);
     
     currentY += 7;
     
@@ -221,13 +229,13 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Valor por pessoa:', valorCol1, currentY);
+    pdf.text(tr('pricePerPerson'), valorCol1, currentY);
     pdf.setTextColor(0, 0, 0);
     pdf.text(`R$ ${valorPorPessoa.toFixed(2).replace('.', ',')}`, valorCol2, currentY);
     
     currentY += 5;
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Valor pago (reserva):', valorCol1, currentY);
+    pdf.text(tr('amountPaid'), valorCol1, currentY);
     pdf.setTextColor(34, 139, 34);
     pdf.setFont('helvetica', 'bold');
     pdf.text(`R$ ${valorReserva.toFixed(2).replace('.', ',')}`, valorCol2, currentY);
@@ -235,7 +243,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     currentY += 5;
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Valor restante:', valorCol1, currentY);
+    pdf.text(tr('remainingAmount'), valorCol1, currentY);
     pdf.setTextColor(200, 80, 0);
     pdf.setFont('helvetica', 'bold');
     pdf.text(`R$ ${valorRestante.toFixed(2).replace('.', ',')}`, valorCol2, currentY);
@@ -243,20 +251,21 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     currentY += 7;
     
     const formasPagamentoLabel: Record<string, string> = {
-      'pix': 'PIX',
-      'dinheiro': 'Dinheiro',
-      'cartao': 'Cartão/Link',
+      'pix': tr('pix'),
+      'dinheiro': tr('cash'),
+      'cartao': tr('card'),
     };
+    const paymentLabel = formasPagamentoLabel[formaPagamento] ?? formaPagamento;
     
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Forma de pagamento:', valorCol1, currentY);
+    pdf.text(tr('paymentMethod'), valorCol1, currentY);
     pdf.setTextColor(0, 0, 0);
-    pdf.text(formasPagamentoLabel[formaPagamento] || formaPagamento, valorCol2, currentY);
+    pdf.text(paymentLabel, valorCol2, currentY);
     
     currentY += 5;
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Vendedora:', valorCol1, currentY);
+    pdf.text(tr('vendor'), valorCol1, currentY);
     pdf.setTextColor(0, 0, 0);
     pdf.text(vendorName, valorCol2, currentY);
 
@@ -266,7 +275,7 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.line(margin, currentY, pageWidth - margin, currentY);
 
     // ==========================================
-    // TERMOS - Regras completas
+    // TERMOS - Condiciones (español)
     // ==========================================
     
     currentY += 8;
@@ -274,67 +283,60 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('TERMOS E CONDIÇÕES', margin, currentY);
+    pdf.text(tr('termsTitle'), margin, currentY);
     
-    // Regra 1 - Remarcações
     currentY += 7;
     pdf.setTextColor(60, 60, 60);
     pdf.setFontSize(7.5);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('1. REGRAS PARA REMARCAÇÕES POR SOLICITAÇÃO DO CLIENTE', margin, currentY);
+    pdf.text(tr('conditionsTitle'), margin, currentY);
     
     currentY += 4.5;
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
-    const regra1a = `A remarcação do passeio por solicitação do cliente deverá ser realizada com no mínimo 48 (quarenta e oito) horas de antecedência da data agendada, estando sujeita à disponibilidade da empresa.`;
-    const regra1aLines = pdf.splitTextToSize(regra1a, contentWidth);
-    pdf.text(regra1aLines, margin, currentY);
-    currentY += regra1aLines.length * 3.2;
-    
-    currentY += 1;
-    const regra1b = `Solicitações fora desse prazo implicam perda do valor pago a título de sinal, em razão da reserva de vaga e logística previamente organizada.`;
-    const regra1bLines = pdf.splitTextToSize(regra1b, contentWidth);
-    pdf.text(regra1bLines, margin, currentY);
-    currentY += regra1bLines.length * 3.2;
-    
-    currentY += 2;
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('O passeio NÃO será cancelado em casos de:', margin, currentY);
+    const condicionesSalida = tr('conditionsText');
+    const condicionesSalidaLines = pdf.splitTextToSize(condicionesSalida, contentWidth);
+    pdf.text(condicionesSalidaLines, margin, currentY);
+    currentY += condicionesSalidaLines.length * 3.2;
     
     currentY += 4;
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(80, 80, 80);
-    const bulletItems = ['• Tempo nublado', '• Frio', '• Chuva fraca', '• Chuva com previsão de cessar'];
-    bulletItems.forEach((item) => {
-      pdf.text(item, margin + 3, currentY);
-      currentY += 3.5;
-    });
-    
-    // Regra 2 - Doença
-    currentY += 2;
-    pdf.setTextColor(60, 60, 60);
     pdf.setFontSize(7.5);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('2. DOENÇA E IMPOSSIBILIDADE JUSTIFICADA', margin, currentY);
+    pdf.text(tr('policyTitle'), margin, currentY);
     
     currentY += 4.5;
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
-    const regra2 = `Em caso de impossibilidade de comparecimento por motivo de saúde, o passeio poderá ser remarcado uma única vez, mediante apresentação de atestado médico, respeitando a disponibilidade da empresa.`;
-    const regra2Lines = pdf.splitTextToSize(regra2, contentWidth);
-    pdf.text(regra2Lines, margin, currentY);
-    currentY += regra2Lines.length * 3.2;
+    const politicaDevolucion = tr('policyText');
+    const politicaDevolucionLines = pdf.splitTextToSize(politicaDevolucion, contentWidth);
+    pdf.text(politicaDevolucionLines, margin, currentY);
+    currentY += politicaDevolucionLines.length * 3.2;
     
-    // Regra 3 - Informações
-    currentY += 2;
+    currentY += 4;
     pdf.setFontSize(7.5);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('3. INFORMAÇÕES DO PASSEIO', margin, currentY);
+    pdf.text(tr('safetyTitle'), margin, currentY);
     
     currentY += 4.5;
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
-    pdf.text('Um dia antes do passeio a empresa envia todas as informações detalhadas do passeio.', margin, currentY);
+    const seguridad = tr('safetyText');
+    const seguridadLines = pdf.splitTextToSize(seguridad, contentWidth);
+    pdf.text(seguridadLines, margin, currentY);
+    currentY += seguridadLines.length * 3.2;
+    
+    currentY += 4;
+    pdf.setFontSize(7.5);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(tr('imageTitle'), margin, currentY);
+    
+    currentY += 4.5;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7);
+    const usoImagen = tr('imageText');
+    const usoImagenLines = pdf.splitTextToSize(usoImagen, contentWidth);
+    pdf.text(usoImagenLines, margin, currentY);
+    currentY += usoImagenLines.length * 3.2;
 
     // ==========================================
     // RODAPÉ - Fixo no final
@@ -349,16 +351,16 @@ export const generateReceiptPDF = async (data: ReceiptData) => {
     pdf.setFontSize(8);
     pdf.setTextColor(vivaBlue.r, vivaBlue.g, vivaBlue.b);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Informações: (48) 98449-2552', pageWidth / 2, footerY + 5, { align: 'center' });
+    pdf.text(tr('footerInfo'), pageWidth / 2, footerY + 5, { align: 'center' });
     
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(120, 120, 120);
     pdf.setFontSize(7);
-    pdf.text('Este documento é um comprovante de reserva.', pageWidth / 2, footerY + 10, { align: 'center' });
+    pdf.text(tr('footerDoc'), pageWidth / 2, footerY + 10, { align: 'center' });
     
     pdf.setFontSize(6);
     pdf.setTextColor(160, 160, 160);
-    pdf.text(`ID: ${reservation.id.substring(0, 20)}...  •  ${new Date().toLocaleDateString('pt-BR')}`, pageWidth / 2, footerY + 14, { align: 'center' });
+    pdf.text(`ID: ${reservation.id.substring(0, 20)}...  •  ${new Date().toLocaleDateString(receiptDateLocales[language])}`, pageWidth / 2, footerY + 14, { align: 'center' });
 
     // Gerar e abrir PDF
     const pdfBlob = pdf.output('blob');

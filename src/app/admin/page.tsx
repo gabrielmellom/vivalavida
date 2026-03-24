@@ -5,9 +5,17 @@ import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
-import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp, Download } from 'lucide-react';
+import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp, Download, Receipt, Globe } from 'lucide-react';
+import { generateReceiptPDF, ReceiptData, type ReceiptLanguage } from '@/lib/receiptGenerator';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
+// Idiomas para recibo (passo 1 antes de aprovar)
+const RECEIPT_LANGUAGES: { code: ReceiptLanguage; name: string; flag: string }[] = [
+  { code: 'pt-BR', name: 'Português', flag: '🇧🇷' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+];
 
 // Formatar data sem problemas de timezone (fora do componente para ser acessível a todos)
 const formatDate = (dateString: string) => {
@@ -1008,7 +1016,62 @@ export default function AdminDashboard() {
   const trend = getReservationTrend();
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Sidebar - Fixo no desktop */}
+      <aside className={`hidden lg:flex flex-col w-52 shrink-0 bg-white border-r border-slate-200 fixed left-0 top-0 h-screen z-40`}>
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-viva-blue to-viva-blue-dark flex items-center justify-center text-white font-bold text-sm">
+              {userRole?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 truncate">Admin</p>
+              <p className="text-sm font-semibold text-slate-800 truncate">{userRole?.name?.split(' ')[0] || 'Capitão'}</p>
+            </div>
+          </div>
+        </div>
+        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+          <Link href="/admin/vendedores" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <Users size={18} />
+            <span>Equipe</span>
+          </Link>
+          <Link href="/admin/checkin" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <CheckCircle size={18} />
+            <span>Check-in</span>
+          </Link>
+          <Link href="/admin/vouchers" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <QrCode size={18} />
+            <span>Vouchers</span>
+          </Link>
+          <Link href="/admin/relatorios" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <BarChart3 size={18} />
+            <span>Relatórios</span>
+          </Link>
+          <Link href="/admin/financeiro" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <DollarSign size={18} />
+            <span>Financeiro</span>
+          </Link>
+          <Link href="/admin/config-site" className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-sm transition">
+            <Settings size={18} />
+            <span>Config</span>
+          </Link>
+          <button onClick={() => setShowWeatherForecast(true)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-sky-50 text-slate-600 hover:text-sky-700 text-sm transition w-full">
+            <Cloud size={18} />
+            <span>Previsão 7d</span>
+          </button>
+        </nav>
+        <div className="p-3 border-t border-slate-100 space-y-0.5">
+          <button onClick={() => { toggleSound(); if (!soundEnabled) setTimeout(() => playNotificationSound(), 100); }} className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition ${soundEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+            <Volume2 size={18} />
+            <span>{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
+          </button>
+          <button onClick={() => { signOut(); router.push('/login'); }} className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 text-sm transition">
+            <LogOut size={18} />
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+
       {/* Alerta de Novo Pedido */}
       {newOrderAlert && (
         <div className="fixed top-0 left-0 right-0 z-50 animate-pulse">
@@ -1339,211 +1402,86 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Header - Clean & Professional */}
-      <header className={`bg-white ${newOrderAlert ? 'mt-12' : ''} transition-all duration-300`}>
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left: Avatar + Greeting */}
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                {userRole?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'A'}
-              </div>
+      {/* Main Content - com margem para sidebar no desktop */}
+      <main className={`flex-1 min-w-0 lg:ml-52 ${newOrderAlert ? 'pt-12' : ''}`}>
+      {/* Header - Compacto */}
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
+        <div className="px-4 lg:px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <button onClick={() => setShowSideMenu(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition">
+                <Menu size={20} className="text-slate-700" />
+              </button>
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">DASHBOARD</p>
-                <h1 className="text-lg font-bold text-slate-800">
-                  Olá, {userRole?.name?.split(' ')[0] || 'Capitão'}
-                </h1>
+                <h1 className="text-base font-bold text-slate-800 truncate">Dashboard</h1>
+                <p className="text-xs text-slate-500">{getDayName()}, {getFormattedDate()}</p>
               </div>
             </div>
-
-            {/* Right: Notification + Menu */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  toggleSound();
-                  if (!soundEnabled) setTimeout(() => playNotificationSound(), 100);
-                }}
-                className={`relative p-2.5 rounded-xl transition ${
-                  soundEnabled && audioUnlocked ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                <Bell size={20} />
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => { toggleSound(); if (!soundEnabled) setTimeout(() => playNotificationSound(), 100); }} className={`relative p-2 rounded-lg transition ${soundEnabled && audioUnlocked ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                <Bell size={18} />
                 {pendingReservations.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {pendingReservations.length > 9 ? '9+' : pendingReservations.length}
-                  </span>
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingReservations.length > 9 ? '9+' : pendingReservations.length}</span>
                 )}
               </button>
-              <button
-                onClick={() => setShowSideMenu(true)}
-                className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
-              >
-                <Menu size={20} className="text-slate-700" />
+              <button onClick={() => setShowWeatherForecast(true)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition flex items-center gap-1.5">
+                {weather ? getWeatherIcon() : <Cloud size={18} />}
+                <span className="hidden sm:inline text-sm font-medium">{weather ? `${weather.temp}°C` : '...'}</span>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6">
-        {/* Data atual */}
-        <p className="text-slate-500 text-sm mb-6">{getDayName()}, {getFormattedDate()}</p>
-
-        {/* Stats Cards - 2 columns */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          {/* Reservas Hoje */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2.5 bg-slate-100 rounded-xl">
-                <FileText size={20} className="text-slate-600" />
-              </div>
-              <span className="text-xs text-slate-500">Reservas<br/>Hoje</span>
+      <div className="px-4 lg:px-6 py-4 max-w-[1600px] mx-auto">
+        {/* Stats + Ações - Linha compacta */}
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <div className="flex items-center gap-4 px-4 py-2.5 bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-2">
+              <FileText size={18} className="text-slate-500" />
+              <span className="text-sm text-slate-600">Reservas hoje</span>
             </div>
-            <p className="text-3xl font-bold text-slate-800 mb-1">
-              {reservations.filter(r => r.rideDate === new Date().toISOString().split('T')[0]).length}
-            </p>
-            <div className={`flex items-center gap-1 text-xs ${trend.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-              <TrendingUp size={14} className={!trend.isUp ? 'rotate-180' : ''} />
-              <span>{trend.isUp ? '+' : '-'}{trend.percent}% vs ontem</span>
-            </div>
+            <span className="text-xl font-bold text-slate-800">{reservations.filter(r => r.rideDate === new Date().toISOString().split('T')[0]).length}</span>
+            <span className={`text-xs ${trend.isUp ? 'text-emerald-600' : 'text-red-500'}`}>{trend.isUp ? '+' : '-'}{trend.percent}% vs ontem</span>
           </div>
-
-          {/* Previsão do Tempo - Clicável para ver 7 dias */}
-          <button
-            onClick={() => setShowWeatherForecast(true)}
-            className="bg-white rounded-2xl p-5 shadow-sm text-left hover:shadow-md transition-shadow relative overflow-hidden group"
-          >
-            {/* Indicador de alerta se houver dias ruins com barcos */}
-            {weekForecast.some(day => {
-              const boatOnDay = boats.find(b => b.date.split('T')[0] === day.date && b.status === 'active');
-              const isBadWeather = day.weatherCode > 50; // Chuva ou pior
-              return boatOnDay && isBadWeather;
-            }) && (
-              <span className="absolute top-2 right-2 w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
-            )}
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2.5 bg-sky-50 rounded-xl group-hover:bg-sky-100 transition-colors">
-                {getWeatherIcon()}
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-500">Floripa</span>
-                <p className="text-[10px] text-sky-600 font-medium">Ver 7 dias →</p>
-              </div>
-            </div>
-            {weather ? (
-              <>
-                <p className="text-3xl font-bold text-slate-800 mb-1">{weather.temp}°C</p>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Droplets size={12} />
-                    {weather.humidity}%
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Wind size={12} />
-                    {weather.wind}km/h
-                  </span>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-slate-400">Carregando...</p>
-            )}
+          <button onClick={() => setShowReservationWizard(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg transition shadow-sm">
+            <Plus size={18} />
+            Novo Passeio
+          </button>
+          <button onClick={() => setShowBoatModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-50 transition">
+            <Ship size={18} />
+            Criar Barco
           </button>
         </div>
 
-        {/* Ações Rápidas */}
-        <div className="mb-6">
-          <h2 className="text-sm font-medium text-slate-500 mb-3">Ações Rápidas</h2>
-          
-          {/* Botão Principal - Novo Passeio */}
-          <button
-            onClick={() => setShowReservationWizard(true)}
-            className="w-full bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-2xl p-5 shadow-lg hover:shadow-xl transition mb-3 flex items-center justify-between group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <Plus size={24} />
-              </div>
-              <div className="text-left">
-                <p className="font-bold text-lg">Novo Passeio</p>
-                <p className="text-white/80 text-sm">Agendar uma nova saída</p>
-              </div>
-            </div>
-            <ChevronRight size={24} className="opacity-60 group-hover:translate-x-1 transition" />
-          </button>
-
-          {/* Botão Secundário - Criar Barco */}
-          <button
-            onClick={() => setShowBoatModal(true)}
-            className="w-full bg-white border border-slate-200 text-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                <Ship size={20} className="text-slate-600" />
-              </div>
-              <span className="font-medium">Criar Novo Barco</span>
-            </div>
-            <ChevronRight size={20} className="text-slate-400" />
-          </button>
-        </div>
-
-        {/* Barcos Programados */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">Barcos Programados</h2>
-
-          {/* Container do Calendário + Observações */}
-          <div className="flex flex-col lg:flex-row gap-4 mb-4">
-          
-          {/* Calendário Visual - Clean Design - Responsivo */}
-          <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 sm:max-w-md lg:max-w-lg shrink-0">
-            {/* Header do Calendário */}
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <button
-                onClick={() => {
-                  const newMonth = new Date(calendarMonth);
-                  newMonth.setMonth(newMonth.getMonth() - 1);
-                  setCalendarMonth(newMonth);
-                }}
-                className="p-2 sm:p-3 hover:bg-slate-100 rounded-lg transition"
-              >
-                <ChevronLeft size={18} className="sm:w-5 sm:h-5 text-slate-600" />
+        {/* Calendário + Observações + Barcos - Mesmo tamanho */}
+        <div className="flex flex-col xl:flex-row xl:items-stretch gap-4 mb-5">
+          {/* Calendário */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 xl:w-80 xl:shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={() => { const m = new Date(calendarMonth); m.setMonth(m.getMonth() - 1); setCalendarMonth(m); }} className="p-1.5 hover:bg-slate-100 rounded-lg transition">
+                <ChevronLeft size={16} className="text-slate-600" />
               </button>
-              <h3 className="text-base sm:text-lg font-bold text-slate-800 capitalize">{calendarMonthName}</h3>
-              <button
-                onClick={() => {
-                  const newMonth = new Date(calendarMonth);
-                  newMonth.setMonth(newMonth.getMonth() + 1);
-                  setCalendarMonth(newMonth);
-                }}
-                className="p-2 sm:p-3 hover:bg-slate-100 rounded-lg transition"
-              >
-                <ChevronRight size={18} className="sm:w-5 sm:h-5 text-slate-600" />
+              <h3 className="text-sm font-bold text-slate-800 capitalize">{calendarMonthName}</h3>
+              <button onClick={() => { const m = new Date(calendarMonth); m.setMonth(m.getMonth() + 1); setCalendarMonth(m); }} className="p-1.5 hover:bg-slate-100 rounded-lg transition">
+                <ChevronRight size={16} className="text-slate-600" />
               </button>
             </div>
-
-            {/* Dias da Semana */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 sm:mb-3">
+            <div className="grid grid-cols-7 gap-0.5 mb-1.5">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                <div key={day} className="text-center text-xs sm:text-sm font-medium text-slate-400 py-1 sm:py-2">
-                  {day}
-                </div>
+                <div key={day} className="text-center text-[10px] font-medium text-slate-400 py-0.5">{day}</div>
               ))}
             </div>
-
-            {/* Dias do Mês */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            <div className="grid grid-cols-7 gap-0.5">
               {getDaysInMonth(calendarMonth).map((date, index) => {
-                if (!date) {
-                  return <div key={`empty-${index}`} className="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14" />;
-                }
-
+                if (!date) return <div key={`empty-${index}`} className="w-8 h-8" />;
                 const status = getCalendarDayStatus(date);
                 const dateStr = date.toISOString().split('T')[0];
-
                 return (
                   <button
                     key={dateStr}
                     onClick={() => setFilterDate(dateStr)}
-                    className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-xl flex flex-col items-center justify-center text-sm sm:text-base font-medium transition relative ${
+                    className={`w-8 h-8 rounded-lg flex flex-col items-center justify-center text-xs font-medium transition relative ${
                       status.isSelected
                         ? 'bg-slate-800 text-white shadow-md'
                         : status.hasReservations
@@ -1570,145 +1508,54 @@ export default function AdminDashboard() {
               })}
             </div>
 
-            {/* Legenda */}
-            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-100">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500"></div>
-                <span className="text-xs sm:text-sm text-slate-500">Com reservas</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-200"></div>
-                <span className="text-xs sm:text-sm text-slate-500">Barco</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full ring-2 ring-sky-400 bg-sky-100"></div>
-                <span className="text-xs sm:text-sm text-slate-500">Hoje</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-xs sm:text-sm text-slate-500">Obs</span>
-              </div>
+            <div className="flex flex-wrap justify-center gap-3 mt-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-slate-500">Reservas</span></div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-200" /><span className="text-[10px] text-slate-500">Barco</span></div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500" /><span className="text-[10px] text-slate-500">Obs</span></div>
             </div>
-
-            {/* Botão Voltar para Hoje */}
             {filterDate !== new Date().toISOString().split('T')[0] && (
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={() => {
-                    const todayDate = new Date();
-                    setFilterDate(todayDate.toISOString().split('T')[0]);
-                    setCalendarMonth(todayDate);
-                  }}
-                  className="text-sm sm:text-base text-sky-600 hover:text-sky-700 font-medium"
-                >
-                  ← Voltar para Hoje
-                </button>
-              </div>
+              <button onClick={() => { const t = new Date(); setFilterDate(t.toISOString().split('T')[0]); setCalendarMonth(t); }} className="w-full mt-2 text-xs text-viva-blue hover:text-viva-blue-dark font-medium py-1">← Hoje</button>
             )}
           </div>
 
-          {/* Card de Observações do Dia - Ao lado no PC */}
           {filterDate && (
-            <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 flex-1 lg:max-w-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <FileText size={18} className="text-slate-400" />
-                <span className="font-semibold text-slate-700">
-                  Observações
-                </span>
-                {dayNotes.has(filterDate) && (
-                  <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                )}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 xl:w-80 xl:shrink-0 flex flex-col">
+              <div className="flex items-center gap-1.5 mb-2">
+                <FileText size={14} className="text-slate-400" />
+                <span className="text-xs font-semibold text-slate-700">Obs. {formatDate(filterDate)}</span>
+                {dayNotes.has(filterDate) && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
               </div>
-              <p className="text-sm text-slate-500 mb-3">{formatDate(filterDate)}</p>
-              <textarea
-                value={currentNote}
-                onChange={(e) => setCurrentNote(e.target.value)}
-                placeholder="Anotações para este dia..."
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-1 focus:ring-slate-400 focus:border-slate-400 outline-none resize-none mb-3"
-                rows={4}
-              />
-              <button
-                onClick={saveDayNote}
-                disabled={savingNote || currentNote === (dayNotes.get(filterDate) || '')}
-                className="w-full px-4 py-2 bg-viva-blue text-white text-sm font-medium rounded-lg hover:bg-viva-blue-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {savingNote ? 'Salvando...' : 'Salvar Observação'}
+              <textarea value={currentNote} onChange={(e) => setCurrentNote(e.target.value)} placeholder="Anotações..." className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-slate-300 outline-none resize-none mb-2" rows={3} />
+              <button onClick={saveDayNote} disabled={savingNote || currentNote === (dayNotes.get(filterDate) || '')} className="w-full px-3 py-1.5 bg-viva-blue text-white text-xs font-medium rounded-lg hover:bg-viva-blue-dark transition disabled:opacity-50">
+                {savingNote ? '...' : 'Salvar'}
               </button>
             </div>
           )}
-          
-          </div>
-          {/* Fim do Container Calendário + Observações */}
 
-          {/* Filtrar barcos pela data selecionada */}
-          {(() => {
-
-            if (filteredBoats.length === 0) {
-              return (
-                <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
-                  <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <Calendar className="text-slate-400" size={32} />
-                  </div>
-                  <p className="text-slate-700 font-semibold mb-1">
-                    {filterDate 
-                      ? `Nenhum barco para ${formatDate(filterDate)}`
-                      : 'Nenhum barco encontrado'
-                    }
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    Selecione outra data ou crie um novo barco
-                  </p>
-                </div>
-              );
-            }
-
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 xl:w-80 xl:shrink-0">
+          {filteredBoats.length === 0 ? (
+            <div className="p-6 text-center">
+              <Calendar className="mx-auto text-slate-300 mb-2" size={28} />
+              <p className="text-sm text-slate-600 font-medium">{filterDate ? `Nenhum barco em ${formatDate(filterDate)}` : 'Selecione uma data'}</p>
+            </div>
+          ) : (
+              <div className="grid grid-cols-1 gap-3">
                 {filteredBoats.filter(b => b.status === 'active').map((boat) => (
-              <div key={boat.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition">
-                {/* Header do Card */}
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold shrink-0 ${
-                        boat.boatType === 'escuna' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
-                        {boat.boatType === 'escuna' ? 'Escuna' : 'Lancha'}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
-                        boat.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {boat.status === 'active' ? (
-                          <>
-                            <CheckCircle size={12} className="inline mr-1" />
-                            Ativo
-                          </>
-                        ) : 'Inativo'}
-                      </span>
-                    </div>
-                    <h3 className="text-base sm:text-lg font-bold text-viva-blue-dark truncate">{boat.name}</h3>
-                  </div>
+              <div key={boat.id} className="bg-white rounded-xl p-4 border border-slate-100 hover:border-slate-200 transition">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${boat.boatType === 'escuna' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                    {boat.boatType === 'escuna' ? 'Escuna' : 'Lancha'}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-800 truncate flex-1">{boat.name}</h3>
                 </div>
-
-                {/* Info do Barco */}
-                <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <Calendar size={16} className="text-viva-blue shrink-0" />
-                      <span className="font-semibold text-sm sm:text-base">{formatDate(boat.date)}</span>
-                    </div>
+                <div className="bg-slate-50 rounded-lg p-2.5 mb-3">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="text-slate-600 font-medium">{formatDate(boat.date)}</span>
+                    <span className="font-bold text-viva-blue-dark">{boat.seatsTaken}/{boat.seatsTotal}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-700 mb-2">
-                    <Users size={16} className="text-viva-blue shrink-0" />
-                    <span className="text-sm sm:text-base">
-                      <span className="font-bold text-viva-blue-dark">{boat.seatsTaken}</span> / {boat.seatsTotal} ocupados
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div className="w-full bg-slate-200 rounded-full h-1.5">
                     <div
-                      className={`h-2.5 rounded-full transition-all ${
+                      className={`h-1.5 rounded-full transition-all ${
                         boat.seatsTaken >= boat.seatsTotal 
                           ? 'bg-red-500' 
                           : boat.seatsTaken >= boat.seatsTotal * 0.8 
@@ -1719,88 +1566,48 @@ export default function AdminDashboard() {
                     />
                   </div>
                   
-                  {/* Vagas por tipo de serviço - apenas para escunas */}
                   {boat.boatType === 'escuna' && boat.seatsWithLanding !== undefined && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600 flex items-center gap-1">
-                          🏝️ Com Desembarque
-                          {boat.priceWithLanding && (
-                            <span className="text-green-700 font-bold">R${boat.priceWithLanding}</span>
-                          )}
-                        </span>
+                    <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-600">🏝️ Desembarque {boat.priceWithLanding && <span className="text-green-700 font-bold">R${boat.priceWithLanding}</span>}</span>
                         <span className={`font-bold ${
                           (boat.seatsWithLandingTaken || 0) >= (boat.seatsWithLanding || 0) 
                             ? 'text-red-600' 
                             : 'text-green-600'
                         }`}>
                           {boat.seatsWithLandingTaken || 0} / {boat.seatsWithLanding || 0}
-                          <span className="text-gray-500 font-normal ml-1">
-                            ({(boat.seatsWithLanding || 0) - (boat.seatsWithLandingTaken || 0)} livres)
-                          </span>
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600 flex items-center gap-1">
-                          🚤 Panorâmico
-                          {boat.priceWithoutLanding && (
-                            <span className="text-blue-700 font-bold">R${boat.priceWithoutLanding}</span>
-                          )}
-                        </span>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-600">🚤 Panorâmico {boat.priceWithoutLanding && <span className="text-blue-700 font-bold">R${boat.priceWithoutLanding}</span>}</span>
                         <span className={`font-bold ${
                           (boat.seatsWithoutLandingTaken || 0) >= (boat.seatsWithoutLanding || 0) 
                             ? 'text-red-600' 
                             : 'text-blue-600'
                         }`}>
                           {boat.seatsWithoutLandingTaken || 0} / {boat.seatsWithoutLanding || 0}
-                          <span className="text-gray-500 font-normal ml-1">
-                            ({(boat.seatsWithoutLanding || 0) - (boat.seatsWithoutLandingTaken || 0)} livres)
-                          </span>
                         </span>
                       </div>
                     </div>
                   )}
-                  
-                  {/* Mensagem para barcos antigos sem divisão */}
                   {boat.boatType === 'escuna' && boat.seatsWithLanding === undefined && (
-                    <p className="text-xs text-gray-400 mt-2 italic">
-                      Barco sem divisão de vagas por tipo
-                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1 italic">Sem divisão</p>
                   )}
-                  
-                  {/* Vagas disponíveis e preço para lanchas */}
                   {boat.boatType !== 'escuna' && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600">
-                          💰 Valor por pessoa:
-                        </span>
-                        <span className="font-bold text-viva-blue-dark">
-                          R$ {boat.ticketPrice.toFixed(2)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1.5">
-                        {boat.seatsTotal - boat.seatsTaken} vagas disponíveis
-                      </p>
+                    <div className="mt-2 pt-2 border-t border-slate-200 text-[10px]">
+                      <span className="text-slate-600">R$ {boat.ticketPrice.toFixed(2)}</span>
+                      <span className="text-slate-400 ml-1">• {boat.seatsTotal - boat.seatsTaken} vagas</span>
                     </div>
                   )}
                 </div>
 
-                {/* Botões de Ação */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      setSelectedBoat(boat);
-                      setSelectedReservation(null);
-                    }}
-                    className="w-full bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white py-2.5 rounded-lg font-semibold hover:shadow-lg transition text-sm sm:text-base flex items-center justify-center gap-2"
-                  >
-                    <Users size={16} />
+                <div className="space-y-1.5">
+                  <button onClick={() => { setSelectedBoat(boat); setSelectedReservation(null); }} className="w-full bg-viva-blue text-white py-2 rounded-lg font-semibold text-sm hover:bg-viva-blue-dark transition flex items-center justify-center gap-1.5">
+                    <Users size={14} />
                     Ver Reservas
                   </button>
-                  <button
-                    onClick={() => handleEditPrice(boat)}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-viva-yellow/10 text-viva-orange border border-viva-orange/30 rounded-lg hover:bg-viva-yellow/20 transition text-sm font-medium"
+                  <button onClick={() => handleEditPrice(boat)}
+                    className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 text-xs font-medium transition"
                     title={boat.boatType === 'escuna' ? 'Editar Valores e Vagas' : 'Editar Valor do Barco'}
                   >
                     <DollarSign size={16} />
@@ -1812,69 +1619,38 @@ export default function AdminDashboard() {
                       `Editar Valor (R$${boat.ticketPrice})`
                     )}
                   </button>
-                  <button
-                    onClick={() => handleToggleBoatStatus(boat)}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
-                    title="Desativar Barco"
-                  >
-                    <Power size={16} />
+                  <button onClick={() => handleToggleBoatStatus(boat)} className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 text-xs transition" title="Desativar">
+                    <Power size={12} />
                     Desativar
                   </button>
                 </div>
               </div>
                 ))}
               </div>
-            );
-          })()}
-          
-          {/* Barcos Desativados */}
-          {(() => {
-            const inactiveBoatsForDate = boats.filter(boat => {
-              const boatDate = new Date(boat.date).toISOString().split('T')[0];
-              return boatDate === filterDate && boat.status === 'inactive';
-            });
-            
-            if (inactiveBoatsForDate.length === 0) return null;
-            
-            return (
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-3 flex items-center gap-2">
-                  <Power size={16} />
-                  Barcos Desativados ({inactiveBoatsForDate.length})
-                </h3>
-                <div className="space-y-2">
-                  {inactiveBoatsForDate.map((boat) => (
-                    <div key={boat.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <div>
-                        <span className="text-sm font-medium text-gray-600">{boat.name}</span>
-                        <span className="text-xs text-gray-400 ml-2">
-                          {boat.seatsTaken}/{boat.seatsTotal} vagas
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleToggleBoatStatus(boat)}
-                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition flex items-center gap-1"
-                      >
-                        <Power size={14} />
-                        Reativar
-                      </button>
-                    </div>
-                  ))}
-                </div>
+          )}
+          {boats.filter(b => new Date(b.date).toISOString().split('T')[0] === filterDate && b.status === 'inactive').length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <h3 className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5"><Power size={14} />Desativados</h3>
+              <div className="flex flex-wrap gap-2">
+                {boats.filter(b => new Date(b.date).toISOString().split('T')[0] === filterDate && b.status === 'inactive').map((boat) => (
+                  <div key={boat.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 text-sm">
+                    <span className="text-slate-600">{boat.name}</span>
+                    <button onClick={() => handleToggleBoatStatus(boat)} className="text-emerald-600 hover:text-emerald-700 font-medium text-xs">Reativar</button>
+                  </div>
+                ))}
               </div>
-            );
-          })()}
+            </div>
+          )}
+          </div>
         </div>
 
         {/* Reservas Pendentes */}
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-viva-blue-dark mb-3 sm:mb-4 flex items-center gap-2">
-            <Clock size={20} className="text-orange-500" />
-            Reservas Pendentes
+        <div className="mt-5">
+          <h2 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Clock size={16} className="text-orange-500" />
+            Pendentes
             {pendingReservations.length > 0 && (
-              <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">
-                {pendingReservations.length}
-              </span>
+              <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">{pendingReservations.length}</span>
             )}
           </h2>
           
@@ -1947,25 +1723,24 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* Versão Desktop - Tabela */}
-          <div className="hidden sm:block bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="hidden sm:block bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ações</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Cliente</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Data</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Tipo</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Valor</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-100">
                   {pendingReservations.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                        <CheckCircle className="mx-auto text-green-400 mb-2" size={32} />
-                        Nenhuma reserva pendente
+                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500 text-sm">
+                        <CheckCircle className="mx-auto text-emerald-400 mb-1" size={24} />
+                        Nenhuma pendente
                       </td>
                     </tr>
                   ) : (
@@ -1974,14 +1749,14 @@ export default function AdminDashboard() {
                       const groupSize = reservation.groupId ? pendingGroupCounts.get(reservation.groupId) || 0 : 0;
                       
                       return (
-                      <tr key={reservation.id} className={`hover:bg-gray-50 ${
+                      <tr key={reservation.id} className={`hover:bg-slate-50/50 ${
                         groupColor 
                           ? groupColor.bg 
                           : reservation.status === 'pre_reserved' 
                             ? 'bg-orange-50' 
                             : ''
                       }`}>
-                        <td className="px-4 lg:px-6 py-4">
+                        <td className="px-3 py-3">
                           <div>
                             {/* Badge de grupo */}
                             {groupColor && groupSize > 1 && (
@@ -2002,7 +1777,7 @@ export default function AdminDashboard() {
                         <td className="px-4 lg:px-6 py-4 text-sm text-gray-600">
                           {formatDate(reservation.rideDate)}
                         </td>
-                        <td className="px-4 lg:px-6 py-4">
+                        <td className="px-3 py-3">
                           {groupColor ? (
                             <span className={`${groupColor.badge} text-white font-bold px-2 py-1 rounded text-sm inline-flex items-center gap-1`}>
                               <Users size={12} />
@@ -2016,7 +1791,7 @@ export default function AdminDashboard() {
                         <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-gray-900">
                           R$ {reservation.totalAmount.toFixed(2)}
                         </td>
-                        <td className="px-4 lg:px-6 py-4">
+                        <td className="px-3 py-3">
                           <button
                             onClick={() => setSelectedReservation(reservation)}
                             className={`px-3 py-1.5 rounded-lg font-semibold text-sm transition ${
@@ -2038,6 +1813,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+      </main>
 
       {/* Modal Criar Barco */}
       {showBoatModal && (
@@ -2339,7 +2115,8 @@ export default function AdminDashboard() {
       {/* Modal Detalhes Reserva */}
       {selectedReservation && (
         <ReservationDetailModal
-          reservation={selectedReservation}
+          reservation={reservations.find(r => r.id === selectedReservation.id) || selectedReservation}
+          reservations={reservations}
           boat={boats.find(b => b.id === selectedReservation.boatId)!}
           boats={boats}
           onClose={() => setSelectedReservation(null)}
@@ -3622,6 +3399,7 @@ function MoveReservationModal({
 
 function ReservationDetailModal({
   reservation,
+  reservations,
   boat,
   boats,
   onClose,
@@ -3629,6 +3407,7 @@ function ReservationDetailModal({
   onReject,
 }: {
   reservation: Reservation;
+  reservations: Reservation[];
   boat: Boat;
   boats: Boat[];
   onClose: () => void;
@@ -3639,6 +3418,29 @@ function ReservationDetailModal({
   const [showReallocationModal, setShowReallocationModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showReceiptDropdown, setShowReceiptDropdown] = useState(false);
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [vendorName, setVendorName] = useState<string>('Vendedor');
+
+  // Líder do grupo (para recibo e receiptSent) ou a própria reserva se individual
+  const leader = reservation.groupId
+    ? reservations.find(r => r.groupId === reservation.groupId && r.isGroupLeader) || reservations.find(r => r.groupId === reservation.groupId) || reservation
+    : reservation;
+  const canApprove = leader.receiptSent === true;
+
+  useEffect(() => {
+    const loadVendorName = async () => {
+      try {
+        const roleDoc = await getDoc(doc(db, 'roles', leader.vendorId));
+        if (roleDoc.exists()) {
+          setVendorName(roleDoc.data().name || 'Vendedor');
+        }
+      } catch {
+        // ignora
+      }
+    };
+    if (leader.vendorId) loadVendorName();
+  }, [leader.vendorId]);
   
   // Estados de edição
   const [editName, setEditName] = useState(reservation.customerName || '');
@@ -3707,6 +3509,65 @@ function ReservationDetailModal({
     setEditIsChild(reservation.isChild || false);
     setEditIsHalfPrice(reservation.isHalfPrice || false);
     setIsEditing(false);
+  };
+
+  const handleGenerateReceipt = async (lang: ReceiptLanguage) => {
+    setSendingReceipt(true);
+    try {
+      let pagantes = 1;
+      let cortesias = 0;
+      const groupMembersList: { name: string; document?: string; isChild?: boolean; amount: number }[] = [];
+
+      if (leader.groupId) {
+        const groupMembers = reservations.filter(r => r.groupId === leader.groupId);
+        pagantes = groupMembers.filter(r => !r.isChild || (r.isChild && r.totalAmount > 0)).length;
+        cortesias = groupMembers.filter(r => r.isChild && r.totalAmount === 0).length;
+        groupMembers.forEach(m => {
+          groupMembersList.push({ name: m.customerName, document: m.document, isChild: m.isChild, amount: m.totalAmount });
+        });
+      } else {
+        if (leader.isChild && leader.totalAmount === 0) {
+          pagantes = 0;
+          cortesias = 1;
+        }
+        groupMembersList.push({ name: leader.customerName, document: leader.document, isChild: leader.isChild, amount: leader.totalAmount });
+      }
+
+      const totalGroupPaid = leader.groupId
+        ? reservations.filter(r => r.groupId === leader.groupId).reduce((sum, r) => sum + r.amountPaid, 0)
+        : leader.amountPaid;
+      const totalGroupDue = leader.groupId
+        ? reservations.filter(r => r.groupId === leader.groupId).reduce((sum, r) => sum + r.amountDue, 0)
+        : leader.amountDue;
+
+      const receiptData: ReceiptData = {
+        reservation: leader,
+        boat,
+        vendorName,
+        pagantes,
+        cortesias,
+        valorPorPessoa: boat.ticketPrice || 180,
+        valorReserva: totalGroupPaid,
+        valorRestante: totalGroupDue,
+        formaPagamento: leader.paymentMethod,
+        groupMembers: groupMembersList,
+        language: lang,
+      };
+
+      await generateReceiptPDF(receiptData);
+      setShowReceiptDropdown(false);
+
+      await updateDoc(doc(db, 'reservations', leader.id), {
+        receiptSent: true,
+        receiptSentAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      console.error('Erro ao gerar recibo:', error);
+      alert('Erro ao gerar recibo. Tente novamente.');
+    } finally {
+      setSendingReceipt(false);
+    }
   };
 
   return (
@@ -4101,6 +3962,56 @@ function ReservationDetailModal({
               </div>
             </div>
 
+            {/* Passo 1: Enviar Recibo (obrigatório antes de aprovar) */}
+            {reservation.status === 'pending' && !canApprove && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                  <Receipt size={18} />
+                  Envie o recibo antes de aprovar
+                </p>
+                <p className="text-xs text-amber-700 mb-3">
+                  Gere o recibo PDF e envie ao vendedor/cliente. Depois disso o botão Aprovar será liberado.
+                </p>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowReceiptDropdown(!showReceiptDropdown)}
+                    disabled={sendingReceipt}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-viva-blue text-white rounded-lg font-medium text-sm hover:bg-viva-blue-dark transition disabled:opacity-50"
+                  >
+                    <Receipt size={16} />
+                    {sendingReceipt ? 'Gerando...' : 'Gerar Recibo PDF'}
+                    <Globe size={14} />
+                  </button>
+                  {showReceiptDropdown && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                      <div className="p-2">
+                        <p className="text-xs text-gray-500 mb-2 text-center">Idioma do recibo</p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {RECEIPT_LANGUAGES.map((lang) => (
+                            <button
+                              key={lang.code}
+                              onClick={() => handleGenerateReceipt(lang.code)}
+                              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
+                            >
+                              <span>{lang.flag}</span>
+                              <span>{lang.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {reservation.status === 'pending' && canApprove && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 flex items-center gap-2">
+                <CheckCircle size={20} className="text-green-600 flex-shrink-0" />
+                <p className="text-sm font-medium text-green-800">Recibo enviado. Você pode aprovar a reserva.</p>
+              </div>
+            )}
+
             {/* Botões de Ação */}
             <div className="space-y-2 sm:space-y-0 sm:flex sm:gap-3 pt-2">
               {reservation.status === 'pending' ? (
@@ -4125,7 +4036,13 @@ function ReservationDetailModal({
                       }
                       onApprove(reservation, paid);
                     }}
-                    className="w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2 text-base sm:text-lg"
+                    disabled={!canApprove}
+                    title={!canApprove ? 'Envie o recibo primeiro para liberar a aprovação' : undefined}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 rounded-lg font-bold transition flex items-center justify-center gap-2 text-base sm:text-lg ${
+                      canApprove
+                        ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:shadow-lg'
+                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    }`}
                   >
                     <CheckCircle size={20} />
                     Aprovar

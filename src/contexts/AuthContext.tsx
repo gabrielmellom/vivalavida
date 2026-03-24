@@ -33,17 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Flag para evitar race conditions
+    if (!auth || !db) {
+      setLoading(false);
+      return;
+    }
     let isMounted = true;
-    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
-      
       if (user) {
         setUser(user);
-        // Buscar role do usuário
         try {
-          const roleDoc = await getDoc(doc(db, 'roles', user.uid));
+          const roleDoc = await getDoc(doc(db!, 'roles', user.uid));
           if (isMounted) {
             if (roleDoc.exists()) {
               setUserRole(roleDoc.data() as UserRole);
@@ -53,20 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (error) {
           console.error('Erro ao buscar role:', error);
-          if (isMounted) {
-            setUserRole(null);
-          }
+          if (isMounted) setUserRole(null);
         }
       } else {
         setUser(null);
         setUserRole(null);
       }
-      
-      if (isMounted) {
-        setLoading(false);
-      }
+      if (isMounted) setLoading(false);
     });
-
     return () => {
       isMounted = false;
       unsubscribe();
@@ -74,10 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    if (!auth) throw new Error('Firebase não configurado. Defina NEXT_PUBLIC_FIREBASE_API_KEY no .env.local');
     await signInWithEmailAndPassword(auth, email, password);
   };
 
   const signOut = async () => {
+    if (!auth) return;
     await firebaseSignOut(auth);
     setUserRole(null);
   };
