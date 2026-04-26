@@ -6,6 +6,13 @@ import { db } from '@/lib/firebase';
 import { Reservation, UserRole, Boat, Payment, Expense } from '@/types';
 import { ArrowLeft, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users, XCircle, CheckCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
+import { formatBrazilianDate } from '@/lib/dateUtils';
+
+// Helper local: data BR a partir de Date (Timestamp.toDate()) sempre em SP.
+const formatBrDate = (d: Date | null | undefined): string => {
+  if (!d) return '';
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(d);
+};
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatOptions) => {
@@ -65,7 +72,8 @@ interface SalesReport {
     customerName: string;
     vendorName: string;
     amount: number;
-    date: Date;
+    // Data do passeio como string YYYY-MM-DD (evita shifts de timezone na renderização)
+    date: string;
     createdAt: Date;
   }>;
   postSaleContacts: Array<{
@@ -272,7 +280,8 @@ export default function RelatoriosPage() {
             customerName: r.customerName,
             vendorName: vendor?.name || vendor?.email || 'Desconhecido',
             amount: r.totalAmount,
-            date: r.rideDate ? new Date(r.rideDate) : new Date(),
+            // Usa string YYYY-MM-DD direto pra evitar shift de timezone na exibição.
+            date: r.rideDate || '',
             createdAt: r.createdAt || new Date(),
           };
         })
@@ -402,7 +411,7 @@ export default function RelatoriosPage() {
 
     let csv = 'RELATÓRIO DE VENDAS\n\n';
     csv += `Período: ${report.period}\n`;
-    csv += `Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}\n\n`;
+    csv += `Gerado em: ${formatBrDate(new Date())} ${new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n\n`;
     
     csv += 'RESUMO GERAL\n';
     csv += `Total de Reservas,${report.totalReservations}\n`;
@@ -446,7 +455,7 @@ export default function RelatoriosPage() {
       csv += '\nCANCELAMENTOS\n';
       csv += 'Cliente,Vendedor,Valor,Data do Passeio,Data do Cancelamento\n';
       report.cancelledDetails.forEach(c => {
-        csv += `"${c.customerName}","${c.vendorName}",R$ ${c.amount.toFixed(2)},${c.date.toLocaleDateString('pt-BR')},${c.createdAt.toLocaleDateString('pt-BR')}\n`;
+        csv += `"${c.customerName}","${c.vendorName}",R$ ${c.amount.toFixed(2)},${formatBrazilianDate(c.date)},${formatBrDate(c.createdAt)}\n`;
       });
     }
     
@@ -835,8 +844,8 @@ export default function RelatoriosPage() {
                           <td className="px-6 py-4 font-semibold text-gray-900">{cancel.customerName}</td>
                           <td className="px-6 py-4 text-gray-600">{cancel.vendorName}</td>
                           <td className="px-6 py-4 text-right font-bold text-red-600">R$ {cancel.amount.toFixed(2)}</td>
-                          <td className="px-6 py-4 text-gray-600">{cancel.date.toLocaleDateString('pt-BR')}</td>
-                          <td className="px-6 py-4 text-gray-600">{cancel.createdAt.toLocaleDateString('pt-BR')}</td>
+                          <td className="px-6 py-4 text-gray-600">{formatBrazilianDate(cancel.date)}</td>
+                          <td className="px-6 py-4 text-gray-600">{formatBrDate(cancel.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>

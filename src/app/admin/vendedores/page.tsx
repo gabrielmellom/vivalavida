@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { UserRole } from '@/types';
-import { Plus, Trash2, UserPlus, ArrowLeft, Headphones, Users, Eye, EyeOff, Edit2 } from 'lucide-react';
+import { Trash2, UserPlus, ArrowLeft, Headphones, Users, Edit2 } from 'lucide-react';
 import Link from 'next/link';
+import { fetchWithAuth } from '@/lib/apiClient';
 
 type UserType = 'vendor' | 'post_sale';
 
@@ -19,7 +20,6 @@ export default function GerenciarVendedores() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [showEditModal, setShowEditModal] = useState(false);
   const [userToEdit, setUserToEdit] = useState<UserRole | null>(null);
   const [editName, setEditName] = useState('');
@@ -62,12 +62,8 @@ export default function GerenciarVendedores() {
     setLoading(true);
 
     try {
-      // Criar usuário usando API route (Admin SDK - não faz login automático)
-      const response = await fetch('/api/create-user', {
+      const response = await fetchWithAuth('/api/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           email,
           password,
@@ -104,27 +100,21 @@ export default function GerenciarVendedores() {
 
   const handleDeleteUsuario = async (uid: string, role: string) => {
     const tipoNome = role === 'post_sale' ? 'atendente pós-venda' : 'vendedor';
-    if (!confirm(`Tem certeza que deseja remover este ${tipoNome}?`)) return;
+    if (!confirm(`Tem certeza que deseja remover este ${tipoNome}?\n\nIsto remove o acesso (login) e os dados de role.`)) return;
 
     try {
-      await deleteDoc(doc(db, 'roles', uid));
+      const response = await fetchWithAuth('/api/delete-user', {
+        method: 'POST',
+        body: JSON.stringify({ uid }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erro ao remover usuário');
       loadUsuarios();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao remover usuário:', error);
-      alert('Erro ao remover usuário');
+      const msg = error instanceof Error ? error.message : 'Erro ao remover usuário';
+      alert(msg);
     }
-  };
-
-  const togglePasswordVisibility = (uid: string) => {
-    setVisiblePasswords(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(uid)) {
-        newSet.delete(uid);
-      } else {
-        newSet.add(uid);
-      }
-      return newSet;
-    });
   };
 
   const openEditModal = (user: UserRole) => {
@@ -143,15 +133,12 @@ export default function GerenciarVendedores() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/update-user', {
+      const response = await fetchWithAuth('/api/update-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           uid: userToEdit.uid,
           name: editName,
-          password: editPassword || undefined, // Só atualiza se foi preenchida
+          password: editPassword || undefined,
         }),
       });
 
@@ -231,7 +218,6 @@ export default function GerenciarVendedores() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Senha</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data Cadastro</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ações</th>
                 </tr>
@@ -241,22 +227,6 @@ export default function GerenciarVendedores() {
                   <tr key={vendedor.uid} className="hover:bg-gray-50">
                     <td className="px-6 py-4 font-semibold text-gray-900">{vendedor.name || vendedor.email}</td>
                     <td className="px-6 py-4 text-gray-600">{vendedor.email}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-gray-600">
-                          {visiblePasswords.has(vendedor.uid) 
-                            ? (vendedor.password || '******') 
-                            : '••••••••'}
-                        </span>
-                        <button
-                          onClick={() => togglePasswordVisibility(vendedor.uid)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-500 hover:text-gray-700"
-                          title={visiblePasswords.has(vendedor.uid) ? 'Ocultar senha' : 'Mostrar senha'}
-                        >
-                          {visiblePasswords.has(vendedor.uid) ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {vendedor.createdAt ? new Date(vendedor.createdAt).toLocaleDateString('pt-BR') : '-'}
                     </td>
@@ -305,7 +275,6 @@ export default function GerenciarVendedores() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Senha</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Data Cadastro</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Ações</th>
                 </tr>
@@ -315,22 +284,6 @@ export default function GerenciarVendedores() {
                   <tr key={atendente.uid} className="hover:bg-purple-50">
                     <td className="px-6 py-4 font-semibold text-gray-900">{atendente.name || atendente.email}</td>
                     <td className="px-6 py-4 text-gray-600">{atendente.email}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-gray-600">
-                          {visiblePasswords.has(atendente.uid) 
-                            ? (atendente.password || '******') 
-                            : '••••••••'}
-                        </span>
-                        <button
-                          onClick={() => togglePasswordVisibility(atendente.uid)}
-                          className="p-1.5 hover:bg-purple-100 rounded-lg transition text-gray-500 hover:text-purple-700"
-                          title={visiblePasswords.has(atendente.uid) ? 'Ocultar senha' : 'Mostrar senha'}
-                        >
-                          {visiblePasswords.has(atendente.uid) ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {atendente.createdAt ? new Date(atendente.createdAt).toLocaleDateString('pt-BR') : '-'}
                     </td>

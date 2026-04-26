@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, setDoc, doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, setDoc, doc, onSnapshot, Timestamp, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Boat, Reservation, PaymentMethod, UserRole } from '@/types';
 import { Plus, Calendar, Users, CheckCircle, XCircle, Clock, DollarSign, FileText, LogOut, Edit2, Power, Trash2, BarChart3, Settings, Bell, Volume2, ChevronLeft, ChevronRight, User, Phone, Mail, MapPin, CreditCard, Sparkles, QrCode, Menu, X, Cloud, Sun, CloudRain, CloudSun, Wind, Droplets, Ship, TrendingUp, Download, Receipt, Globe } from 'lucide-react';
 import { generateReceiptPDF, ReceiptData, type ReceiptLanguage } from '@/lib/receiptGenerator';
 import { useSiteConfig, DEFAULT_TOURS } from '@/lib/useSiteConfig';
+import { todayKey, toDateKey } from '@/lib/dateUtils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -71,7 +72,7 @@ export default function AdminDashboard() {
   const [newSeatsWithLanding, setNewSeatsWithLanding] = useState('');
   const [newSeatsWithoutLanding, setNewSeatsWithoutLanding] = useState('');
   const [hasApprovedReservations, setHasApprovedReservations] = useState(false);
-  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]); // Data para filtrar barcos
+  const [filterDate, setFilterDate] = useState<string>(todayKey());
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
   const [newOrderAlert, setNewOrderAlert] = useState(false);
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -457,136 +458,153 @@ export default function AdminDashboard() {
       const boatRef = doc(db, 'boats', reservation.boatId);
       const reservationRef = doc(db, 'reservations', reservation.id);
 
-      // Buscar barco atual
-      const boatDocSnap = await getDoc(boatRef);
-      
-      if (!boatDocSnap.exists()) {
-        alert('Barco não encontrado!');
-        return;
-      }
-      
-      const boatData = boatDocSnap.data() as Boat;
-      const currentSeatsTaken = boatData.seatsTaken || 0;
-      
-      // Se a reserva já estava aprovada, não incrementar seatsTaken novamente
-      const wasAlreadyApproved = reservation.status === 'approved';
-      
-      // Verificar se ainda há vagas disponíveis (geral)
-      if (!wasAlreadyApproved && currentSeatsTaken >= boatData.seatsTotal) {
-        alert('Não há mais vagas disponíveis neste barco!');
-        return;
-      }
+      // Tudo em uma transação para evitar race condition entre dois admins.
+      await runTransaction(db, async (tx) => {
+        const boatSnap = await tx.get(boatRef);
+        if (!boatSnap.exists()) {
+          throw new Error('Barco não encontrado!');
+        }
+        const reservationSnap = await tx.get(reservationRef);
+        if (!reservationSnap.exists()) {
+          throw new Error('Reserva não encontrada!');
+        }
+        const boatData = boatSnap.data() as Boat;
+        const currentReservation = reservationSnap.data() as Reservation;
 
-      // Verificar vagas por tipo de serviço (para escunas)
-      if (!wasAlreadyApproved && boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
-        const isWithLanding = reservation.escunaType === 'com-desembarque';
-        
-        if (isWithLanding) {
-          const currentWithLandingTaken = boatData.seatsWithLandingTaken || 0;
-          if (currentWithLandingTaken >= (boatData.seatsWithLanding || 0)) {
-            alert(`Não há mais vagas com desembarque disponíveis! (${currentWithLandingTaken}/${boatData.seatsWithLanding})`);
-            return;
-          }
-        } else {
-          const currentWithoutLandingTaken = boatData.seatsWithoutLandingTaken || 0;
-          if (currentWithoutLandingTaken >= (boatData.seatsWithoutLanding || 0)) {
-            alert(`Não há mais vagas panorâmicas disponíveis! (${currentWithoutLandingTaken}/${boatData.seatsWithoutLanding})`);
-            return;
+        const wasAlreadyApproved = currentReservation.status === 'approved';
+        const currentSeatsTaken = boatData.seatsTaken || 0;
+
+        if (!wasAlreadyApproved && currentSeatsTaken >= boatData.seatsTotal) {
+          throw new Error('Não há mais vagas disponíveis neste barco!');
+        }
+
+        const isWithLanding = currentReservation.escunaType === 'com-desembarque';
+        const usesPools = boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined;
+
+        if (!wasAlreadyApproved && usesPools) {
+          if (isWithLanding) {
+            const taken = boatData.seatsWithLandingTaken || 0;
+            if (taken >= (boatData.seatsWithLanding || 0)) {
+              throw new Error(`Não há mais vagas com desembarque disponíveis! (${taken}/${boatData.seatsWithLanding})`);
+            }
+          } else {
+            const taken = boatData.seatsWithoutLandingTaken || 0;
+            if (taken >= (boatData.seatsWithoutLanding || 0)) {
+              throw new Error(`Não há mais vagas panorâmicas disponíveis! (${taken}/${boatData.seatsWithoutLanding})`);
+            }
           }
         }
-      }
 
-      await updateDoc(reservationRef, {
-        status: 'approved',
-        amountPaid,
-        amountDue: reservation.totalAmount - amountPaid,
-        updatedAt: Timestamp.now(),
+        tx.update(reservationRef, {
+          status: 'approved',
+          amountPaid,
+          amountDue: reservation.totalAmount - amountPaid,
+          updatedAt: Timestamp.now(),
+        });
+
+        if (!wasAlreadyApproved) {
+          const updateData: Record<string, unknown> = {
+            seatsTaken: currentSeatsTaken + 1,
+            updatedAt: Timestamp.now(),
+          };
+          if (usesPools) {
+            if (isWithLanding) {
+              updateData.seatsWithLandingTaken = (boatData.seatsWithLandingTaken || 0) + 1;
+            } else {
+              updateData.seatsWithoutLandingTaken = (boatData.seatsWithoutLandingTaken || 0) + 1;
+            }
+          }
+          tx.update(boatRef, updateData);
+        }
       });
 
-      // Incrementar seatsTaken apenas se não estava aprovado antes
-      if (!wasAlreadyApproved) {
-        const updateData: Record<string, unknown> = {
-          seatsTaken: currentSeatsTaken + 1,
-          updatedAt: Timestamp.now(),
-        };
-        
-        // Atualizar contadores por tipo de serviço (para escunas)
-        if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
-          const isWithLanding = reservation.escunaType === 'com-desembarque';
-          if (isWithLanding) {
-            updateData.seatsWithLandingTaken = (boatData.seatsWithLandingTaken || 0) + 1;
-          } else {
-            updateData.seatsWithoutLandingTaken = (boatData.seatsWithoutLandingTaken || 0) + 1;
-          }
-        }
-        
-        await updateDoc(boatRef, updateData);
-      }
-
       setSelectedReservation(null);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao aprovar reserva:', error);
-      alert('Erro ao aprovar reserva');
+      const msg = error instanceof Error ? error.message : 'Erro ao aprovar reserva';
+      alert(msg);
     }
   };
 
   const handleRejectReservation = async (reservationId: string) => {
     try {
-      // Buscar a reserva para verificar se já estava aprovada
       const reservation = reservations.find(r => r.id === reservationId);
       if (!reservation) {
         alert('Reserva não encontrada!');
         return;
       }
 
-      const reservationRef = doc(db, 'reservations', reservationId);
-      
-      // Se a reserva estava aprovada, decrementar seatsTaken do barco
-      if (reservation.status === 'approved') {
-        const boatRef = doc(db, 'boats', reservation.boatId);
-        const boatDocSnap = await getDoc(boatRef);
-        
-        if (boatDocSnap.exists()) {
-          const boatData = boatDocSnap.data() as Boat;
-          const currentSeatsTaken = boatData.seatsTaken || 0;
-          
-          // Decrementar apenas se for maior que zero
-          if (currentSeatsTaken > 0) {
-            const updateData: Record<string, unknown> = {
-              seatsTaken: currentSeatsTaken - 1,
-              updatedAt: Timestamp.now(),
-            };
-            
-            // Decrementar contadores por tipo de serviço (para escunas)
-            if (boatData.boatType === 'escuna' && boatData.seatsWithLanding !== undefined) {
-              const isWithLanding = reservation.escunaType === 'com-desembarque';
-              if (isWithLanding) {
-                const currentWithLandingTaken = boatData.seatsWithLandingTaken || 0;
-                if (currentWithLandingTaken > 0) {
-                  updateData.seatsWithLandingTaken = currentWithLandingTaken - 1;
-                }
-              } else {
-                const currentWithoutLandingTaken = boatData.seatsWithoutLandingTaken || 0;
-                if (currentWithoutLandingTaken > 0) {
-                  updateData.seatsWithoutLandingTaken = currentWithoutLandingTaken - 1;
-                }
-              }
-            }
-            
-            await updateDoc(boatRef, updateData);
+      // Se for líder de grupo, oferecer cancelar todo mundo.
+      let groupToCancel: Reservation[] = [reservation];
+      if (reservation.groupId) {
+        const groupMembers = reservations.filter(r => r.groupId === reservation.groupId && r.status !== 'cancelled');
+        if (groupMembers.length > 1) {
+          const isLeader = !!reservation.isGroupLeader;
+          const msg = isLeader
+            ? `Esta é a reserva LÍDER de um grupo de ${groupMembers.length} pessoas. Cancelar TODO o grupo?\n\nOK = cancelar todos\nCancelar = cancelar só esta`
+            : `Esta reserva faz parte de um grupo de ${groupMembers.length} pessoas. Cancelar TODO o grupo?\n\nOK = cancelar todos\nCancelar = cancelar só esta`;
+          if (confirm(msg)) {
+            groupToCancel = groupMembers;
           }
         }
       }
 
-      await updateDoc(reservationRef, {
-        status: 'cancelled',
-        updatedAt: Timestamp.now(),
+      // Cada cancelamento atualiza o pool da escuna se a reserva estava aprovada.
+      // Fazemos em batch + leituras prévias do barco.
+      const boatIds = Array.from(new Set(groupToCancel.map(r => r.boatId)));
+      const boatSnaps = await Promise.all(
+        boatIds.map(id => getDoc(doc(db, 'boats', id)).then(snap => ({ id, snap })))
+      );
+      const boatDataById = new Map<string, Boat>();
+      boatSnaps.forEach(({ id, snap }) => {
+        if (snap.exists()) boatDataById.set(id, snap.data() as Boat);
       });
-      
+
+      const decrementsByBoat = new Map<string, { total: number; withLanding: number; without: number }>();
+      for (const r of groupToCancel) {
+        if (r.status !== 'approved') continue;
+        const acc = decrementsByBoat.get(r.boatId) || { total: 0, withLanding: 0, without: 0 };
+        acc.total += 1;
+        if (r.escunaType === 'com-desembarque') acc.withLanding += 1;
+        else acc.without += 1;
+        decrementsByBoat.set(r.boatId, acc);
+      }
+
+      const batch = writeBatch(db);
+      const now = Timestamp.now();
+
+      for (const r of groupToCancel) {
+        batch.update(doc(db, 'reservations', r.id), {
+          status: 'cancelled',
+          receiptSent: false,
+          confirmationSent: false,
+          termsLinkSent: false,
+          voucherSent: false,
+          cancelledAt: now,
+          updatedAt: now,
+        });
+      }
+
+      for (const [boatId, dec] of decrementsByBoat) {
+        const boat = boatDataById.get(boatId);
+        if (!boat) continue;
+        const update: Record<string, unknown> = {
+          seatsTaken: Math.max(0, (boat.seatsTaken || 0) - dec.total),
+          updatedAt: now,
+        };
+        if (boat.boatType === 'escuna' && boat.seatsWithLanding !== undefined) {
+          update.seatsWithLandingTaken = Math.max(0, (boat.seatsWithLandingTaken || 0) - dec.withLanding);
+          update.seatsWithoutLandingTaken = Math.max(0, (boat.seatsWithoutLandingTaken || 0) - dec.without);
+        }
+        batch.update(doc(db, 'boats', boatId), update);
+      }
+
+      await batch.commit();
       setSelectedReservation(null);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao recusar reserva:', error);
-      alert('Erro ao recusar reserva');
+      const msg = error instanceof Error ? error.message : 'Erro ao recusar reserva';
+      alert(msg);
     }
   };
 
@@ -856,10 +874,10 @@ export default function AdminDashboard() {
     }
   };
 
-  // Filtrar por data do filtro selecionado
-  const today = filterDate || new Date().toISOString().split('T')[0];
+  // Filtrar por data do filtro selecionado (usando timezone de SP)
+  const today = filterDate || todayKey();
   const filteredBoats = boats.filter(boat => {
-    const boatDate = new Date(boat.date).toISOString().split('T')[0];
+    const boatDate = toDateKey(boat.date);
     return boatDate === today;
   });
   
@@ -920,9 +938,9 @@ export default function AdminDashboard() {
   };
 
   const getCalendarDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = toDateKey(date);
     const data = calendarData.get(dateKey);
-    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isToday = dateKey === todayKey();
     const isSelected = dateKey === filterDate;
     const hasNote = dayNotes.has(dateKey);
     
@@ -1003,12 +1021,12 @@ export default function AdminDashboard() {
     return `${d.getDate()} de ${months[d.getMonth()]}`;
   };
 
-  // Calcular variação de reservas vs ontem
+  // Calcular variação de reservas vs ontem (usando timezone de SP)
   const getReservationTrend = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const todayCount = reservations.filter(r => r.rideDate === today).length;
-    const yesterdayCount = reservations.filter(r => r.rideDate === yesterday).length;
+    const today = todayKey();
+    const yesterday = toDateKey(new Date(Date.now() - 86400000));
+    const todayCount = reservations.filter(r => toDateKey(r.rideDate) === today).length;
+    const yesterdayCount = reservations.filter(r => toDateKey(r.rideDate) === yesterday).length;
     if (yesterdayCount === 0) return { percent: 0, isUp: true };
     const percent = Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100);
     return { percent: Math.abs(percent), isUp: percent >= 0 };
@@ -1442,7 +1460,7 @@ export default function AdminDashboard() {
               <FileText size={18} className="text-slate-500" />
               <span className="text-sm text-slate-600">Reservas hoje</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">{reservations.filter(r => r.rideDate === new Date().toISOString().split('T')[0]).length}</span>
+            <span className="text-xl font-bold text-slate-800">{reservations.filter(r => toDateKey(r.rideDate) === todayKey()).length}</span>
             <span className={`text-xs ${trend.isUp ? 'text-emerald-600' : 'text-red-500'}`}>{trend.isUp ? '+' : '-'}{trend.percent}% vs ontem</span>
           </div>
           <button onClick={() => setShowReservationWizard(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-viva-blue to-viva-blue-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg transition shadow-sm">
@@ -1514,8 +1532,8 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-200" /><span className="text-[10px] text-slate-500">Barco</span></div>
               <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500" /><span className="text-[10px] text-slate-500">Obs</span></div>
             </div>
-            {filterDate !== new Date().toISOString().split('T')[0] && (
-              <button onClick={() => { const t = new Date(); setFilterDate(t.toISOString().split('T')[0]); setCalendarMonth(t); }} className="w-full mt-2 text-xs text-viva-blue hover:text-viva-blue-dark font-medium py-1">← Hoje</button>
+            {filterDate !== todayKey() && (
+              <button onClick={() => { setFilterDate(todayKey()); setCalendarMonth(new Date()); }} className="w-full mt-2 text-xs text-viva-blue hover:text-viva-blue-dark font-medium py-1">← Hoje</button>
             )}
           </div>
 
@@ -2999,30 +3017,98 @@ function MoveReservationModal({
       const totalAmount = parseFloat(editTotalAmount) || 0;
       const amountPaidValue = parseFloat(editAmountPaid) || 0;
       const amountDue = totalAmount - amountPaidValue;
+      const newEscunaType = currentBoat.boatType === 'escuna' ? editEscunaType : undefined;
 
-      await updateDoc(doc(db, 'reservations', reservation.id), {
-        customerName: editName,
-        phone: editPhone,
-        whatsapp: editWhatsapp || editPhone,
-        document: editDocument,
-        birthDate: editBirthDate,
-        email: editEmail,
-        address: editAddress,
-        totalAmount,
-        amountPaid: amountPaidValue,
-        amountDue: Math.max(0, amountDue),
-        paymentMethod: editPaymentMethod,
-        escunaType: currentBoat.boatType === 'escuna' ? editEscunaType : undefined,
-        isChild: editIsChild,
-        isHalfPrice: editIsHalfPrice,
-        updatedAt: Timestamp.now(),
-      });
-      
+      const reservationRef = doc(db, 'reservations', reservation.id);
+      const boatRef = doc(db, 'boats', currentBoat.id);
+
+      // Se escunaType mudou em reserva aprovada, atualizar pools de vagas em transação.
+      const escunaChanged =
+        currentBoat.boatType === 'escuna' &&
+        currentBoat.seatsWithLanding !== undefined &&
+        reservation.status === 'approved' &&
+        newEscunaType !== reservation.escunaType;
+
+      if (escunaChanged) {
+        await runTransaction(db, async (tx) => {
+          const boatSnap = await tx.get(boatRef);
+          if (!boatSnap.exists()) throw new Error('Barco não encontrado');
+          const boatData = boatSnap.data() as Boat;
+
+          const oldType = reservation.escunaType;
+          const movingToLanding = newEscunaType === 'com-desembarque';
+
+          // Validar limite do novo pool
+          if (movingToLanding) {
+            const taken = boatData.seatsWithLandingTaken || 0;
+            if (taken >= (boatData.seatsWithLanding || 0)) {
+              throw new Error(`Não há vagas COM desembarque disponíveis (${taken}/${boatData.seatsWithLanding})`);
+            }
+          } else {
+            const taken = boatData.seatsWithoutLandingTaken || 0;
+            if (taken >= (boatData.seatsWithoutLanding || 0)) {
+              throw new Error(`Não há vagas PANORÂMICAS disponíveis (${taken}/${boatData.seatsWithoutLanding})`);
+            }
+          }
+
+          // Decrementa pool antigo, incrementa novo
+          const updateData: Record<string, unknown> = { updatedAt: Timestamp.now() };
+          if (oldType === 'com-desembarque') {
+            updateData.seatsWithLandingTaken = Math.max(0, (boatData.seatsWithLandingTaken || 0) - 1);
+          } else {
+            updateData.seatsWithoutLandingTaken = Math.max(0, (boatData.seatsWithoutLandingTaken || 0) - 1);
+          }
+          if (movingToLanding) {
+            updateData.seatsWithLandingTaken = ((updateData.seatsWithLandingTaken as number | undefined) ?? boatData.seatsWithLandingTaken ?? 0) + 1;
+          } else {
+            updateData.seatsWithoutLandingTaken = ((updateData.seatsWithoutLandingTaken as number | undefined) ?? boatData.seatsWithoutLandingTaken ?? 0) + 1;
+          }
+
+          tx.update(boatRef, updateData);
+          tx.update(reservationRef, {
+            customerName: editName,
+            phone: editPhone,
+            whatsapp: editWhatsapp || editPhone,
+            document: editDocument,
+            birthDate: editBirthDate,
+            email: editEmail,
+            address: editAddress,
+            totalAmount,
+            amountPaid: amountPaidValue,
+            amountDue: Math.max(0, amountDue),
+            paymentMethod: editPaymentMethod,
+            escunaType: newEscunaType,
+            isChild: editIsChild,
+            isHalfPrice: editIsHalfPrice,
+            updatedAt: Timestamp.now(),
+          });
+        });
+      } else {
+        await updateDoc(reservationRef, {
+          customerName: editName,
+          phone: editPhone,
+          whatsapp: editWhatsapp || editPhone,
+          document: editDocument,
+          birthDate: editBirthDate,
+          email: editEmail,
+          address: editAddress,
+          totalAmount,
+          amountPaid: amountPaidValue,
+          amountDue: Math.max(0, amountDue),
+          paymentMethod: editPaymentMethod,
+          escunaType: newEscunaType,
+          isChild: editIsChild,
+          isHalfPrice: editIsHalfPrice,
+          updatedAt: Timestamp.now(),
+        });
+      }
+
       alert('✅ Dados atualizados com sucesso!');
       onClose();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao salvar dados:', error);
-      alert('Erro ao salvar. Tente novamente.');
+      const msg = error instanceof Error ? error.message : 'Erro ao salvar. Tente novamente.';
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -3033,59 +3119,96 @@ function MoveReservationModal({
       alert('Selecione um barco');
       return;
     }
-    
+
     setLoading(true);
     try {
-      // Atualizar reserva para o novo barco
-      await updateDoc(doc(db, 'reservations', reservation.id), {
-        boatId: selectedBoatId,
-        rideDate: selectedBoat.date,
-        updatedAt: Timestamp.now(),
-      });
-      
-      // Decrementar vagas do barco antigo
+      const reservationRef = doc(db, 'reservations', reservation.id);
       const oldBoatRef = doc(db, 'boats', currentBoat.id);
-      const oldBoatUpdateData: Record<string, unknown> = {
-        seatsTaken: Math.max(0, currentBoat.seatsTaken - 1),
-        updatedAt: Timestamp.now(),
-      };
-      
-      if (currentBoat.boatType === 'escuna' && currentBoat.seatsWithLanding !== undefined) {
-        if (reservation.escunaType === 'com-desembarque') {
-          oldBoatUpdateData.seatsWithLandingTaken = Math.max(0, (currentBoat.seatsWithLandingTaken || 0) - 1);
-        } else {
-          oldBoatUpdateData.seatsWithoutLandingTaken = Math.max(0, (currentBoat.seatsWithoutLandingTaken || 0) - 1);
-        }
-      }
-      
-      await updateDoc(oldBoatRef, oldBoatUpdateData);
-      
-      // Incrementar vagas do novo barco
       const newBoatRef = doc(db, 'boats', selectedBoatId);
-      const newBoatDoc = await getDoc(newBoatRef);
-      if (newBoatDoc.exists()) {
-        const newBoatData = newBoatDoc.data() as Boat;
-        const newBoatUpdateData: Record<string, unknown> = {
-          seatsTaken: (newBoatData.seatsTaken || 0) + 1,
-          updatedAt: Timestamp.now(),
-        };
-        
-        if (newBoatData.boatType === 'escuna' && newBoatData.seatsWithLanding !== undefined) {
-          if (reservation.escunaType === 'com-desembarque') {
-            newBoatUpdateData.seatsWithLandingTaken = (newBoatData.seatsWithLandingTaken || 0) + 1;
-          } else {
-            newBoatUpdateData.seatsWithoutLandingTaken = (newBoatData.seatsWithoutLandingTaken || 0) + 1;
+
+      // Vamos usar o tipo selecionado no formulário (caso o usuário queira alterar
+      // ao mover para uma escuna). Se o barco destino não for escuna, ignoramos.
+      const targetEscunaType = selectedBoat.boatType === 'escuna' ? editEscunaType : undefined;
+      const wasApproved = reservation.status === 'approved';
+
+      await runTransaction(db, async (tx) => {
+        const newBoatSnap = await tx.get(newBoatRef);
+        if (!newBoatSnap.exists()) throw new Error('Barco destino não encontrado');
+        const newBoatData = newBoatSnap.data() as Boat;
+        const oldBoatSnap = await tx.get(oldBoatRef);
+        const oldBoatData = oldBoatSnap.exists() ? (oldBoatSnap.data() as Boat) : null;
+
+        // Só ajustamos vagas se a reserva consumia vaga (status approved)
+        if (wasApproved) {
+          // Validar disponibilidade no novo barco
+          const newSeatsTaken = newBoatData.seatsTaken || 0;
+          if (newSeatsTaken >= newBoatData.seatsTotal) {
+            throw new Error('Barco destino lotado.');
           }
+          if (newBoatData.boatType === 'escuna' && newBoatData.seatsWithLanding !== undefined) {
+            if (targetEscunaType === 'com-desembarque') {
+              const taken = newBoatData.seatsWithLandingTaken || 0;
+              if (taken >= (newBoatData.seatsWithLanding || 0)) {
+                throw new Error('Sem vagas COM desembarque no barco destino.');
+              }
+            } else {
+              const taken = newBoatData.seatsWithoutLandingTaken || 0;
+              if (taken >= (newBoatData.seatsWithoutLanding || 0)) {
+                throw new Error('Sem vagas PANORÂMICAS no barco destino.');
+              }
+            }
+          }
+
+          // Decrementa antigo
+          if (oldBoatData) {
+            const oldUpdate: Record<string, unknown> = {
+              seatsTaken: Math.max(0, (oldBoatData.seatsTaken || 0) - 1),
+              updatedAt: Timestamp.now(),
+            };
+            if (oldBoatData.boatType === 'escuna' && oldBoatData.seatsWithLanding !== undefined) {
+              if (reservation.escunaType === 'com-desembarque') {
+                oldUpdate.seatsWithLandingTaken = Math.max(0, (oldBoatData.seatsWithLandingTaken || 0) - 1);
+              } else {
+                oldUpdate.seatsWithoutLandingTaken = Math.max(0, (oldBoatData.seatsWithoutLandingTaken || 0) - 1);
+              }
+            }
+            tx.update(oldBoatRef, oldUpdate);
+          }
+
+          // Incrementa novo
+          const newUpdate: Record<string, unknown> = {
+            seatsTaken: newSeatsTaken + 1,
+            updatedAt: Timestamp.now(),
+          };
+          if (newBoatData.boatType === 'escuna' && newBoatData.seatsWithLanding !== undefined) {
+            if (targetEscunaType === 'com-desembarque') {
+              newUpdate.seatsWithLandingTaken = (newBoatData.seatsWithLandingTaken || 0) + 1;
+            } else {
+              newUpdate.seatsWithoutLandingTaken = (newBoatData.seatsWithoutLandingTaken || 0) + 1;
+            }
+          }
+          tx.update(newBoatRef, newUpdate);
         }
-        
-        await updateDoc(newBoatRef, newBoatUpdateData);
-      }
-      
+
+        tx.update(reservationRef, {
+          boatId: selectedBoatId,
+          rideDate: selectedBoat.date,
+          escunaType: targetEscunaType,
+          // ao mover, considere reenviar confirmações: limpar flags pra evitar mensagem
+          // antiga (com data/barco antigos) marcada como já enviada.
+          confirmationSent: false,
+          termsLinkSent: false,
+          voucherSent: false,
+          updatedAt: Timestamp.now(),
+        });
+      });
+
       alert(`${reservation.customerName} foi movido para ${selectedBoat.name}!`);
       onClose();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao mover reserva:', error);
-      alert('Erro ao mover reserva. Tente novamente.');
+      const msg = error instanceof Error ? error.message : 'Erro ao mover reserva. Tente novamente.';
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -3464,8 +3587,18 @@ function ReservationDetailModal({
       const totalAmount = parseFloat(editTotalAmount) || 0;
       const amountPaidValue = parseFloat(editAmountPaid) || 0;
       const amountDue = totalAmount - amountPaidValue;
+      const newEscunaType = boat.boatType === 'escuna' ? editEscunaType : undefined;
 
-      await updateDoc(doc(db, 'reservations', reservation.id), {
+      const reservationRef = doc(db, 'reservations', reservation.id);
+      const boatRef = doc(db, 'boats', boat.id);
+
+      const escunaChanged =
+        boat.boatType === 'escuna' &&
+        boat.seatsWithLanding !== undefined &&
+        reservation.status === 'approved' &&
+        newEscunaType !== reservation.escunaType;
+
+      const baseUpdate = {
         customerName: editName,
         phone: editPhone,
         whatsapp: editWhatsapp || editPhone,
@@ -3477,18 +3610,58 @@ function ReservationDetailModal({
         amountPaid: amountPaidValue,
         amountDue: Math.max(0, amountDue),
         paymentMethod: editPaymentMethod,
-        escunaType: boat.boatType === 'escuna' ? editEscunaType : undefined,
+        escunaType: newEscunaType,
         isChild: editIsChild,
         isHalfPrice: editIsHalfPrice,
         updatedAt: Timestamp.now(),
-      });
-      
+      };
+
+      if (escunaChanged) {
+        await runTransaction(db, async (tx) => {
+          const boatSnap = await tx.get(boatRef);
+          if (!boatSnap.exists()) throw new Error('Barco não encontrado');
+          const boatData = boatSnap.data() as Boat;
+
+          const oldType = reservation.escunaType;
+          const movingToLanding = newEscunaType === 'com-desembarque';
+
+          if (movingToLanding) {
+            const taken = boatData.seatsWithLandingTaken || 0;
+            if (taken >= (boatData.seatsWithLanding || 0)) {
+              throw new Error(`Sem vagas COM desembarque (${taken}/${boatData.seatsWithLanding})`);
+            }
+          } else {
+            const taken = boatData.seatsWithoutLandingTaken || 0;
+            if (taken >= (boatData.seatsWithoutLanding || 0)) {
+              throw new Error(`Sem vagas PANORÂMICAS (${taken}/${boatData.seatsWithoutLanding})`);
+            }
+          }
+
+          let newWithLanding = boatData.seatsWithLandingTaken || 0;
+          let newWithoutLanding = boatData.seatsWithoutLandingTaken || 0;
+          if (oldType === 'com-desembarque') newWithLanding = Math.max(0, newWithLanding - 1);
+          else newWithoutLanding = Math.max(0, newWithoutLanding - 1);
+          if (movingToLanding) newWithLanding += 1;
+          else newWithoutLanding += 1;
+
+          tx.update(boatRef, {
+            seatsWithLandingTaken: newWithLanding,
+            seatsWithoutLandingTaken: newWithoutLanding,
+            updatedAt: Timestamp.now(),
+          });
+          tx.update(reservationRef, baseUpdate);
+        });
+      } else {
+        await updateDoc(reservationRef, baseUpdate);
+      }
+
       setIsEditing(false);
       alert('✅ Reserva atualizada com sucesso!');
-      onClose(); // Fechar para atualizar os dados
-    } catch (error) {
+      onClose();
+    } catch (error: unknown) {
       console.error('Erro ao salvar edição:', error);
-      alert('Erro ao salvar alterações');
+      const msg = error instanceof Error ? error.message : 'Erro ao salvar alterações';
+      alert(msg);
     } finally {
       setSaving(false);
     }

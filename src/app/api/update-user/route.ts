@@ -3,13 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getFirebaseAdminInitError } from '@/lib/firebase-admin-init';
+import { requireAdmin } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
-  const adminError = getFirebaseAdminInitError();
-  if (adminError) {
-    return NextResponse.json({ error: adminError }, { status: 500 });
-  }
+  const authResult = await requireAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const { uid, name, password } = await request.json();
@@ -24,34 +22,31 @@ export async function POST(request: NextRequest) {
     const auth = getAuth();
     const db = getFirestore();
 
-    // Preparar dados para atualizar
     const updateData: Record<string, unknown> = {};
     const firestoreUpdateData: Record<string, unknown> = {};
 
-    // Atualizar nome se fornecido
     if (name) {
       updateData.displayName = name;
       firestoreUpdateData.name = name;
     }
 
-    // Atualizar senha se fornecida
     if (password) {
-      if (password.length < 6) {
+      if (typeof password !== 'string' || password.length < 6) {
         return NextResponse.json(
           { error: 'A senha deve ter pelo menos 6 caracteres' },
           { status: 400 }
         );
       }
       updateData.password = password;
-      firestoreUpdateData.password = password; // Salvar no Firestore para exibição
+      // NÃO salvamos a senha em claro no Firestore (era brecha de LGPD).
+      // Apenas registramos quando foi alterada para auditoria.
+      firestoreUpdateData.passwordChangedAt = new Date();
     }
 
-    // Atualizar usuário no Firebase Auth
     if (Object.keys(updateData).length > 0) {
       await auth.updateUser(uid, updateData as { displayName?: string; password?: string });
     }
 
-    // Atualizar documento de role no Firestore
     if (Object.keys(firestoreUpdateData).length > 0) {
       firestoreUpdateData.updatedAt = new Date();
       await db.collection('roles').doc(uid).update(firestoreUpdateData);

@@ -8,6 +8,7 @@ import { Boat, Reservation, PaymentMethod } from '@/types';
 import { Calendar, Users, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSiteConfig, DEFAULT_TOURS } from '@/lib/useSiteConfig';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { todayKey, toDateKey } from '@/lib/dateUtils';
 
 // Formatar data sem problemas de timezone
 const formatDateForDisplay = (dateString: string, locale: string, options?: Intl.DateTimeFormatOptions) => {
@@ -147,8 +148,8 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
       setEscunaType(preselectedTourType === 'desembarque' ? 'com-desembarque' : 'sem-desembarque');
     }
 
-    // Buscar barcos ativos
-    const today = new Date().toISOString().split('T')[0];
+    // Buscar barcos ativos a partir de hoje (timezone de SP)
+    const today = todayKey();
     const boatsQuery = query(
       collection(db, 'boats'),
       where('status', '==', 'active'),
@@ -251,12 +252,9 @@ export default function PublicReservationModal({ isOpen, onClose, preselectedTou
   };
 
   const getDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
-    const today = new Date().toISOString().split('T')[0];
-    const hasBoat = boats.some(b => {
-      const boatDate = new Date(b.date).toISOString().split('T')[0];
-      return boatDate === dateKey && b.status === 'active';
-    });
+    const dateKey = toDateKey(date);
+    const today = todayKey();
+    const hasBoat = boats.some(b => toDateKey(b.date) === dateKey && b.status === 'active');
     const isPast = dateKey < today;
     
     return {

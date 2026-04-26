@@ -8,6 +8,7 @@ import { Boat, Reservation, PaymentMethod, Payment } from '@/types';
 import { DollarSign, ChevronLeft, ChevronRight, Sparkles, Ship } from 'lucide-react';
 import { Calendar, Users, CheckCircle, LogOut, Plus, User, Phone, Mail, MapPin, CreditCard, Banknote } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { todayKey, toDateKey, formatBrazilianDate } from '@/lib/dateUtils';
 
 // Cores para identificar grupos (paleta vibrante)
 const GROUP_COLORS = [
@@ -52,7 +53,7 @@ interface PersonData {
 export default function VendedorDashboard() {
   const [boats, setBoats] = useState<Boat[]>([]);
   const [myReservations, setMyReservations] = useState<Reservation[]>([]);
-  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState<string>(todayKey());
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [reservationForPayment, setReservationForPayment] = useState<Reservation | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date()); // Mês do calendário
@@ -165,11 +166,8 @@ export default function VendedorDashboard() {
   }, [user]);
 
 
-  // Formatar data sem problemas de timezone
-  const formatDate = (dateString: string) => {
-    const [year, month, day] = dateString.split('-').map(Number);
-    return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
-  };
+  // Formatar data sem problemas de timezone (usa helper compartilhado)
+  const formatDate = (dateString: string) => formatBrazilianDate(dateString);
 
   // Filtrar reservas pela data selecionada (por rideDate) e excluir canceladas
   // Ordenar para manter grupos juntos
@@ -286,9 +284,9 @@ export default function VendedorDashboard() {
   };
 
   const getCalendarDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = toDateKey(date);
     const data = calendarData.get(dateKey);
-    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isToday = dateKey === todayKey();
     const isSelected = dateKey === filterDate;
     
     return {
@@ -477,13 +475,12 @@ export default function VendedorDashboard() {
             </div>
 
             {/* Botão Voltar para Hoje */}
-            {filterDate !== new Date().toISOString().split('T')[0] && (
+            {filterDate !== todayKey() && (
               <div className="flex justify-center mt-4">
                 <button
                   onClick={() => {
-                    const todayDate = new Date();
-                    setFilterDate(todayDate.toISOString().split('T')[0]);
-                    setCalendarMonth(todayDate);
+                    setFilterDate(todayKey());
+                    setCalendarMonth(new Date());
                   }}
                   className="text-sm sm:text-base text-sky-600 hover:text-sky-700 font-medium"
                 >
@@ -744,8 +741,7 @@ export default function VendedorDashboard() {
               const newAmountPaid = reservationForPayment.amountPaid + amount;
               const newAmountDue = reservationForPayment.totalAmount - newAmountPaid;
 
-              // Criar registro de pagamento
-              await addDoc(collection(db, 'payments'), {
+              const paymentData: Record<string, unknown> = {
                 reservationId: reservationForPayment.id,
                 amount,
                 method,
@@ -753,7 +749,16 @@ export default function VendedorDashboard() {
                 vendorId: user.uid,
                 createdAt: Timestamp.now(),
                 createdBy: user.uid,
-              });
+              };
+              // Se a reserva já tem banco associado (selecionado na criação),
+              // copiamos pra cá pra manter consistência nos relatórios.
+              if (reservationForPayment.bankId) {
+                paymentData.bankId = reservationForPayment.bankId;
+              }
+              if (reservationForPayment.bankName) {
+                paymentData.bankName = reservationForPayment.bankName;
+              }
+              await addDoc(collection(db, 'payments'), paymentData);
 
               // Atualizar reserva
               await updateDoc(doc(db, 'reservations', reservationForPayment.id), {
@@ -934,9 +939,9 @@ function ReservationWizard({
   };
 
   const getWizardDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
-    const today = new Date().toISOString().split('T')[0];
-    const hasBoat = boats.some(b => new Date(b.date).toISOString().split('T')[0] === dateKey && b.status === 'active');
+    const dateKey = toDateKey(date);
+    const today = todayKey();
+    const hasBoat = boats.some(b => toDateKey(b.date) === dateKey && b.status === 'active');
     const isPast = dateKey < today;
     
     return {

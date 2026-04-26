@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CheckCircle, XCircle, Calendar, ArrowLeft, User, Phone, DollarSign, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { todayKey, toDateKey } from '@/lib/dateUtils';
 
 // Cores para identificar grupos (paleta vibrante e colorida)
 const GROUP_COLORS = [
@@ -46,7 +47,7 @@ const formatDateForDisplay = (dateString: string, options?: Intl.DateTimeFormatO
 function CheckInPageContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(todayKey());
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [allBoats, setAllBoats] = useState<Boat[]>([]);
   const [allReservations, setAllReservations] = useState<Reservation[]>([]);
@@ -435,6 +436,7 @@ function CheckInPageContent() {
               
               const paymentData: Record<string, unknown> = {
                 reservationId: member.id,
+                vendorId: member.vendorId, // Para relatórios financeiros corretos
                 amount: entryAmount * ratio,
                 method: entry.method,
                 source: 'checkin',
@@ -443,7 +445,6 @@ function CheckInPageContent() {
                 createdBy: user.uid,
               };
               
-              // Só adicionar bankId e bankName se existirem
               if (entry.bankId) {
                 paymentData.bankId = entry.bankId;
               }
@@ -503,12 +504,30 @@ function CheckInPageContent() {
     }
 
     try {
-      // Marcar check-in e zerar o valor devido (gratuidade) para todos do grupo
+      // Marcar check-in e zerar o valor devido (gratuidade) para todos do grupo,
+      // registrando um payment 'courtesy' para cada um (necessário pra relatórios
+      // financeiros conseguirem reconciliar o "pago" com lançamentos reais).
       for (const member of groupReservationsToCheckIn) {
+        const courtesyAmount = member.amountDue;
+        if (courtesyAmount > 0) {
+          await addDoc(collection(db, 'payments'), {
+            reservationId: member.id,
+            vendorId: member.vendorId,
+            amount: courtesyAmount,
+            method: 'courtesy',
+            source: 'checkin',
+            isCourtesy: true,
+            groupPayment: groupReservationsToCheckIn.length > 1,
+            createdAt: Timestamp.now(),
+            createdBy: user?.uid,
+          });
+        }
         await updateDoc(doc(db, 'reservations', member.id), {
           checkedIn: true,
           amountDue: 0,
-          amountPaid: member.totalAmount, // Marcar como pago integralmente
+          amountPaid: member.totalAmount,
+          isCourtesy: true,
+          courtesyGrantedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         });
       }
@@ -713,9 +732,9 @@ function CheckInPageContent() {
   }, [allBoats, allReservations]);
 
   const getCalendarDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = toDateKey(date);
     const data = calendarData.get(dateKey);
-    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isToday = dateKey === todayKey();
     const isSelected = dateKey === selectedDate;
     
     return {
@@ -838,13 +857,12 @@ function CheckInPageContent() {
           </div>
 
           {/* Botão Voltar para Hoje */}
-          {selectedDate !== new Date().toISOString().split('T')[0] && (
+          {selectedDate !== todayKey() && (
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => {
-                  const todayDate = new Date();
-                  setSelectedDate(todayDate.toISOString().split('T')[0]);
-                  setCalendarMonth(todayDate);
+                  setSelectedDate(todayKey());
+                  setCalendarMonth(new Date());
                 }}
                 className="text-sm text-sky-600 hover:text-sky-700 font-medium"
               >

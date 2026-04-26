@@ -74,8 +74,9 @@ export interface UserRole {
   email: string;
   role: 'admin' | 'vendor' | 'post_sale';
   name?: string;
-  password?: string; // Para exibição no admin (não é seguro, mas útil para gerenciamento)
   createdAt: Date;
+  passwordChangedAt?: Date;
+  updatedAt?: Date;
 }
 
 export type PaymentMethod = 'pix' | 'cartao' | 'dinheiro';

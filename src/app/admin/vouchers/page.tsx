@@ -10,8 +10,9 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { generateVoucherPDF, SupportedLanguage } from '@/lib/voucherGenerator';
 import { generateReceiptPDF, ReceiptData, type ReceiptLanguage } from '@/lib/receiptGenerator';
-import { updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { updateDoc, doc, Timestamp, writeBatch } from 'firebase/firestore';
 import { Globe } from 'lucide-react';
+import { todayKey, toDateKey } from '@/lib/dateUtils';
 
 // Idiomas disponíveis
 const LANGUAGES: { code: SupportedLanguage; name: string; flag: string }[] = [
@@ -46,7 +47,7 @@ interface ReservationGroup {
 
 export default function VouchersPage() {
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(todayKey());
   const [boats, setBoats] = useState<Boat[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [allReservations, setAllReservations] = useState<Reservation[]>([]);
@@ -318,10 +319,15 @@ export default function VouchersPage() {
     return `https://wa.me/${cleanPhone}`;
   };
 
-  const handleSendConfirmation = async (reservation: Reservation, language: 'pt-BR' | 'es') => {
+  const handleSendConfirmation = async (
+    reservation: Reservation,
+    language: 'pt-BR' | 'es',
+    groupMembers: Reservation[] = []
+  ) => {
     const vendorName = vendorNames.get(reservation.vendorId) || 'Vendedor';
     const isWithLanding = reservation.escunaType === 'com-desembarque';
-    
+    const totalPeople = 1 + groupMembers.length;
+
     const formatDateForMessage = (dateString: string) => {
       if (!dateString) return '';
       const datePart = dateString.split('T')[0];
@@ -338,81 +344,221 @@ export default function VouchersPage() {
     };
 
     const dateFormatted = formatDateForMessage(reservation.rideDate);
+    const peopleLabelPt = totalPeople === 1 ? '1 pessoa' : `${totalPeople} pessoas`;
+    const peopleLabelEs = totalPeople === 1 ? '1 persona' : `${totalPeople} personas`;
 
     let message = '';
 
-    if (language === 'es') {
-      message = `*PASEO ISLA DO CAMPECHE - BARCO VIVA LA VIDA*
+    if (language === 'es' && isWithLanding) {
+      // ES — Tour CON DESEMBARQUE en la Isla
+      message = `TOUR ISLA DE CAMPECHE
+🏝️ *BARCO VIVA LA VIDA*
+*CON DESEMBARQUE EN LA ISLA*
 
-Reserva con la vendedora *${vendorName}* para la Isla do Campeche ${isWithLanding ? 'con *DESEMBARQUE*' : '*PANORAMICO*'}
+Ha reservado un tour con la vendedora *${vendorName}* para *${dateFormatted}* *${peopleLabelEs}*.
 
-*${dateFormatted}* | *${reservation.customerName}*
+Recordemos algunos hechos:
 
-*Check-in:* desde las 08:00 (llegar hasta las 08:30)
-Rua Amaro Coelho, 22 - Barra da Lagoa
-Si no se presenta hasta ese horario, la reserva podra liberarse.
+📌Debe estar a las *08:00* en la calle Amaro Coelho, 22 junto al puente de hierro, Barra da Lagoa. Regístrese con la marinera GISLENE o BRUNA. El check-in debe hacerse antes de las *8:30* am, de lo contrario su reserva será liberada.
 
-*Embarque:* 09:00 | *Salida:* 09:15
-*Trayecto:* aprox. 1h10 de ida y 1h10 de regreso
-*Tiempo en la isla:* hasta 3h30
-*Regreso previsto:* alrededor de las 16:00
+⚓️Embarque: *9:00*
 
-Documento de identidad obligatorio para todos (incluidos menores).
+📌Salida: *9:15/9:30* del almacén de Barra da Lagoa.
 
-La isla cuenta con restaurante y quiosco.
-Se permite llevar snacks y bebidas.
-La alimentacion no esta incluida.
-Bar a bordo con venta de bebidas y caipirinhas.
-Bano disponible en el barco.
-${isWithLanding ? '\n*DESEMBARQUE:* desembarque directo en la arena, barco con rampa (es necesario mojar las piernas).\n' : ''}
-Prohibido fumar en la embarcacion.
-Prohibido llevar animales.
-Prohibido hacer asado / churrasco.
+*En caso de retraso o no presentación no se devuelve el valor de la reserva*
 
-La basura regresa con el pasajero al barco, no se deja en la isla.
+⛴️ Duración total del recorrido 6 horas.
 
-*Confirmacion del paseo el dia del embarque, hasta las 07:00.*
-Espere la confirmacion antes de dirigirse al punto de embarque.
+🚢 Duración del viaje: aproximadamente 1h10 ida y 1h10 de vuelta.
 
-No olvide el protector solar!
+⏳ Tendrá *hasta 3h30 en la isla* para disfrutar de las playas de arena blanca y aguas cristalinas.
 
-*Sera un placer recibirlos.*`;
+🍽️ En la isla hay restaurante y quiosco. Puede llevar snacks y bebidas.
+*La alimentación no está incluida.*
+
+El barco tiene un bar a bordo con venta de caipirinhas, refrescos y cerveza.
+*Las bebidas no están incluidas en el precio.*
+
+🛟 *DESEMBARQUE:* directo en la arena, barco con rampa (es necesario mojarse las piernas).
+
+🏁 Regreso: llegada alrededor de las 16:00 horas, al almacén de Barra da Lagoa.
+
+🛃 Presentar documento de identificación para el embarque, incluso para menores de edad.
+
+🚭 Prohibido fumar en la embarcación.
+🐾 Prohibido llevar animales.
+🔥 Prohibido hacer asado / churrasco.
+🗑️ La basura regresa con el pasajero al barco, no se deja en la isla.
+
+Si necesita estacionamiento, hay algunos privados cerca del punto de partida.
+No están incluidos en el paseo.
+
+Todas las mañanas enviamos un mensaje confirmando el paseo. Si no hay condiciones de navegación, avisaremos antes de las 7 de la mañana del día del tour.
+
+Si necesita información previa, póngase en contacto con nosotros.
+
+CONSEJO: No olvides el protector solar.
+
+¡Estamos disponibles para cualquier pregunta!
+
+😃 Será un placer tenerte con nosotros.`;
+    } else if (language === 'es') {
+      // ES — Tour PANORÁMICO / CON ACTIVIDADES (sin desembarque)
+      message = `TOUR ISLA DE CAMPECHE
+🏝️ *BARCO VIVA LA VIDA*
+*CON ACTIVIDADES*
+
+Ha reservado un tour con la vendedora *${vendorName}* para *${dateFormatted}* *${peopleLabelEs}*.
+
+Recordemos algunos hechos:
+
+📌Debe estar a las *08:00* en la calle Amaro Coelho, 22 junto al puente de hierro, Barra da Lagoa. Regístrese con la marinera GISLENE o BRUNA. El check-in debe hacerse antes de las *8:30* am, de lo contrario su reserva será liberada.
+
+⚓️Embarque: *9:00*
+
+📌Salida: *9:15/9:30* del almacén de Barra da Lagoa.
+
+*En caso de retraso o no presentación no se devuelve el valor de la reserva*
+
+⛴️ Duración total del recorrido 6 horas.
+
+🚢 Duración del viaje: aproximadamente 1h10 ida y 1h10 de vuelta.
+
+⏳ Al llegar a la isla estaremos a bordo con actividades de Stand up, Kaiak, máscaras de snorkel, bicicleta de agua, tobogán inflable y piscina inflable.
+
+También está incluido:
+🥖 1 choripan por persona
+🍹 1 caipirinha o jugo en la ida y una en la vuelta.
+
+El barco tiene un bar a bordo con la venta de caipirinhas, refrescos y cerveza.
+
+*Las bebidas no están incluidas en el precio.*
+
+Usted también puede llevar comida y bebida, caja de almacenamiento, boyas y otros artículos de ocio privados.
+
+*ATENCIÓN: paseo SIN BAJAR A LA PLAYA* *sin desembarcar*
+
+🏁 Regreso: llegada alrededor de las 16:00 horas, al almacén de Barra da Lagoa.
+
+🛃 Presentar documento de identificación para el embarque, incluso para menores de edad.
+
+Si necesita estacionamiento, hay algunos privados cerca del punto de partida.
+No están incluidos en el paseo.
+
+Todas las mañanas enviamos un mensaje confirmando el paseo. Si no hay condiciones de navegación, avisaremos antes de las 7 de la mañana del día del tour.
+
+Si necesita información previa, póngase en contacto con nosotros.
+
+CONSEJO: No olvides el protector solar.
+
+¡Estamos disponibles para cualquier pregunta!
+
+😃 Será un placer tenerte con nosotros.`;
+    } else if (isWithLanding) {
+      // PT-BR — Passeio COM DESEMBARQUE na Ilha
+      message = `PASSEIO ILHA DO CAMPECHE
+🏝️ *BARCO VIVA LA VIDA*
+*PASSEIO COM DESEMBARQUE NA ILHA*
+
+Você reservou um passeio com a vendedora *${vendorName}* para dia *${dateFormatted}* para *${peopleLabelPt}*.
+
+Vamos lembrar alguns fatos:
+
+📌Deve estar às *08:00* na rua Amaro Coelho, 22 junto à ponte de ferro, Barra da Lagoa. Registre-se com a marinheira GISLENE ou BRUNA. O check-in deve ser feito antes das *8:40* da manhã, caso contrário sua reserva será liberada.
+
+⚓️Embarque: *9:00*
+
+📌Saída: *9:15/9:30* do trapiche da Barra da Lagoa.
+
+*Em caso de atraso ou não comparecimento o valor da reserva não é devolvido*
+
+⛴️ Duração total do passeio 6 horas.
+
+🚢 Duração do trajeto: aproximadamente 1h10 ida e 1h10 volta.
+
+⏳ Você terá *até 3h30 na ilha* para curtir as praias de areia branca e águas cristalinas.
+
+🍽️ Na ilha há restaurante e quiosque. Você pode levar lanches e bebidas.
+*A alimentação não está inclusa.*
+
+O barco tem um bar a bordo com venda de caipirinhas, refrigerantes e cerveja.
+*As bebidas não estão incluídas no preço.*
+
+🛟 *DESEMBARQUE:* direto na areia, barco com rampa (é necessário molhar as pernas).
+
+🏁 Retorno: chegada por volta das 16:00 horas, no armazém da Barra da Lagoa.
+
+🛃 Apresentar documento de identificação para embarque, mesmo para menores de idade.
+
+🚭 Proibido fumar na embarcação.
+🐾 Proibido levar animais.
+🔥 Proibido fazer churrasco.
+🗑️ O lixo retorna com o passageiro para o barco, não fica na ilha.
+
+Se você precisar de estacionamento, há alguns privados perto do ponto de partida.
+Eles não estão incluídos no passeio.
+
+Todas as manhãs enviamos uma mensagem confirmando o passeio. Se não houver condições de navegação, avisaremos antes das 7 da manhã do dia do passeio.
+
+Se você precisar de informações prévias, entre em contato conosco.
+
+DICA: Não se esqueça do protetor solar.
+
+Estamos disponíveis para qualquer dúvida!
+
+😃 Será um prazer tê-lo connosco.`;
     } else {
-      message = `*PASSEIO ILHA DO CAMPECHE - BARCO VIVA LA VIDA*
+      // PT-BR — Passeio PANORÂMICO / COM ATIVIDADES (sem desembarque)
+      message = `PASSEIO ILHA DO CAMPECHE
+🏝️ *BARCO VIVA LA VIDA*
+*PASSEIO COM ATIVIDADES*
 
-Reserva com a vendedora *${vendorName}* para a Ilha do Campeche ${isWithLanding ? 'com *DESEMBARQUE*' : '*PANORAMICO*'}
+Você reservou um passeio com a vendedora *${vendorName}* para dia *${dateFormatted}* para *${peopleLabelPt}*.
 
-*${dateFormatted}* | *${reservation.customerName}*
+Vamos lembrar alguns fatos:
 
-*Check-in:* a partir das 08:00 (chegar ate 08:30)
-Rua Amaro Coelho, 22 - Barra da Lagoa
-Nao comparecendo ate esse horario, a reserva podera ser liberada.
+📌Deve estar às *08:00* na rua Amaro Coelho, 22 junto à ponte de ferro, Barra da Lagoa. Registre-se com a marinheira GISLENE ou BRUNA. O check-in deve ser feito antes das *8:40* da manhã, caso contrário sua reserva será liberada.
 
-*Embarque:* 09:00 | *Saida:* 09:15
-*Trajeto:* aprox. 1h10 ida e retorno
-*Permanencia na ilha:* ate 3h30
-*Retorno previsto:* por volta das 16:00
+⚓️Embarque: *9:00*
 
-Documento obrigatorio para todos (inclusive menores).
+📌Saída: *9:15/9:30* do trapiche da Barra da Lagoa.
 
-Restaurante e quiosque na ilha.
-Pode levar lanches e bebidas.
-Alimentacao nao inclusa.
-Bar a bordo com venda de bebidas e caipirinhas.
-Banheiro disponivel no barco.
-${isWithLanding ? '\n*DESEMBARQUE:* direto na areia, barco com rampa (e necessario molhar as pernas).\n' : ''}
-Proibido fumar na embarcacao.
-Proibido levar animais.
-Proibido fazer churrasco.
+*Em caso de atraso ou não comparecimento o valor da reserva não é devolvido*
 
-O lixo retorna com o passageiro para o barco, nao fica na ilha.
+⛴️ Duração total do passeio 6 horas.
 
-*Confirmacao do passeio no dia do embarque, ate as 07:00.*
-Aguarde a confirmacao para se deslocar ate o local do embarque.
+🚢 Duração do trajeto: aproximadamente 1h10 ida e 1h10 volta.
 
-Nao esqueca o protetor solar!
+⏳ Ao chegar à ilha estaremos a bordo com atividades de Stand up, Caiaque, máscaras de snorkel, bicicleta aquática, piscina inflável e tobogã Inflável.
 
-*Sera um prazer te-los conosco.*`;
+Também está incluso:
+🥖 1 choripan
+🍹 1 caipirinha ou suco por pessoa.
+
+O barco tem um bar a bordo com a venda de caipirinhas, refrigerantes e cerveja.
+
+*As bebidas não estão incluídas no preço.*
+
+Você também pode levar comida e bebida, caixa de armazenamento, bóias e outros itens de entretenimento privados.
+
+*ATENÇÃO: passeio SEM DESCER À PRAIA* *sem desembarcar*
+
+🏁 Retorno: chegada por volta das 16:00 horas, no armazém da Barra da Lagoa.
+
+🛃 Apresentar documento de identificação para embarque, mesmo para menores de idade.
+
+Se você precisar de estacionamento, há alguns privados perto do ponto de partida.
+Eles não estão incluídos no passeio.
+
+Todas as manhãs enviamos uma mensagem confirmando o passeio. Se não houver condições de navegação, avisaremos antes das 7 da manhã do dia do passeio.
+
+Se você precisar de informações prévias, entre em contato conosco.
+
+DICA: Não se esqueça do protetor solar.
+
+Estamos disponíveis para qualquer dúvida!
+
+😃 Será um prazer tê-lo connosco.`;
     }
 
     const cleanPhone = reservation.phone.replace(/\D/g, '');
@@ -421,12 +567,23 @@ Nao esqueca o protetor solar!
     window.open(whatsappUrl, '_blank');
     
     try {
-      await updateDoc(doc(db, 'reservations', reservation.id), {
+      const now = Timestamp.now();
+      const update = {
         confirmationSent: true,
-        confirmationSentAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      
+        confirmationSentAt: now,
+        updatedAt: now,
+      };
+      // Propaga a flag pra todo o grupo (a confirmação é da reserva do líder
+      // mas representa o aviso de embarque para o grupo todo).
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'reservations', reservation.id), update);
+      for (const member of groupMembers) {
+        if (member.id !== reservation.id) {
+          batch.update(doc(db, 'reservations', member.id), update);
+        }
+      }
+      await batch.commit();
+
       setStepForCard(reservation.id, 'terms');
     } catch (error) {
       console.error('Erro ao atualizar status da confirmação:', error);
@@ -555,9 +712,9 @@ Obrigado e ate breve!`;
   };
 
   const getCalendarDayStatus = (date: Date) => {
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = toDateKey(date);
     const data = calendarData.get(dateKey);
-    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    const isToday = dateKey === todayKey();
     const isSelected = dateKey === selectedDate;
     
     return {
@@ -739,13 +896,12 @@ Obrigado e ate breve!`;
             </div>
           </div>
 
-          {selectedDate !== new Date().toISOString().split('T')[0] && (
+          {selectedDate !== todayKey() && (
             <div className="flex justify-center mt-2">
               <button
                 onClick={() => {
-                  const todayDate = new Date();
-                  setSelectedDate(todayDate.toISOString().split('T')[0]);
-                  setCalendarMonth(todayDate);
+                  setSelectedDate(todayKey());
+                  setCalendarMonth(new Date());
                 }}
                 className="text-xs text-viva-blue hover:text-viva-blue-dark font-semibold"
               >
@@ -1069,7 +1225,7 @@ Obrigado e ate breve!`;
                                             {CONFIRMATION_LANGUAGES.map((lang) => (
                                               <button
                                                 key={lang.code}
-                                                onClick={() => handleSendConfirmation(leader, lang.code)}
+                                                onClick={() => handleSendConfirmation(leader, lang.code, members)}
                                                 className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition"
                                               >
                                                 <span>{lang.flag}</span>

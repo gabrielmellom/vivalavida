@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { getDb } from '@/lib/firebase';
 import { Reservation, Boat } from '@/types';
 import { Loader2, CheckCircle, AlertCircle, Ship, Camera, FileText, Calendar, User, Phone, Globe } from 'lucide-react';
@@ -449,57 +449,37 @@ export default function AceitePage() {
 
       const now = Timestamp.now();
       const db = getDb();
-      
-      // Atualizar reserva com os aceites
+
       const updateData: Record<string, unknown> = {
         acceptedTerms: true,
         acceptedTermsAt: now,
         acceptedFromIP: clientIP,
         acceptedUserAgent: userAgent,
+        acceptedImageRights: acceptedImageRights,
+        acceptedImageRightsAt: acceptedImageRights ? now : null,
         updatedAt: now,
       };
 
-      // Se aceitou uso de imagem, adicionar também
-      if (acceptedImageRights) {
-        updateData.acceptedImageRights = true;
-        updateData.acceptedImageRightsAt = now;
+      // Atualiza a reserva atual + todos os membros do grupo num único batch.
+      // Se algum falhar, ninguém é atualizado — evita estado parcial.
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'reservations', reservation.id), updateData);
+
+      if (reservation.groupId) {
+        const groupQuery = query(
+          collection(db, 'reservations'),
+          where('groupId', '==', reservation.groupId)
+        );
+        const groupSnapshot = await getDocs(groupQuery);
+        groupSnapshot.docs.forEach((docSnapshot) => {
+          if (docSnapshot.id !== reservation.id) {
+            batch.update(doc(db, 'reservations', docSnapshot.id), updateData);
+          }
+        });
       }
 
-      // Atualizar a reserva atual
-      await updateDoc(doc(db, 'reservations', reservation.id), updateData);
-      
-      // Se faz parte de um grupo, propagar aceite para todos do grupo
-      if (reservation.groupId) {
-        try {
-          const groupQuery = query(
-            collection(db, 'reservations'),
-            where('groupId', '==', reservation.groupId)
-          );
-          const groupSnapshot = await getDocs(groupQuery);
-          const batch = writeBatch(db);
-          
-          groupSnapshot.docs.forEach((docSnapshot) => {
-            // Não atualizar a reserva que já foi atualizada
-            if (docSnapshot.id !== reservation.id) {
-              batch.update(doc(db, 'reservations', docSnapshot.id), {
-                acceptedTerms: true,
-                acceptedTermsAt: now,
-                acceptedFromIP: clientIP,
-                acceptedUserAgent: userAgent,
-                acceptedImageRights: acceptedImageRights,
-                acceptedImageRightsAt: acceptedImageRights ? now : null,
-                updatedAt: now,
-              });
-            }
-          });
-          
-          await batch.commit();
-        } catch (groupError) {
-          console.error('Erro ao propagar aceite para o grupo:', groupError);
-          // Não impedir o sucesso se falhar a propagação
-        }
-      }
-      
+      await batch.commit();
+
       setSuccess(true);
     } catch (err) {
       console.error('Erro ao salvar aceite:', err);
